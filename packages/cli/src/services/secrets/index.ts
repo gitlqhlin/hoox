@@ -7,6 +7,7 @@ export {
   SecretsService,
   SYSTEM_SECRET_NAMES,
   isSystemSecret,
+  resolveWorkerWranglerConfig,
   default as SecretsServiceDefault,
 } from "./secrets-service.js";
 export type {

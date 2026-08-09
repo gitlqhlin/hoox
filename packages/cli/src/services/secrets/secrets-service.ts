@@ -3,6 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import { join, resolve as resolvePath } from "node:path";
 import { parse as parseJsonc } from "jsonc-parser";
 import { sanitizeWranglerOutput } from "../../utils/wrangler-output.js";
 import type {
@@ -14,6 +15,53 @@ import type {
   SyncSecretsOptions,
   WorkersJsonc,
 } from "./types.js";
+
+/**
+ * Resolve the wrangler config file for a worker directory.
+ *
+ * Prefer `wrangler.jsonc` / `wrangler.toml`. Fall back to
+ * `wrangler.jsonc.example` when the real file is gitignored and not yet
+ * created (common for hoox-worker). Never walk up to the monorepo root
+ * meta-config (`global` / `workers` keys) — that is not a valid Worker
+ * wrangler file and breaks `secret put`.
+ */
+export async function resolveWorkerWranglerConfig(
+  workerPath: string
+): Promise<{ configPath: string; deployName: string | null }> {
+  const abs = resolvePath(workerPath);
+  const candidates = [
+    join(abs, "wrangler.jsonc"),
+    join(abs, "wrangler.toml"),
+    join(abs, "wrangler.jsonc.example"),
+  ];
+
+  for (const configPath of candidates) {
+    if (!(await Bun.file(configPath).exists())) continue;
+    let deployName: string | null = null;
+    try {
+      const text = await Bun.file(configPath).text();
+      // toml: name = "…" or name = '…' — best-effort
+      if (configPath.endsWith(".toml")) {
+        const m = text.match(/^\s*name\s*=\s*["']([^"']+)["']/m);
+        if (m?.[1]) deployName = m[1];
+      } else {
+        const parsed = parseJsonc(text) as { name?: unknown };
+        if (typeof parsed?.name === "string" && parsed.name.trim()) {
+          deployName = parsed.name.trim();
+        }
+      }
+    } catch {
+      /* name optional — --name can still be supplied by caller */
+    }
+    return { configPath, deployName };
+  }
+
+  throw new Error(
+    `No wrangler.jsonc (or wrangler.jsonc.example) in ${workerPath}. ` +
+      `Copy the example config into wrangler.jsonc and fill account resources, ` +
+      `then re-run secrets sync.`
+  );
+}
 
 /**
  * System / mesh secrets — auto-generated internal auth and gateway keys.
@@ -266,7 +314,12 @@ export class SecretsService {
       try {
         const value = existingValues.get(secret);
         if (value !== undefined && !this.isPlaceholder(value)) {
-          await this.execWranglerSecretPut(worker.path, secret, value);
+          await this.execWranglerSecretPut(
+            worker.path,
+            secret,
+            value,
+            workerName
+          );
           synced.push(secret);
           items.push({ name: secret, status: "synced" });
         } else {
@@ -354,17 +407,33 @@ export class SecretsService {
   }
 
   /**
-   * Runs `wrangler secret put <name>` inside the worker's directory.
+   * Runs `wrangler secret put <name>` for a worker.
+   *
+   * Always passes `-c <worker-config>` so wrangler never walks up to the
+   * monorepo root meta-config. Prefer the deploy `name` from the worker
+   * wrangler file; fall back to the monorepo logical worker key.
+   *
    * Marked `protected` so unit tests can stub it without touching the
    * real `Bun.spawn`.
    */
   protected async execWranglerSecretPut(
     workerPath: string,
     name: string,
-    value: string
+    value: string,
+    logicalWorkerName?: string
   ): Promise<void> {
-    const proc = Bun.spawn(["wrangler", "secret", "put", name], {
-      cwd: workerPath,
+    const { configPath, deployName } =
+      await resolveWorkerWranglerConfig(workerPath);
+    const workerName = deployName ?? logicalWorkerName ?? null;
+
+    const args = ["wrangler", "secret", "put", name, "-c", configPath];
+    if (workerName) {
+      args.push("--name", workerName);
+    }
+
+    const proc = Bun.spawn(args, {
+      // Worker dir keeps relative alias paths valid; -c is absolute.
+      cwd: resolvePath(workerPath),
       stdin: "pipe",
       stdout: "pipe",
       stderr: "pipe",

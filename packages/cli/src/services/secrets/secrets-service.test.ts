@@ -12,6 +12,7 @@ import {
   SecretsService,
   isSystemSecret,
   SYSTEM_SECRET_NAMES,
+  resolveWorkerWranglerConfig,
 } from "./secrets-service.js";
 
 // ---------------------------------------------------------------------------
@@ -578,6 +579,55 @@ describe("SecretsService", () => {
         const sync = expectOk(result);
         expect(sync.ok).toBe(true);
         expect(sync.synced).toEqual([]);
+      } finally {
+        rmSync(dir, { recursive: true, force: true });
+      }
+    });
+  });
+
+  // -- resolveWorkerWranglerConfig ------------------------------------------
+
+  describe("resolveWorkerWranglerConfig", () => {
+    it("prefers wrangler.jsonc over the example file", async () => {
+      const dir = tmpDir();
+      try {
+        writeFileSync(
+          join(dir, "wrangler.jsonc"),
+          '{ "name": "from-jsonc", "main": "src/index.ts" }\n'
+        );
+        writeFileSync(
+          join(dir, "wrangler.jsonc.example"),
+          '{ "name": "from-example", "main": "src/index.ts" }\n'
+        );
+        const resolved = await resolveWorkerWranglerConfig(dir);
+        expect(resolved.configPath).toBe(join(dir, "wrangler.jsonc"));
+        expect(resolved.deployName).toBe("from-jsonc");
+      } finally {
+        rmSync(dir, { recursive: true, force: true });
+      }
+    });
+
+    it("falls back to wrangler.jsonc.example when real config is missing", async () => {
+      const dir = tmpDir();
+      try {
+        writeFileSync(
+          join(dir, "wrangler.jsonc.example"),
+          '{ "name": "hoox", "main": "src/index.ts" }\n'
+        );
+        const resolved = await resolveWorkerWranglerConfig(dir);
+        expect(resolved.configPath).toBe(join(dir, "wrangler.jsonc.example"));
+        expect(resolved.deployName).toBe("hoox");
+      } finally {
+        rmSync(dir, { recursive: true, force: true });
+      }
+    });
+
+    it("throws a clear error when no config exists", async () => {
+      const dir = tmpDir();
+      try {
+        await expect(resolveWorkerWranglerConfig(dir)).rejects.toThrow(
+          /No wrangler\.jsonc/
+        );
       } finally {
         rmSync(dir, { recursive: true, force: true });
       }

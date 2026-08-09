@@ -5,6 +5,13 @@ This project adheres loosely to [Semantic Versioning](https://semver.org/).
 
 ## Unreleased
 
+## [0.11.1] — 2026-08-09
+
+### Fixed
+
+- **`hoox secrets sync`**: always pass `-c <worker wrangler config>` (and `--name`) so wrangler does not walk up to the monorepo root meta-config. Falls back to `wrangler.jsonc.example` when the real config is gitignored (e.g. hoox-worker).
+- **Worker wrangler configs**: remove invalid `smart_placement` and monorepo-only `secrets` arrays that made `wrangler secret put` fail validation.
+
 ## [0.11.0] — 2026-08-09
 
 ### Added

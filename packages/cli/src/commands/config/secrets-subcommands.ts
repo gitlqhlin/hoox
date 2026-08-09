@@ -13,6 +13,7 @@ import { spinner } from "@clack/prompts";
 
 import {
   SecretsService,
+  resolveWorkerWranglerConfig,
   type SecretSyncResult,
 } from "../../services/secrets/index.js";
 import { CLIError, ExitCode } from "../../utils/errors.js";
@@ -406,11 +407,26 @@ EXAMPLES:
 
           const workerPath =
             svc.getWorkerPath(workerName) ?? `workers/${workerName}`;
-          const proc = Bun.spawn(["wrangler", "secret", "delete", secretName], {
-            cwd: workerPath,
-            stdout: "pipe",
-            stderr: "pipe",
-          });
+          const { configPath, deployName } =
+            await resolveWorkerWranglerConfig(workerPath);
+          const deploy = deployName ?? workerName;
+          const proc = Bun.spawn(
+            [
+              "wrangler",
+              "secret",
+              "delete",
+              secretName,
+              "-c",
+              configPath,
+              "--name",
+              deploy,
+            ],
+            {
+              cwd: workerPath,
+              stdout: "pipe",
+              stderr: "pipe",
+            }
+          );
 
           const exitCode = await proc.exited;
           if (exitCode !== 0) {
