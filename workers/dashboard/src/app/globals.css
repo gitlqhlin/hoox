@@ -221,6 +221,44 @@ html:not(.dark) .grid-bg {
     linear-gradient(to bottom, oklch(0.85 0.01 260 / 0.6) 1px, transparent 1px);
 }
 
+/* ── Landing-page fine noise dot overlay (hoox.sh data-texture=dot) ── */
+.texture-overlay {
+  pointer-events: none;
+  position: fixed;
+  inset: 0;
+  z-index: 1;
+  opacity: 0.25;
+}
+
+.texture-overlay::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background-image:
+    radial-gradient(circle at 25% 25%, #ffffff73 0 0.35px, transparent 0.5px),
+    radial-gradient(circle at 75% 65%, #ffffff47 0 0.3px, transparent 0.48px),
+    radial-gradient(circle at 45% 85%, #0009 0 0.4px, transparent 0.55px);
+  background-position:
+    0 0,
+    1px 2px,
+    2px 1px;
+  background-size:
+    3px 3px,
+    4px 4px,
+    5px 5px;
+}
+
+html:not(.dark) .texture-overlay {
+  opacity: 0.12;
+}
+
+html:not(.dark) .texture-overlay::before {
+  background-image:
+    radial-gradient(circle at 25% 25%, #0a0a0a59 0 0.35px, transparent 0.5px),
+    radial-gradient(circle at 75% 65%, #0a0a0a40 0 0.3px, transparent 0.48px),
+    radial-gradient(circle at 45% 85%, #ffffff40 0 0.4px, transparent 0.55px);
+}
+
 /* ── Selection ── */
 ::selection {
   background: oklch(0.72 0.17 48 / 0.35);

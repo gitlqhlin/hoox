@@ -19,14 +19,14 @@ function ensureProductionAuth(): void {
 /**
  * CSP relaxed for Next.js client-side hydration.
  * Next.js uses inline scripts (RSC payload, bootstrap) and loads
- * JS/CSS from `/_next/static/`. The login page also loads a noise
- * overlay from grainy-gradients.vercel.app (CSS background-image).
+ * JS/CSS from `/_next/static/`. Login noise is a local CSS dot overlay
+ * (no external image assets).
  */
 const NEXTJS_CSP = [
   "default-src 'self'",
   "script-src 'self' 'unsafe-inline' 'unsafe-eval'",
   "style-src 'self' 'unsafe-inline'",
-  "img-src 'self' data: https://grainy-gradients.vercel.app",
+  "img-src 'self' data:",
   "font-src 'self' data:",
   "connect-src 'self'",
   "frame-src 'none'",
@@ -58,12 +58,16 @@ export function middleware(request: NextRequest) {
     ensureProductionAuth();
     const { pathname } = request.nextUrl;
 
-    // Skip auth for static files, login, and auth API
+    // Skip auth for static files, public brand assets, login, and auth API
     if (
       pathname.startsWith("/_next") ||
       pathname.startsWith("/login") ||
       pathname.startsWith("/api/auth") ||
-      pathname === "/favicon.ico"
+      pathname === "/favicon.ico" ||
+      pathname === "/hoox-logo.svg" ||
+      pathname === "/icon.svg" ||
+      pathname.startsWith("/icon-") ||
+      pathname.startsWith("/apple-icon")
     ) {
       return withSecurityHeaders(NextResponse.next());
     }
@@ -135,5 +139,7 @@ export function middleware(request: NextRequest) {
 }
 
 export const config = {
-  matcher: ["/((?!_next/static|_next/image|favicon.ico).*)"],
+  matcher: [
+    "/((?!_next/static|_next/image|favicon.ico|hoox-logo\\.svg|icon\\.svg|icon-|apple-icon).*)",
+  ],
 };

@@ -9,7 +9,7 @@ import { useState } from "react";
 import type { FormEvent } from "react";
 import { useRouter } from "next/navigation";
 import { motion, useReducedMotion } from "framer-motion";
-import { ArrowRight, Loader2, Terminal } from "lucide-react";
+import { ArrowRight, Loader2 } from "lucide-react";
 import { Key, Lock, Shield, User } from "reicon-react";
 
 import { Alert, AlertDescription } from "@/components/ui/alert";
@@ -73,7 +73,7 @@ export default function LoginPage() {
         "bg-background text-foreground relative flex min-h-svh items-center justify-center overflow-hidden p-4"
       )}
     >
-      {/* Ambient glows */}
+      {/* Ambient glows — same soft accent wash as the landing page */}
       {!reduceMotion && (
         <>
           <div
@@ -87,11 +87,8 @@ export default function LoginPage() {
         </>
       )}
 
-      {/* Grid (local, no external noise asset) */}
-      <div
-        aria-hidden="true"
-        className="pointer-events-none absolute inset-0 grid-bg opacity-50"
-      />
+      {/* Fine noise dot overlay — matches hoox.sh data-texture=dot */}
+      <div className="texture-overlay" aria-hidden="true" />
 
       <motion.div
         initial={reduceMotion ? false : { opacity: 0, y: 16 }}
@@ -110,9 +107,17 @@ export default function LoginPage() {
               initial={reduceMotion ? false : { scale: 0.85, opacity: 0 }}
               animate={reduceMotion ? undefined : { scale: 1, opacity: 1 }}
               transition={{ delay: 0.12, type: "spring", stiffness: 220 }}
-              className="mx-auto mb-1 flex size-12 items-center justify-center rounded-xl border border-border bg-muted/40 shadow-inner"
+              className="mx-auto mb-1 flex size-14 items-center justify-center"
             >
-              <Terminal className="size-6 text-accent" aria-hidden="true" />
+              {/* Official HOOX mark (brand/svg/mark-orange-transparent) */}
+              <img
+                src="/hoox-logo.svg"
+                alt="Hoox"
+                width={56}
+                height={56}
+                className="size-14 shrink-0"
+                decoding="async"
+              />
             </motion.div>
             <CardTitle className="bg-gradient-to-br from-foreground to-muted-foreground bg-clip-text text-3xl font-bold tracking-tight text-transparent">
               Hoox Gateway
