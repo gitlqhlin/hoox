@@ -5,6 +5,8 @@ This project adheres loosely to [Semantic Versioning](https://semver.org/).
 
 ## Unreleased
 
+## [0.11.0] — 2026-08-09
+
 ### Added
 
 - **`hoox pyne` command group** for the Python pyne-worker isolate:
@@ -15,7 +17,19 @@ This project adheres loosely to [Semantic Versioning](https://semver.org/).
   - `ingest` — wrap `scripts/fetch_and_ingest.py`
   - `sync-vendor` / `deploy` — vendor pynescript then `wrangler deploy`
 - **pyne-worker** in deploy order, env catalog (`API_KEY`, `ALERT_WEBHOOK_URL`, `PYNE_API_KEY`, `PYNE_WORKER_URL`), worker manifest registry, interactive menu Tools, and shell completions.
-- **TUI**: dashboard PYNE health section via `cliBridge.pyneHealthCheck()`; worker-settings loads `pyne-worker` dashboard.jsonc.
+- Configurable **agent cron** (1–1440 min) and setup secrets UX improvements.
+- **TUI 0.2.0** (optional `@hoox-sh/hoox-tui`): dashboard PYNE health, full 16-view session restore, Ctrl+digit / Ctrl+Alt navigation coverage, broader operator views polish.
+
+### Fixed / hardened
+
+- **TUI reliability**: SSE `stopStreams()` teardown, stale `fetchWorkers` drop, safe-mode skip of network/CLI/SSE, stable global keyboard handler.
+- **Remote auth fail-closed**: Bearer (`HOOX_API_TOKEN`) and/or Cloudflare Access service-token pair; CLI fallback never used in remote mode.
+- **CLI bridge**: abort signals, timeout kill escalation, noise-tolerant JSON parse, argv secret redaction in logs/status.
+- **State paths**: session path resolves at call time; TUI state path traversal rejected; atomic JSON state writes.
+
+### Dependencies
+
+- Requires `@hoox-sh/hoox-shared@^1.2.0` (workspace-aligned). Optional TUI: `@hoox-sh/hoox-tui@^0.2.0`.
 
 ## [0.10.1] — 2026-07-26
 
