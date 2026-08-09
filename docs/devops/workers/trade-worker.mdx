@@ -85,7 +85,7 @@ The `trade-worker` does not expose a public URL, communicating internally via V8
 | Analytics | Exchange blob encoded as `{exchange}:test` |
 | Live WS perf | When `use_websocket=true` and live, router **skips** REST client construction |
 
-Operator guide: [Test Trading](/enduser/guides/test-trading).
+Operator guide: [Test Trading](/docs/enduser/guides/test-trading).
 
 ---
 
@@ -120,7 +120,7 @@ The `ExchangeRouter` evaluates the incoming symbol and parses settings in `CONFI
 
 ## 🔌 3. Internal REST API Specification
 
-> **Note:** For the canonical endpoint directory with full request/response examples across all workers, see [`/docs/devops/api/endpoints`](../api/endpoints).
+> **Note:** For the canonical endpoint directory with full request/response examples across all workers, see [`/docs/devops/api/endpoints`](/docs/devops/api/endpoints).
 
 ### A. Process Order Pipeline
 
@@ -196,5 +196,5 @@ try {
 
 ### 🔗 Next Steps
 
-- **[hoox Gateway Profile](hoox)** — Review WAF rules and Durable Object idempotency locks.
-- **[D1 Database Operations](../../enduser/guides/database-ops)** — Manage Drizzle schemas, migrations, and query operations.
+- **[hoox Gateway Profile](/docs/devops/workers/hoox)** — Review WAF rules and Durable Object idempotency locks.
+- **[D1 Database Operations](/docs/enduser/guides/database-ops)** — Manage Drizzle schemas, migrations, and query operations.

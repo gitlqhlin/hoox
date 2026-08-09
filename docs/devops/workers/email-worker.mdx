@@ -16,7 +16,7 @@ The worker also tracks signal ingestion metrics by forwarding event data to `ana
 
 ## ⚡ 1. Endpoints
 
-> **Note:** For the canonical endpoint directory with full request/response examples across all workers, see [`/docs/devops/api/endpoints`](../api/endpoints).
+> **Note:** For the canonical endpoint directory with full request/response examples across all workers, see [`/docs/devops/api/endpoints`](/docs/devops/api/endpoints).
 
 | Endpoint        | Method | Auth                            | Purpose                                      |
 | --------------- | ------ | ------------------------------- | -------------------------------------------- |
@@ -82,7 +82,7 @@ Two-phase parsing: JSON first, plaintext fallback.
 }
 ```
 
-JSON bodies may include `"test": true` to request exchange testnet execution (Binance/Bybit). The flag is forwarded on the `TRADE_SERVICE` webhook call. **Plaintext extraction does not set `test`** (always live) — use structured JSON email bodies for sandbox trades. See [Test Trading](/enduser/guides/test-trading).
+JSON bodies may include `"test": true` to request exchange testnet execution (Binance/Bybit). The flag is forwarded on the `TRADE_SERVICE` webhook call. **Plaintext extraction does not set `test`** (always live) — use structured JSON email bodies for sandbox trades. See [Test Trading](/docs/enduser/guides/test-trading).
 
 ### Phase 2: Plaintext Fallback
 
@@ -348,6 +348,6 @@ All active signal ingestion is via webhook, direct POST, or Cloudflare Email Rou
 
 ### Next Steps
 
-- **[trade-worker Profile](trade-worker)** — How parsed signals become execution orders
-- **[analytics-worker Profile](analytics-worker)** — Signal tracking and observability
-- **[Architecture Overview](../architecture/overview)** — Full system architecture and data flow
+- **[trade-worker Profile](/docs/devops/workers/trade-worker)** — How parsed signals become execution orders
+- **[analytics-worker Profile](/docs/devops/workers/analytics-worker)** — Signal tracking and observability
+- **[Architecture Overview](/docs/devops/architecture/overview)** — Full system architecture and data flow

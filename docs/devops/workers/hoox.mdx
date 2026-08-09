@@ -123,7 +123,7 @@ Applied on the webhook critical path **before** dispatch:
 
 ## 🛜 3. API Route Specifications
 
-> **Note:** For the canonical endpoint directory with full request/response examples across all workers, see [`/docs/devops/api/endpoints`](../api/endpoints).
+> **Note:** For the canonical endpoint directory with full request/response examples across all workers, see [`/docs/devops/api/endpoints`](/docs/devops/api/endpoints).
 
 ### A. Ingest Signal Webhook
 
@@ -142,7 +142,7 @@ Applied on the webhook critical path **before** dispatch:
     "idempotencyKey": "uuid-9b1deb4d-3b7d"
   }
   ```
-- **`test` (optional)**: forwarded to trade-worker / queue. Idempotency keys are mode-split (`…:live` vs `…:test`) so a live fill and a sandbox fill of the same size never dedupe each other. See [Test Trading](/enduser/guides/test-trading).
+- **`test` (optional)**: forwarded to trade-worker / queue. Idempotency keys are mode-split (`…:live` vs `…:test`) so a live fill and a sandbox fill of the same size never dedupe each other. See [Test Trading](/docs/enduser/guides/test-trading).
 - **`idempotencyKey` (optional)**: client-supplied dedupe key (also accepted via `Idempotency-Key` header). Max 256 chars.
 - **Success Response (200 OK)** — direct trade-worker path:
   ```json
@@ -220,5 +220,5 @@ Bearer `OPERATOR_API_KEY` (or legacy `INTERNAL_API_KEY`). Prefer Cloudflare Acce
 
 ### 🔗 Next Steps
 
-- **[trade-worker Spec](trade-worker)** — Review how trade executions, order math, and margin settings compile on the edge.
-- **[D1 Database Operations](../../enduser/guides/database-ops)** — Manage schema migrations, query ledgers, and execute SQL scripts.
+- **[trade-worker Spec](/docs/devops/workers/trade-worker)** — Review how trade executions, order math, and margin settings compile on the edge.
+- **[D1 Database Operations](/docs/enduser/guides/database-ops)** — Manage schema migrations, query ledgers, and execute SQL scripts.

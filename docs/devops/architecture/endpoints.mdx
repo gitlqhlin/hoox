@@ -8,7 +8,7 @@ title: "Internal Endpoints Map"
 description: "Architectural routing flow and service-binding topology for the Hoox microservice mesh, with the canonical endpoint directory living under the API reference."
 ---
 
-> **This document is now a stub focused on the routing flow. For complete endpoint specifications, see [`/docs/devops/api/endpoints`](../api/endpoints).**
+> **This document is now a stub focused on the routing flow. For complete endpoint specifications, see [`/docs/devops/api/endpoints`](/docs/devops/api/endpoints).**
 
 This page captures the **architectural context** for routing across the Hoox microservice monorepo — the Mermaid routing diagram, the internal-auth header contract, and the request-trace propagation story. The exhaustive endpoint directory (per-worker route tables, JSON payloads, and success-response examples) lives in the canonical reference.
 
@@ -46,7 +46,7 @@ Every internal HTTP request between V8 isolates **must** transmit the standard b
 X-Internal-Auth-Key: <INTERNAL_KEY_BINDING>
 ```
 
-This shared secret is provisioned per-worker as an encrypted `wrangler secret` and validated by the `requireInternalAuth` middleware from `@hoox-sh/hoox-shared/middleware`. Public webhook and dashboard endpoints use payload-embedded API keys or session cookies instead — see the canonical [`/docs/devops/api/endpoints`](../api/endpoints) for the full auth matrix.
+This shared secret is provisioned per-worker as an encrypted `wrangler secret` and validated by the `requireInternalAuth` middleware from `@hoox-sh/hoox-shared/middleware`. Public webhook and dashboard endpoints use payload-embedded API keys or session cookies instead — see the canonical [`/docs/devops/api/endpoints`](/docs/devops/api/endpoints) for the full auth matrix.
 
 ---
 
@@ -63,6 +63,6 @@ This shared secret is provisioned per-worker as an encrypted `wrangler secret` a
 
 ### 🔗 Next Steps
 
-- **[Complete API Reference](../api/endpoints)** — The canonical endpoint directory with full request/response examples for every worker.
-- **[Service Binding Mesh](communication)** — Deep dive into the Zero-Trust service-binding topology and the public/internal isolation boundary.
-- **[System Storage Architecture](storage)** — Review R2 log offloading, D1 SQLite ledger layout, and Vectorize RAG indexes.
+- **[Complete API Reference](/docs/devops/api/endpoints)** — The canonical endpoint directory with full request/response examples for every worker.
+- **[Service Binding Mesh](/docs/devops/architecture/communication)** — Deep dive into the Zero-Trust service-binding topology and the public/internal isolation boundary.
+- **[System Storage Architecture](/docs/devops/architecture/storage)** — Review R2 log offloading, D1 SQLite ledger layout, and Vectorize RAG indexes.

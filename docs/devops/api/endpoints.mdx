@@ -50,7 +50,7 @@ Receives TradingView alerts or automated cURL signals.
     "idempotencyKey": "uuid-9b1deb4d-3b7d"
   }
   ```
-- **`test` (optional boolean)**: when `true`, routes to exchange testnet (Binance/Bybit). MEXC returns `TEST_TRADING_UNSUPPORTED`. Idempotency keys are mode-split (`:live` vs `:test`). Prefer `BINANCE_TESTNET_*` / `BYBIT_TESTNET_*` secrets. See [Test Trading](/enduser/guides/test-trading).
+- **`test` (optional boolean)**: when `true`, routes to exchange testnet (Binance/Bybit). MEXC returns `TEST_TRADING_UNSUPPORTED`. Idempotency keys are mode-split (`:live` vs `:test`). Prefer `BINANCE_TESTNET_*` / `BYBIT_TESTNET_*` secrets. See [Test Trading](/docs/enduser/guides/test-trading).
 - **Success Response (200 OK)**:
   ```json
   {
@@ -187,5 +187,5 @@ Bridges background risk audits and multi-provider AI chat streams.
 
 ### 🔗 Next Steps
 
-- **[Request Payload Schemas](payloads)** — Analyze the complete JSON request schemas and type rules.
-- **[Standard Response Schemas](responses)** — Check error factories and normal JSON envelopes.
+- **[Request Payload Schemas](/docs/devops/api/payloads)** — Analyze the complete JSON request schemas and type rules.
+- **[Standard Response Schemas](/docs/devops/api/responses)** — Check error factories and normal JSON envelopes.

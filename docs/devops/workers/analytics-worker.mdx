@@ -47,7 +47,7 @@ The `analytics-worker` binds directly to Cloudflare’s **Analytics Engine** dat
 
 ## 🔌 3. Internal REST API Specification
 
-> **Note:** For the canonical endpoint directory with full request/response examples across all workers, see [`/docs/devops/api/endpoints`](../api/endpoints).
+> **Note:** For the canonical endpoint directory with full request/response examples across all workers, see [`/docs/devops/api/endpoints`](/docs/devops/api/endpoints).
 
 All endpoints are reachable via Cloudflare Service Bindings only (no public URL). Each endpoint validates its payload with a Zod schema using `.strict()` to reject unknown fields.
 
@@ -177,5 +177,5 @@ The metrics written to `hoox-analytics` (and related D1 rollups) feed:
 
 ### 🔗 Next Steps
 
-- **[System Observability Guides](../deployment/monitoring)** — Deepen your understanding of time-series logging and metrics.
-- **[trade-worker Profile](trade-worker)** — Review how execution latency details are generated and offloaded.
+- **[System Observability Guides](/docs/devops/deployment/monitoring)** — Deepen your understanding of time-series logging and metrics.
+- **[trade-worker Profile](/docs/devops/workers/trade-worker)** — Review how execution latency details are generated and offloaded.

@@ -69,7 +69,7 @@ hoox secrets set trade-worker BYBIT_TESTNET_KEY_BINDING
 hoox secrets set trade-worker BYBIT_TESTNET_SECRET_BINDING
 ```
 
-Test fills are stored as `TEST_EXECUTED` with `*-testnet-*` position ids so they do not mix with live exposure. See **[Test Trading](/enduser/guides/test-trading)**.
+Test fills are stored as `TEST_EXECUTED` with `*-testnet-*` position ids so they do not mix with live exposure. See **[Test Trading](/docs/enduser/guides/test-trading)**.
 
 ### Q: Can I rotate API keys without downtime?
 
@@ -193,7 +193,7 @@ The `agent-worker` runs on a **configurable Cloudflare Cron** (any interval from
 5. Partially closes positions that hit take-profit targets
 6. Sends a Telegram health summary
 
-To change the interval, update `triggers.crons` and redeploy. See [agent-worker Cron setup](/devops/workers/agent-worker#cron-schedule-11440-minutes).
+To change the interval, update `triggers.crons` and redeploy. See [agent-worker Cron setup](/docs/devops/workers/agent-worker#cron-schedule-11440-minutes).
 
 ---
 
