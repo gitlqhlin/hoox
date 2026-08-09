@@ -41,9 +41,19 @@ jobs:
           node-version: "20"
           registry-url: "https://registry.npmjs.org"
 
+      - name: Diagnose npm auth
+        id: npm_whoami
+        continue-on-error: true
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+        run: |
+          if [ -z "${NODE_AUTH_TOKEN:-}" ]; then
+            echo "::warning::NPM_TOKEN secret is empty"
+            exit 1
+          fi
+          npm whoami
+
       - name: Publish @hoox-sh/hoox-shared to npm
-        # continue-on-error: @hoox-sh scope may be missing on registry.npmjs.org
-        # while GitHub Packages remains the source of truth during org migration.
         id: npm_shared
         continue-on-error: true
         run: cd packages/shared && npm publish --access public --ignore-scripts
@@ -58,7 +68,14 @@ jobs:
           registry-url: "https://npm.pkg.github.com"
 
       - name: Publish @hoox-sh/hoox-shared to GitHub Packages
-        run: cd packages/shared && npm publish --access public --ignore-scripts --registry https://npm.pkg.github.com
+        # Idempotent on re-run (version may already exist from a prior release)
+        continue-on-error: true
+        run: |
+          cd packages/shared
+          npm publish --access public --ignore-scripts --registry https://npm.pkg.github.com || {
+            echo "::warning::GitHub Packages publish skipped or failed (often E409 already exists)"
+            exit 0
+          }
         env:
           NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
@@ -73,7 +90,8 @@ jobs:
             packages/shared/package.json
             packages/shared/README.md
 
-      - name: Note npm publish outcome
-        if: steps.npm_shared.outcome == 'failure'
+      - name: Fail if npm publish failed
+        if: steps.npm_shared.outcome == 'failure' || steps.npm_whoami.outcome == 'failure'
         run: |
-          echo "::warning::npm registry publish failed (often missing @hoox-sh org). GitHub Packages step completed independently."
+          echo "::error::npm registry publish failed. After renaming the npm account to hoox-sh, regenerate an automation token and update the GitHub secret NPM_TOKEN, then re-run 'Publish packages to npm' (workflow_dispatch)."
+          exit 1
