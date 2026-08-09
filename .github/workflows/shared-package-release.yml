@@ -42,6 +42,10 @@ jobs:
           registry-url: "https://registry.npmjs.org"
 
       - name: Publish @hoox-sh/hoox-shared to npm
+        # continue-on-error: @hoox-sh scope may be missing on registry.npmjs.org
+        # while GitHub Packages remains the source of truth during org migration.
+        id: npm_shared
+        continue-on-error: true
         run: cd packages/shared && npm publish --access public --ignore-scripts
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
@@ -68,3 +72,8 @@ jobs:
           files: |
             packages/shared/package.json
             packages/shared/README.md
+
+      - name: Note npm publish outcome
+        if: steps.npm_shared.outcome == 'failure'
+        run: |
+          echo "::warning::npm registry publish failed (often missing @hoox-sh org). GitHub Packages step completed independently."
