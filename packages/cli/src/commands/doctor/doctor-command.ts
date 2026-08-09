@@ -7,7 +7,7 @@
  * `hoox doctor` — diagnose global runtime / toolchain layout.
  *
  * Reports $HOME/.hoox, local vs global monorepo resolution, and TUI entry.
- * With `--fix-runtime`, clones hoox-setup into ~/.hoox/repo and installs deps.
+ * With `--fix-runtime`, clones the hoox monorepo into ~/.hoox/repo and installs deps.
  * With `--security`, runs operator-plane hygiene + optional /v1/health probes.
  */
 import { Command } from "commander";
@@ -98,7 +98,7 @@ function printStatus(): number {
       label: "Resolved runtime root",
       detail:
         runtime.root === null
-          ? "set HOOX_REPO, cd into hoox-setup, or fix-runtime"
+          ? "set HOOX_REPO, cd into the hoox monorepo, or fix-runtime"
           : `${runtime.source}: ${runtime.root}`,
     },
     {

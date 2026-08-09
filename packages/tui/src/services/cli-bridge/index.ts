@@ -749,7 +749,7 @@ class CliBridgeImpl {
   }
 
   /**
-   * Locate the hoox-setup monorepo (local checkout or $HOME/.hoox/repo).
+   * Locate the hoox monorepo (local checkout or $HOME/.hoox/repo).
    * Prefers resolveHooxRuntimeRoot so the TUI works outside the checkout.
    * Result is cached for the process lifetime (invalidated via invalidateCache).
    */

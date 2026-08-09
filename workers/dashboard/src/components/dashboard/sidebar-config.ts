@@ -104,7 +104,7 @@ export const footerNavItems: NavFooterItem[] = [
   { title: "Setup", href: "/dashboard/setup", icon: "setup" },
   {
     title: "Get Help",
-    href: "https://github.com/hoox-sh/hoox-setup/issues",
+    href: "https://github.com/hoox-sh/hoox/issues",
     icon: "help",
     external: true,
   },

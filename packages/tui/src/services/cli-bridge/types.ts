@@ -291,7 +291,7 @@ export interface AiModelOption {
 /**
  * SSE streaming subscription for AI chat responses.
  *
- * Connects to the hoox-setup API's /api/agent/chat endpoint and invokes
+ * Connects to the hoox API's /api/agent/chat endpoint and invokes
  * the onToken callback for each streamed token fragment. Supports
  * reconnection with exponential backoff on connection loss.
  *

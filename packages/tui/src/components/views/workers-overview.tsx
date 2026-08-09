@@ -534,7 +534,7 @@ export function WorkersOverview({ dialog }: WorkersOverviewProps = {}) {
             meta={<text fg={Colors.muted}>0 total</text>}
           />
           <EmptyState
-            message="No workers connected. Check your hoox-setup deployment."
+            message="No workers connected. Check your hoox deployment."
             icon="🔌"
           />
           {connectionStatus === "connected" && (

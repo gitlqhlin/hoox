@@ -172,13 +172,13 @@ export type {
 Run:
 
 ```bash
-cd /home/jango/Git/hoox-setup && bun run typecheck 2>&1 | tail -40
+cd /home/jango/Git/hoox && bun run typecheck 2>&1 | tail -40
 ```
 
 Expected: no new errors related to `colors` exports (full monorepo typecheck may show pre-existing issues elsewhere; at minimum):
 
 ```bash
-cd /home/jango/Git/hoox-setup/packages/shared && bunx tsc --noEmit 2>&1 | tail -20
+cd /home/jango/Git/hoox/packages/shared && bunx tsc --noEmit 2>&1 | tail -20
 ```
 
 If shared package lacks a standalone typecheck script, run root `scripts/typecheck-all` or `bun run typecheck` and confirm colors-related files clean.
@@ -259,7 +259,7 @@ Update token completeness:
 - [x] **Step 2: Run colors tests**
 
 ```bash
-cd /home/jango/Git/hoox-setup/packages/tui && bun test --preload ./src/test-setup.ts src/utils/colors.test.ts
+cd /home/jango/Git/hoox/packages/tui && bun test --preload ./src/test-setup.ts src/utils/colors.test.ts
 ```
 
 Expected: all pass. If import path fails, confirm workspace links `@hoox-sh/hoox-shared` (package name in monorepo).
@@ -343,7 +343,7 @@ import { Colors, LogLevelColor, ... } from "@hoox-sh/hoox-shared";
 - [x] **Step 6: Grep for remaining local maps / brand hex**
 
 ```bash
-cd /home/jango/Git/hoox-setup && rg -n 'LEVEL_FG|statusColor\s*[:=]|#0D1117|#E8780A|#00FF88|#FF4444|#FFAA00|#4488FF|#000000' packages/tui/src --glob '!**/*.test.*'
+cd /home/jango/Git/hoox && rg -n 'LEVEL_FG|statusColor\s*[:=]|#0D1117|#E8780A|#00FF88|#FF4444|#FFAA00|#4488FF|#000000' packages/tui/src --glob '!**/*.test.*'
 ```
 
 Fix any production hits to use shared tokens/maps. Tests may still mention hex when asserting DNA values.
@@ -351,7 +351,7 @@ Fix any production hits to use shared tokens/maps. Tests may still mention hex w
 - [x] **Step 7: Run focused tests**
 
 ```bash
-cd /home/jango/Git/hoox-setup/packages/tui && bun test --preload ./src/test-setup.ts \
+cd /home/jango/Git/hoox/packages/tui && bun test --preload ./src/test-setup.ts \
   src/utils/colors.test.ts \
   src/components/shared/shared.test.tsx \
   src/components/layout/statusbar.test.tsx \
@@ -479,7 +479,7 @@ describe("view-registry", () => {
 - [x] **Step 2: Run tests — expect fail**
 
 ```bash
-cd /home/jango/Git/hoox-setup/packages/tui && bun test --preload ./src/test-setup.ts src/view-registry.test.ts
+cd /home/jango/Git/hoox/packages/tui && bun test --preload ./src/test-setup.ts src/view-registry.test.ts
 ```
 
 Expected: fail (module not found).
@@ -649,7 +649,7 @@ Fill every entry from current `app.tsx` `VIEWS` / `PALETTE_COMMANDS` / `sidebar`
 - [x] **Step 4: Run registry tests — expect pass**
 
 ```bash
-cd /home/jango/Git/hoox-setup/packages/tui && bun test --preload ./src/test-setup.ts src/view-registry.test.ts
+cd /home/jango/Git/hoox/packages/tui && bun test --preload ./src/test-setup.ts src/view-registry.test.ts
 ```
 
 - [x] **Step 5: Wire `sidebar.tsx`**
@@ -702,7 +702,7 @@ Delete the five separate Ctrl+Alt if-blocks once the map handles them.
 - [x] **Step 7: Run navigation + layout tests**
 
 ```bash
-cd /home/jango/Git/hoox-setup/packages/tui && bun test --preload ./src/test-setup.ts \
+cd /home/jango/Git/hoox/packages/tui && bun test --preload ./src/test-setup.ts \
   src/view-registry.test.ts \
   test/integration/navigation.test.tsx \
   src/components/layout/layout.test.tsx
@@ -857,7 +857,7 @@ Where worker cards already use border + focused accent, wrap content in `<Panel 
 - [x] **Step 6: Run dashboard + workers tests**
 
 ```bash
-cd /home/jango/Git/hoox-setup/packages/tui && bun test --preload ./src/test-setup.ts \
+cd /home/jango/Git/hoox/packages/tui && bun test --preload ./src/test-setup.ts \
   src/components/shared/chrome.test.tsx \
   src/components/views/dashboard.test.tsx \
   src/components/views/workers-overview.test.tsx
@@ -979,7 +979,7 @@ After directory map section, add:
 - [x] **Step 4: Final hex sweep (production)**
 
 ```bash
-cd /home/jango/Git/hoox-setup && rg -n '#[0-9A-Fa-f]{6}' packages/tui/src --glob '!**/*.{test.ts,test.tsx}' --glob '!**/colors.test.ts'
+cd /home/jango/Git/hoox && rg -n '#[0-9A-Fa-f]{6}' packages/tui/src --glob '!**/*.{test.ts,test.tsx}' --glob '!**/colors.test.ts'
 ```
 
 Expected: no brand hex outside comments; any remaining must be justified and moved to `Colors`.
@@ -987,7 +987,7 @@ Expected: no brand hex outside comments; any remaining must be justified and mov
 - [x] **Step 5: Full TUI verification**
 
 ```bash
-cd /home/jango/Git/hoox-setup/packages/tui && bun run typecheck && bun test --preload ./src/test-setup.ts
+cd /home/jango/Git/hoox/packages/tui && bun run typecheck && bun test --preload ./src/test-setup.ts
 ```
 
 Expected: typecheck exit 0; all tests pass (skip e2e if no TTY — existing smoke behavior).
@@ -1021,7 +1021,7 @@ Verify each:
 If interactive TTY available:
 
 ```bash
-cd /home/jango/Git/hoox-setup/packages/tui && bun run dev
+cd /home/jango/Git/hoox/packages/tui && bun run dev
 ```
 
 Manually: Ctrl+1, Ctrl+B, Ctrl+P, Ctrl+Alt+K, status bar colors offline vs connected if possible.

@@ -50,7 +50,7 @@ import type { InitOptions } from "./types.js";
  * We treat a directory as the Hoox repo root when it contains BOTH the
  * root `wrangler.jsonc` AND the `packages/cli` workspace (the CLI
  * package that ships this command). This is a strong, cheap signal that
- * the user cloned `hoox-setup` (or a checkout of it) rather than a
+ * the user cloned `hoox` (or a checkout of it) rather than a
  * random folder.
  *
  * @throws CLIError (INVALID_USAGE) with an actionable hint when not in
@@ -73,18 +73,18 @@ export async function verifyRepoRoot(): Promise<void> {
   }
   if (!cliPackageExists) {
     reasons.push(
-      "no `packages/cli` workspace found (this is not the hoox-setup repo)"
+      "no `packages/cli` workspace found (this is not the hoox monorepo)"
     );
   }
 
   const cloneHint =
     "  Clone first: git clone --recursive " +
-    "https://github.com/hoox-sh/hoox-setup.git";
+    "https://github.com/hoox-sh/hoox.git";
   throw new CLIError(
     "Not inside a Hoox repository root.\n  " +
       reasons.join("\n  ") +
       "\n  Run `hoox init` / `hoox onboard` from the root of your cloned " +
-      "hoox-setup repo.\n  " +
+      "hoox monorepo.\n  " +
       cloneHint,
     ExitCode.INVALID_USAGE
   );

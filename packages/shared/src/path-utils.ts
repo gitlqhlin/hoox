@@ -13,13 +13,13 @@
  *
  * Runtime layout:
  *   $HOME/.hoox/              — getHooxHome() (override with HOOX_HOME)
- *   $HOME/.hoox/repo/         — managed clone of hoox-setup (getHooxRepoPath)
+ *   $HOME/.hoox/repo/         — managed clone of the hoox monorepo (getHooxRepoPath)
  *   $HOME/.hoox/config/       — user config
  *   $HOME/.hoox/data/         — persistent state
  *
  * Tool/runtime resolution (resolveHooxRuntimeRoot):
  *   1. HOOX_REPO env (explicit monorepo path)
- *   2. Walk up from cwd for a local hoox-setup checkout
+ *   2. Walk up from cwd for a local hoox monorepo checkout
  *   3. $HOME/.hoox/repo (global managed clone)
  */
 
@@ -97,7 +97,7 @@ export function getHooxHome(): HooxPath {
 }
 
 /**
- * True when `dir` looks like a hoox-setup monorepo root.
+ * True when `dir` looks like a hoox monorepo root.
  *
  * Markers match CLI verifyRepoRoot: root wrangler.jsonc + packages/cli package.
  */
@@ -115,7 +115,7 @@ export function isHooxSetupRoot(dir: string): boolean {
 }
 
 /**
- * Walk up from `startDir` looking for a hoox-setup monorepo root.
+ * Walk up from `startDir` looking for a hoox monorepo root.
  *
  * @returns Absolute root path, or null if not found
  */

@@ -51,7 +51,7 @@ The release workflow triggers on tags matching `v0.*` or `v1.*`.
 ### 3. Monitor the Workflow
 
 Watch the release at:
-https://github.com/hoox-sh/hoox-setup/actions/workflows/release.yml
+https://github.com/hoox-sh/hoox/actions/workflows/release.yml
 
 The workflow takes approximately 3-5 minutes.
 
@@ -60,8 +60,8 @@ The workflow takes approximately 3-5 minutes.
 After the workflow completes:
 
 - **npm**: `npm view @hoox-sh/hoox-cli` should show the new version
-- **GitHub Packages**: Check https://github.com/hoox-sh/hoox-setup/packages
-- **GitHub Release**: Check https://github.com/hoox-sh/hoox-setup/releases
+- **GitHub Packages**: Check https://github.com/hoox-sh/hoox/packages
+- **GitHub Release**: Check https://github.com/hoox-sh/hoox/releases
 
 ## What Gets Published
 

@@ -211,7 +211,7 @@ export const useServiceStore = create<ServiceState & ServiceActions>()(
   immer((set, get) => ({
     ...initialState,
 
-    // ── Async: fetch workers from hoox-setup REST API ──────────────────────
+    // ── Async: fetch workers from hoox REST API ──────────────────────
     fetchWorkers: async () => {
       const gen = ++fetchWorkersGeneration;
       const { hooxFetch } = await import("../api-client");

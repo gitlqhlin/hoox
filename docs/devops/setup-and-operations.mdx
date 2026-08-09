@@ -128,7 +128,7 @@ You need access to clone with submodules:
 
 ```bash
 # Main repository
-git clone --recursive https://github.com/hoox-sh/hoox-setup.git
+git clone --recursive https://github.com/hoox-sh/hoox.git
 
 # Or via CLI
 hoox clone my-hoox-app
@@ -331,7 +331,7 @@ hoox clone my-hoox-app
 cd my-hoox-app
 
 # Option B: Direct git clone
-git clone --recursive https://github.com/hoox-sh/hoox-setup.git my-hoox-app
+git clone --recursive https://github.com/hoox-sh/hoox.git my-hoox-app
 cd my-hoox-app
 
 # If submodules are missing
@@ -477,8 +477,8 @@ The dashboard runs at `http://localhost:3000`.
 
 ```bash
 # Clone with submodules
-git clone --recursive https://github.com/hoox-sh/hoox-setup.git
-cd hoox-setup
+git clone --recursive https://github.com/hoox-sh/hoox.git
+cd hoox
 
 # Install dependencies
 bun install
@@ -1366,7 +1366,7 @@ curl https://<worker>.<prefix>.workers.dev/health
 ## Appendix B: Directory Structure
 
 ```
-hoox-setup/
+hoox/
 ├── .opencode/                    # Project intelligence hub
 ├── .env.local                    # Local environment (gitignored)
 ├── .env.example                  # Environment template

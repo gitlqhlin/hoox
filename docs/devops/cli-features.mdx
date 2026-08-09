@@ -17,7 +17,7 @@ The **`hoox` CLI** (`packages/cli`) is the unified lifecycle engine of the tradi
 The CLI is integrated into our monorepo using **Bun Workspaces**, which link local packages together. This design ensures that the CLI binary can resolve and load local shared types (`@hoox-sh/hoox-shared`) and TUI components (`packages/tui`) instantly without network downloads or pre-compilation overhead:
 
 ```
-hoox-setup/ (Monorepo Root)
+hoox/ (Monorepo Root)
 ├── packages/
 │   ├── cli/       # CLI Source code (entry binary: bin/hoox.js)
 │   ├── tui/       # OpenTUI dashboard source code

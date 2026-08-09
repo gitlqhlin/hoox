@@ -13,8 +13,6 @@
     "noEmit": true,
     "paths": {
       "@/*": ["./src/*"],
-      "@hoox/shared": ["../shared/src"],
-      "@hoox/shared/*": ["../shared/*"],
       "@hoox-sh/hoox-shared": ["../shared/src/index.ts"],
       "@hoox-sh/hoox-shared/*": ["../shared/src/*"],
       "@hoox/test-utils": ["../test-utils/src"],

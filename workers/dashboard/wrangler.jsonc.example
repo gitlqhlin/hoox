@@ -2,6 +2,15 @@
   // Dashboard — Next.js 16 + OpenNext on Cloudflare Workers
   "name": "dashboard",
   "main": ".open-next/worker.js",
+  "alias": {
+    "@hoox-sh/hoox-shared": "../../packages/shared/src/index.ts",
+    "@hoox-sh/hoox-shared/errors": "../../packages/shared/src/errors.ts",
+    "@hoox-sh/hoox-shared/legal": "../../packages/shared/src/legal.ts",
+    "@hoox-sh/hoox-shared/middleware": "../../packages/shared/src/middleware/index.ts",
+    "@hoox-sh/hoox-shared/middleware/auth": "../../packages/shared/src/middleware/auth.ts",
+    "@hoox-sh/hoox-shared/service-bindings": "../../packages/shared/src/service-bindings.ts",
+    "@hoox-sh/hoox-shared/types": "../../packages/shared/src/types.ts"
+  },
   "account_id": "YOUR_ACCOUNT_ID",
   "compatibility_date": "2026-06-08",
   "compatibility_flags": ["nodejs_compat"],
@@ -38,6 +47,10 @@
     {
       "binding": "WEB3_WALLET_SERVICE",
       "service": "web3-wallet-worker"
+    },
+    {
+      "binding": "PYNE_SERVICE",
+      "service": "pyne-worker"
     }
   ],
   "vars": {
@@ -48,7 +61,8 @@
     "TRADE_WORKER_URL": "https://trade-worker.YOUR_PREFIX.workers.dev",
     "TELEGRAM_WORKER_URL": "https://telegram-worker.YOUR_PREFIX.workers.dev",
     "WEB3_WALLET_WORKER_URL": "https://web3-wallet-worker.YOUR_PREFIX.workers.dev",
-    "EMAIL_WORKER_URL": "https://email-worker.YOUR_PREFIX.workers.dev"
+    "EMAIL_WORKER_URL": "https://email-worker.YOUR_PREFIX.workers.dev",
+    "PYNE_WORKER_URL": "https://pyne-worker.YOUR_PREFIX.workers.dev"
   },
   "ai": {
     "binding": "AI"

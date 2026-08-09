@@ -68,9 +68,9 @@ target "prod" {
     REVISION    = REVISION
   }
   labels = {
-    "org.opencontainers.image.title"       = "hoox-setup"
+    "org.opencontainers.image.title"       = "hoox"
     "org.opencontainers.image.description" = "Hoox self-hosted production image (multi-worker Bun.serve router)"
-    "org.opencontainers.image.source"      = "https://github.com/hoox-sh/hoox-setup"
+    "org.opencontainers.image.source"      = "https://github.com/hoox-sh/hoox"
     "org.opencontainers.image.licenses"    = "Apache-2.0"
     "org.opencontainers.image.version"     = VERSION
     "org.opencontainers.image.revision"    = REVISION

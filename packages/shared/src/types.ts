@@ -332,7 +332,7 @@ export type WorkerStatus = "operational" | "degraded" | "down";
 
 /**
  * Information about a Cloudflare Worker for the TUI dashboard.
- * Mirrors the data surfaced from the hoox-setup REST API.
+ * Mirrors the data surfaced from the hoox REST API.
  */
 export interface WorkerInfo {
   id: string;

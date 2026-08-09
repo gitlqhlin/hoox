@@ -61,7 +61,7 @@ median 22 ms signal-to-ack; requires @hoox-sh/hoox-cli v0.9.3+
 for the extended hop tracing used in the fast-path probe tables).
 Full monograph (extended technical reference): ~90+ pages including ADRs,
 deep dives, complete listings, and full runtime details.
-Open source: https://github.com/hoox-sh/hoox-setup
+Open source: https://github.com/hoox-sh/hoox
 ```
 
 ---
@@ -216,7 +216,7 @@ the architecture, key mechanisms, security model, and operational results.
 The extended technical reference (ADRs, per-Worker deep dives, data layer,
 runtime semantics, and full listing index) is available in the source
 repository and as a companion document. The system is released under CC BY 4.0
-at https://github.com/hoox-sh/hoox-setup.
+at https://github.com/hoox-sh/hoox.
 ```
 
 ---

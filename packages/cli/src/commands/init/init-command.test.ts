@@ -886,7 +886,7 @@ describe("init command", () => {
       fileExists.clear();
       fileExists.add("wrangler.jsonc"); // only one marker
       await expect(verifyRepoRoot()).rejects.toThrowError(
-        /this is not the hoox-setup repo/
+        /this is not the hoox monorepo/
       );
     });
 
