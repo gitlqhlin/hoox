@@ -14,7 +14,12 @@
 import { createCliRenderer } from "@opentui/core";
 import { createRoot } from "@opentui/react";
 import { CrashRecoveryApp } from "./app";
-import { Colors, saveSession } from "@hoox-sh/hoox-shared";
+import {
+  Colors,
+  saveSession,
+  useServiceStore,
+  useUIStore,
+} from "@hoox-sh/hoox-shared";
 import { setRendererRef } from "./hooks";
 import { enableAutoCopyOnSelection } from "./services/clipboard";
 import { ensureTuiStateDir } from "./services/hoox-path-service";
@@ -71,12 +76,23 @@ async function main() {
 
   const renderer = await createCliRenderer(RENDERER_CONFIG);
 
+  // Persist the *current* UI state on teardown — never hard-code dashboard.
+  // (A previous bug always rewrote session.json to dashboard on exit.)
   renderer.on("destroy", () => {
-    saveSession("dashboard", true, { cols: 80, rows: 24 }, Date.now()).catch(
-      () => {
+    try {
+      const ui = useUIStore.getState();
+      const lastUpdated = useServiceStore.getState().lastUpdated;
+      saveSession(
+        ui.activeView,
+        ui.sidebarExpanded,
+        { cols: 80, rows: 24 },
+        lastUpdated > 0 ? lastUpdated : Date.now()
+      ).catch(() => {
         // Non-fatal: session save failures are silent
-      }
-    );
+      });
+    } catch {
+      // Stores unavailable during catastrophic teardown
+    }
   });
 
   renderer.on("resize", (_width: unknown, _height: unknown) => {

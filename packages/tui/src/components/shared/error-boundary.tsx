@@ -13,6 +13,7 @@
  */
 import { Component, type ReactNode } from "react";
 import { Colors } from "@hoox-sh/hoox-shared";
+import { redactSecretsInText } from "../../services/dev-log";
 
 // ── Types ──────────────────────────────────────────────────────────────────
 
@@ -25,6 +26,15 @@ interface ErrorBoundaryProps {
 
 interface ErrorBoundaryState {
   error: Error | null;
+}
+
+/** First line of error message, secrets scrubbed, length-capped for chrome. */
+export function formatBoundaryErrorMessage(error: Error, maxLen = 160): string {
+  const first = (error.message || "Unknown error").split("\n")[0] ?? "";
+  const scrubbed = redactSecretsInText(first).trim() || "Unknown error";
+  return scrubbed.length > maxLen
+    ? `${scrubbed.slice(0, maxLen - 1)}…`
+    : scrubbed;
 }
 
 // ── Component ──────────────────────────────────────────────────────────────
@@ -46,6 +56,7 @@ export class ErrorBoundary extends Component<
 
   render(): ReactNode {
     if (this.state.error) {
+      const message = formatBoundaryErrorMessage(this.state.error);
       return (
         <box
           flexDirection="column"
@@ -66,10 +77,8 @@ export class ErrorBoundary extends Component<
             </text>
           </box>
 
-          {/* Error message (dimmed, first line only for brevity) */}
-          <text fg={Colors.muted}>
-            {this.state.error.message.split("\n")[0]}
-          </text>
+          {/* Error message (redacted, first line only) */}
+          <text fg={Colors.muted}>{message}</text>
 
           {/* Retry action */}
           <box paddingTop={1}>

@@ -116,6 +116,11 @@ interface ServiceActions {
   fetchWorkers: () => Promise<void>;
   streamTrades: () => Promise<void>;
   streamLogs: () => Promise<void>;
+  /**
+   * Abort active SSE trade/log subscriptions. Safe to call when none are open.
+   * Prefer calling on shell unmount so reconnect loops do not outlive the TUI.
+   */
+  stopStreams: () => void;
   addAlert: (alert: Alert) => void;
   addAlerts: (alerts: Alert[]) => void;
   setConnectionStatus: (status: ConnectionStatus) => void;
@@ -153,6 +158,14 @@ interface ServiceActions {
    */
   addCliErrorAlert: (details: CliErrorDetails) => void;
 }
+
+// ─── Module-private stream handles + fetch generation ────────────────────────
+// Kept outside Immer state so abort fns are not frozen/proxied. Generation
+// counters drop stale in-flight fetch results when a newer request has started.
+
+let tradeStreamAbort: (() => void) | null = null;
+let logStreamAbort: (() => void) | null = null;
+let fetchWorkersGeneration = 0;
 
 // ─── Buffer Caps ─────────────────────────────────────────────────────────────
 
@@ -200,9 +213,12 @@ export const useServiceStore = create<ServiceState & ServiceActions>()(
 
     // ── Async: fetch workers from hoox-setup REST API ──────────────────────
     fetchWorkers: async () => {
+      const gen = ++fetchWorkersGeneration;
       const { hooxFetch } = await import("../api-client");
       try {
         const data = await hooxFetch<WorkerInfo[]>("/v1/workers");
+        // Drop stale responses when a newer fetchWorkers() started
+        if (gen !== fetchWorkersGeneration) return;
         set((state) => {
           state.workers = data;
           state.lastUpdated = Date.now();
@@ -222,6 +238,7 @@ export const useServiceStore = create<ServiceState & ServiceActions>()(
           }
         });
       } catch (error) {
+        if (gen !== fetchWorkersGeneration) return;
         const msg =
           error instanceof Error ? error.message : "Unknown fetch error";
         get().addAlert({
@@ -268,12 +285,20 @@ export const useServiceStore = create<ServiceState & ServiceActions>()(
     },
 
     // ── Async: stream trades via SSE ───────────────────────────────────────
+    // subscribeSSE is long-lived and returns an abort handle immediately.
+    // We retain the handle so stopStreams / re-subscribe can tear down cleanly.
     streamTrades: async () => {
       const { subscribeSSE } = await import("../sse");
+      // Replace any previous trade subscription (avoids duplicate callbacks)
+      tradeStreamAbort?.();
+      tradeStreamAbort = null;
       try {
-        await subscribeSSE<Trade>("/v1/trades/stream", (trade) => {
+        const sub = subscribeSSE<Trade>("/v1/trades/stream", (trade) => {
           get().pushTrade(trade);
         });
+        // Support both sync and Promise-returning doubles
+        const resolved = await Promise.resolve(sub);
+        tradeStreamAbort = resolved.abort.bind(resolved);
       } catch (error) {
         const msg =
           error instanceof Error ? error.message : "SSE trade stream failed";
@@ -292,10 +317,14 @@ export const useServiceStore = create<ServiceState & ServiceActions>()(
     // ── Async: stream logs via SSE ─────────────────────────────────────────
     streamLogs: async () => {
       const { subscribeSSE } = await import("../sse");
+      logStreamAbort?.();
+      logStreamAbort = null;
       try {
-        await subscribeSSE<LogEntry>("/v1/logs/stream", (log) => {
+        const sub = subscribeSSE<LogEntry>("/v1/logs/stream", (log) => {
           get().pushLog(log);
         });
+        const resolved = await Promise.resolve(sub);
+        logStreamAbort = resolved.abort.bind(resolved);
       } catch (error) {
         const msg =
           error instanceof Error ? error.message : "SSE log stream failed";
@@ -309,6 +338,13 @@ export const useServiceStore = create<ServiceState & ServiceActions>()(
         });
         get().handleConnectionFailure(msg);
       }
+    },
+
+    stopStreams: () => {
+      tradeStreamAbort?.();
+      logStreamAbort?.();
+      tradeStreamAbort = null;
+      logStreamAbort = null;
     },
 
     // ── Sync: add single alert ─────────────────────────────────────────────

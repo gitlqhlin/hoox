@@ -33,11 +33,16 @@ import {
   resetNetworkDoubles,
   setMockApiData,
   setMockApiFailure,
+  setMockApiDelay,
+  emitSseEvent,
+  sseSubscriptions,
 } from "../network-test-double";
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
 function resetStore() {
+  // Tear down any SSE handles before clearing state (avoids cross-test leaks)
+  useServiceStore.getState().stopStreams();
   useServiceStore.setState({
     workers: [],
     tradeStream: [],
@@ -850,7 +855,7 @@ describe("useServiceStore", () => {
     });
   });
 
-  // ── streamTrades ─────────────────────────────────────────────────────────
+  // ── streamTrades / streamLogs / SSE lifecycle ────────────────────────────
 
   describe("streamTrades", () => {
     it("subscribes to SSE trade stream", async () => {
@@ -873,6 +878,120 @@ describe("useServiceStore", () => {
 
       // Restore
       subscribeSSEMock.mockImplementation(origMock as any);
+    });
+
+    it("pushes trades from SSE events into the ring buffer", async () => {
+      await useServiceStore.getState().streamTrades();
+      const trade = makeTrade({ id: "sse-t1", symbol: "ETH" });
+      emitSseEvent(trade, "/v1/trades");
+      expect(useServiceStore.getState().tradeStream).toHaveLength(1);
+      expect(useServiceStore.getState().tradeStream[0].id).toBe("sse-t1");
+    });
+  });
+
+  describe("streamLogs", () => {
+    it("subscribes to SSE log stream", async () => {
+      await useServiceStore.getState().streamLogs();
+      expect(subscribeSSEMock).toHaveBeenCalledTimes(1);
+      expect(subscribeSSEMock.mock.calls[0][0]).toBe("/v1/logs/stream");
+    });
+
+    it("pushes logs from SSE events into the ring buffer", async () => {
+      await useServiceStore.getState().streamLogs();
+      const log = makeLog({ id: "sse-l1", message: "from-sse" });
+      emitSseEvent(log, "/v1/logs");
+      expect(useServiceStore.getState().logs).toHaveLength(1);
+      expect(useServiceStore.getState().logs[0].message).toBe("from-sse");
+    });
+  });
+
+  describe("SSE subscription cleanup", () => {
+    it("stopStreams aborts active subscriptions so further events are ignored", async () => {
+      await useServiceStore.getState().streamTrades();
+      await useServiceStore.getState().streamLogs();
+      expect(sseSubscriptions.length).toBe(2);
+
+      useServiceStore.getState().stopStreams();
+      expect(sseSubscriptions.length).toBe(0);
+
+      emitSseEvent(makeTrade({ id: "after-stop" }), "/v1/trades");
+      emitSseEvent(makeLog({ id: "after-stop-log" }), "/v1/logs");
+      expect(useServiceStore.getState().tradeStream).toHaveLength(0);
+      expect(useServiceStore.getState().logs).toHaveLength(0);
+    });
+
+    it("re-subscribing trades aborts the previous trade subscription", async () => {
+      await useServiceStore.getState().streamTrades();
+      expect(
+        sseSubscriptions.filter((s) => s.path.includes("trades"))
+      ).toHaveLength(1);
+
+      await useServiceStore.getState().streamTrades();
+      // Only one active trade subscription after replace
+      expect(
+        sseSubscriptions.filter((s) => s.path.includes("trades"))
+      ).toHaveLength(1);
+
+      emitSseEvent(makeTrade({ id: "only-once" }), "/v1/trades");
+      // Single push — not duplicated from two live callbacks
+      expect(
+        useServiceStore
+          .getState()
+          .tradeStream.filter((t) => t.id === "only-once")
+      ).toHaveLength(1);
+    });
+
+    it("stopStreams is idempotent when no streams are open", () => {
+      expect(() => useServiceStore.getState().stopStreams()).not.toThrow();
+      useServiceStore.getState().stopStreams();
+      expect(sseSubscriptions.length).toBe(0);
+    });
+  });
+
+  // ── Concurrent fetch race ────────────────────────────────────────────────
+
+  describe("fetchWorkers race", () => {
+    it("newer fetch wins when an older in-flight request resolves later", async () => {
+      const slow = [makeWorker({ name: "stale-alpha" })];
+      const fast = [
+        makeWorker({ name: "fresh-beta" }),
+        makeWorker({ name: "fresh-gamma" }),
+      ];
+
+      // First call: delayed stale payload
+      setMockApiDelay(40);
+      setMockApiData(slow);
+      const p1 = useServiceStore.getState().fetchWorkers();
+
+      // Second call: immediate fresh payload (starts while p1 still pending)
+      await new Promise((r) => setTimeout(r, 5));
+      setMockApiDelay(0);
+      setMockApiData(fast);
+      const p2 = useServiceStore.getState().fetchWorkers();
+
+      await Promise.all([p1, p2]);
+
+      const workers = useServiceStore.getState().workers;
+      expect(workers).toHaveLength(2);
+      expect(workers.map((w) => w.name)).toEqual(["fresh-beta", "fresh-gamma"]);
+      expect(useServiceStore.getState().connectionStatus).toBe("connected");
+    });
+
+    it("stale failure does not clobber a newer successful fetch", async () => {
+      setMockApiDelay(40);
+      setMockApiFailure(true, "slow fail");
+      const p1 = useServiceStore.getState().fetchWorkers();
+
+      await new Promise((r) => setTimeout(r, 5));
+      setMockApiDelay(0);
+      setMockApiFailure(false);
+      setMockApiData([makeWorker({ name: "winner" })]);
+      const p2 = useServiceStore.getState().fetchWorkers();
+
+      await Promise.all([p1, p2]);
+
+      expect(useServiceStore.getState().workers[0]?.name).toBe("winner");
+      expect(useServiceStore.getState().connectionStatus).toBe("connected");
     });
   });
 

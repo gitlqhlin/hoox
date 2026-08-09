@@ -34,7 +34,8 @@
  *   - paused    → Colors.muted    (gray)
  *   - unknown   → Colors.muted    (gray)
  */
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useKeyboard } from "@opentui/react";
 import { Colors, useUIStore } from "@hoox-sh/hoox-shared";
 import { ErrorBoundary } from "../shared/error-boundary";
 import { Spinner, EmptyState } from "../shared/spinner";
@@ -44,7 +45,31 @@ import { cliBridge } from "../../services/cli-bridge";
 import type { QueueDepth, QueueDepthStatus } from "../../services/cli-bridge";
 
 /** Auto-refresh interval in milliseconds. */
-const REFRESH_INTERVAL_MS = 5_000;
+export const REFRESH_INTERVAL_MS = 5_000;
+
+/** Status severity for sort order (critical first). */
+const STATUS_RANK: Record<QueueDepthStatus, number> = {
+  critical: 0,
+  backlogged: 1,
+  paused: 2,
+  unknown: 3,
+  healthy: 4,
+};
+
+/**
+ * Sort queues by pressure (critical → healthy) then name.
+ * Exported for unit tests.
+ */
+export function sortQueuesByPressure(
+  queues: readonly QueueDepth[]
+): QueueDepth[] {
+  return [...queues].sort((a, b) => {
+    const ra = STATUS_RANK[a.status] ?? 99;
+    const rb = STATUS_RANK[b.status] ?? 99;
+    if (ra !== rb) return ra - rb;
+    return a.queueName.localeCompare(b.queueName);
+  });
+}
 
 /** Width of the depth fill-bar (in terminal columns). */
 const METER_WIDTH = 20;
@@ -200,11 +225,16 @@ export function QueueDepthView() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [lastSampledAt, setLastSampledAt] = useState<string | null>(null);
+  /** Generation counter so stale responses after unmount/nav are ignored. */
+  const fetchGenRef = useRef(0);
 
-  const refresh = useCallback(async () => {
-    setLoading(true);
-    setError(null);
+  const refresh = useCallback(async (opts?: { soft?: boolean }) => {
+    const soft = opts?.soft === true;
+    const gen = ++fetchGenRef.current;
+    // Soft refresh (auto-poll): keep prior rows painted; only spinner on first load.
+    if (!soft) setLoading(true);
     const result = await cliBridge.monitorQueueDepth();
+    if (gen !== fetchGenRef.current) return; // superseded or unmounted
     if (result.success && result.data) {
       setQueues(result.data);
       setLastSampledAt(new Date().toISOString());
@@ -213,44 +243,36 @@ export function QueueDepthView() {
       // Keep previous data on transient failure but surface the message.
       setError(result.stderr || result.stdout || "Failed to read queue depths");
     }
-    setLoading(false);
+    if (!soft || gen === fetchGenRef.current) setLoading(false);
   }, []);
 
-  // Initial load on mount
+  // Initial load on mount + invalidate in-flight on unmount
   useEffect(() => {
-    let cancelled = false;
-    const run = async () => {
-      if (cancelled) return;
-      setLoading(true);
-      setError(null);
-      const result = await cliBridge.monitorQueueDepth();
-      if (cancelled) return;
-      if (result.success && result.data) {
-        setQueues(result.data);
-        setLastSampledAt(new Date().toISOString());
-      } else {
-        setError(
-          result.stderr || result.stdout || "Failed to read queue depths"
-        );
-      }
-      if (!cancelled) setLoading(false);
-    };
-    void run();
+    void refresh({ soft: false });
     return () => {
-      cancelled = true;
+      fetchGenRef.current += 1;
     };
-  }, []);
+  }, [refresh]);
 
   // Auto-refresh every 5s while the view is the active view.
-  // We re-create the interval when `isActive` flips so navigation
-  // away from the view stops the polling.
+  // Soft poll avoids flicker; interval stops when user navigates away.
   useEffect(() => {
     if (!isActive) return;
     const handle = setInterval(() => {
-      void refresh();
+      void refresh({ soft: true });
     }, REFRESH_INTERVAL_MS);
     return () => clearInterval(handle);
   }, [isActive, refresh]);
+
+  // Keyboard: r / F5 manual refresh while active
+  useKeyboard((key) => {
+    if (!isActive) return;
+    if (key.name === "r" || key.name === "f5") {
+      void refresh({ soft: false });
+    }
+  });
+
+  const sortedQueues = useMemo(() => sortQueuesByPressure(queues), [queues]);
 
   // ── Render ──────────────────────────────────────────────────────────────
   return (
@@ -312,7 +334,7 @@ export function QueueDepthView() {
             </box>
           ) : (
             <scrollbox width="100%" flexGrow={1}>
-              {queues.map((q) => (
+              {sortedQueues.map((q) => (
                 <QueueRow key={q.queueName} queue={q} />
               ))}
             </scrollbox>
@@ -334,6 +356,9 @@ export function QueueDepthView() {
               onMouseUp={loading ? undefined : () => void refresh()}
             >
               {loading ? " ... " : " [REFRESH] "}
+            </text>
+            <text fg={Colors.dim} dim>
+              r refresh
             </text>
             {error && queues.length > 0 && (
               <text fg={Colors.warning} dim>

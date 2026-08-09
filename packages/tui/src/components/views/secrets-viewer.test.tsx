@@ -9,7 +9,12 @@
  * unit render with mock.module pollutes the shared store under Bun's runner.
  */
 import { describe, it, expect } from "bun:test";
-import { SecretsViewer } from "./secrets-viewer";
+import {
+  SecretsViewer,
+  filterSecrets,
+  MAX_VISIBLE_SECRETS,
+} from "./secrets-viewer";
+import type { SecretMetadata } from "../../services/cli-bridge";
 
 describe("SecretsViewer", () => {
   it("is a function component", () => {
@@ -33,5 +38,28 @@ describe("SecretsViewer", () => {
     expect(src).toContain("setSearchActive(true)");
     expect(src).toContain("filteredSecrets");
     expect(src).toContain("onChange={setSearch}");
+  });
+
+  it("never fetches secret values (no get/reveal bridge calls)", async () => {
+    const src = await Bun.file(
+      new URL("./secrets-viewer.tsx", import.meta.url)
+    ).text();
+    expect(src).toContain("configSecretsList");
+    expect(src).not.toMatch(/configSecretsGet|secrets get|revealValue/i);
+    // Explicit security comment contract
+    expect(src).toContain("NEVER");
+  });
+
+  it("filters by name only (values never considered)", () => {
+    const secrets: SecretMetadata[] = [
+      { name: "OPENAI_API_KEY", type: "api_key", source: "config" },
+      { name: "BINANCE_KEY_BINDING", type: "api_key", source: "Cloudflare" },
+    ];
+    expect(filterSecrets(secrets, "openai")).toHaveLength(1);
+    expect(filterSecrets(secrets, "")).toHaveLength(2);
+  });
+
+  it("caps visible secret rows", () => {
+    expect(MAX_VISIBLE_SECRETS).toBeGreaterThan(0);
   });
 });

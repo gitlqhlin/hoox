@@ -44,7 +44,7 @@ export function messageAuthRequired(mode: TuiMode, host: string): string {
 }
 
 export function messageAuthMissing(host: string): string {
-  return `No API token · REMOTE · ${host}`;
+  return `No API credentials · REMOTE · ${host}`;
 }
 
 export function messageOfflineStartup(
@@ -185,7 +185,10 @@ export function toastAuthRequiredMode(mode: TuiMode, host: string): void {
   });
 }
 
-/** Remote launch without a token configured. */
+/**
+ * Remote launch without fail-closed auth (no Bearer and no Access pair).
+ * Prefer gating with `resolveTuiConnectionEnv().hasAuth` / `isRemoteAuthReady()`.
+ */
 export function toastAuthMissingRemote(host: string): void {
   toastWarning(messageAuthMissing(host), {
     description: remoteAuthMissingHint(),

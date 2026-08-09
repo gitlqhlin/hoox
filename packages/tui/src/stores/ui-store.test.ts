@@ -12,6 +12,7 @@
 import { describe, it, expect, beforeEach } from "bun:test";
 import { useUIStore } from "@hoox-sh/hoox-shared/stores/ui-store";
 import type { ViewId, ModalState } from "@hoox-sh/hoox-shared";
+import { ALL_VIEW_IDS } from "../test-utils";
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -41,19 +42,9 @@ describe("useUIStore", () => {
       expect(useUIStore.getState().activeView).toBe("workers");
     });
 
-    it("accepts all valid view IDs", () => {
-      const views: ViewId[] = [
-        "dashboard",
-        "workers",
-        "worker-detail",
-        "trade-monitor",
-        "logs-viewer",
-        "service-manager",
-        "config-editor",
-        "setup-wizard",
-        "settings",
-      ];
-      for (const view of views) {
+    it("accepts all valid view IDs (16)", () => {
+      expect(ALL_VIEW_IDS).toHaveLength(16);
+      for (const view of ALL_VIEW_IDS) {
         useUIStore.getState().setView(view);
         expect(useUIStore.getState().activeView).toBe(view);
       }

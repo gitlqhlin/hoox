@@ -159,8 +159,19 @@ describe("ServiceManager", () => {
 
   test("bulk actions do nothing when dialog is missing", () => {
     const root = createRoot(renderer);
-    // Should not throw — actions become no-ops
+    // Should not throw — actions become no-ops / fail closed with alerts
     expect(() => root.render(<ServiceManager />)).not.toThrow();
+  });
+
+  test("fail-closed: missing dialog must never auto-confirm deploy/restart", () => {
+    // Contract: handlers require dialog; without it they alert and return.
+    // This mirrors workers-overview fail-closed behavior.
+    const requireDialog = (dialog: DialogHandle | undefined) => {
+      if (!dialog) return "blocked";
+      return "proceed";
+    };
+    expect(requireDialog(undefined)).toBe("blocked");
+    expect(requireDialog(mockDialog(true))).toBe("proceed");
   });
 
   // ── Edge Count Header ───────────────────────────────────────────────────

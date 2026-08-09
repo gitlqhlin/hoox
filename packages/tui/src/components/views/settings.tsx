@@ -33,11 +33,23 @@ import { ViewHeader } from "../shared/view-header";
 import { Panel } from "../shared/panel";
 import { showConfirm } from "../ui/dialog";
 import type { DialogHandle } from "../ui/dialog";
-import { cliBridge } from "../../services/cli-bridge";
+import { cliBridge as realCliBridge } from "../../services/cli-bridge";
 import { getSettingsConnectionSnapshot } from "../../services/tui-connection";
 import * as path from "path";
 import * as os from "os";
 import type { ViewId, NotificationPreferences } from "@hoox-sh/hoox-shared";
+
+/**
+ * Prefer the process-wide CLI bridge test double when test-setup installed it
+ * (`globalThis.__hooxCliBridgeDouble`). Resolved at call time so the double is
+ * picked up even if this module evaluated before the preload finished.
+ */
+function cliBridge(): typeof realCliBridge {
+  const g = globalThis as unknown as {
+    __hooxCliBridgeDouble?: typeof realCliBridge;
+  };
+  return g.__hooxCliBridgeDouble ?? realCliBridge;
+}
 
 export interface SettingsViewProps {
   /** Dialog handle for destructive action confirmation. */
@@ -303,10 +315,12 @@ function ThemePanel({
     } = {};
     try {
       const cfg = readConfigSync();
+      // Presence only — never pass cleartext tokens into view/snapshot objects.
+      // A non-empty placeholder is enough for authSummary (Boolean check).
       configFallback = {
         transport: cfg.transport,
         apiUrl: cfg.apiUrl,
-        apiToken: cfg.apiToken,
+        apiToken: cfg.apiToken ? "1" : undefined,
       };
     } catch {
       // config.json may be missing — env-only snapshot is fine
@@ -915,7 +929,7 @@ export function SettingsView({ dialog }: SettingsViewProps = {}) {
 
   const handleExportData = useCallback(async () => {
     try {
-      const result = await cliBridge.configShow();
+      const result = await cliBridge().configShow();
       if (!result.success) {
         useServiceStore.getState().addAlert({
           id: `export-err-${Date.now()}`,
@@ -1033,7 +1047,7 @@ export function SettingsView({ dialog }: SettingsViewProps = {}) {
   const handleCheckSetup = useCallback(async () => {
     setSetupCheck({ kind: "running" });
     try {
-      const result = await cliBridge.checkSetup();
+      const result = await cliBridge().checkSetup();
       if (!result.success) {
         // Process-level failure (CLI exited non-zero, or binary not found).
         setSetupCheck({
@@ -1119,7 +1133,7 @@ export function SettingsView({ dialog }: SettingsViewProps = {}) {
     );
     if (!ok) return;
     try {
-      const result = await cliBridge.checkFix();
+      const result = await cliBridge().checkFix();
       if (!result.success) {
         useServiceStore.getState().addAlert({
           id: `auto-repair-${Date.now()}`,

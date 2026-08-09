@@ -6,9 +6,9 @@
 /**
  * Integration Tests — Navigation, view switching, keyboard shortcuts.
  *
- * Tests the full navigation flow via the UI store, verifying:
- *   - View transitions via setView
- *   - Keyboard shortcut dispatch (Ctrl+1-9)
+ * Tests the full navigation flow via the UI store + view-registry helpers:
+ *   - View transitions via setView (all 16 views)
+ *   - Keyboard shortcut maps (Ctrl+digit + Ctrl+Alt chords)
  *   - Focus routing across views
  *   - Command palette integration
  *   - Back navigation
@@ -19,34 +19,13 @@ import { describe, it, expect, beforeEach } from "bun:test";
 import { useUIStore } from "@hoox-sh/hoox-shared/stores/ui-store";
 import { useServiceStore } from "@hoox-sh/hoox-shared/stores/service-store";
 import type { ViewId } from "@hoox-sh/hoox-shared";
-
-// ─── View shortcut mapping (mirrors app.tsx) ──────────────────────────────────
-
-const VIEW_SHORTCUTS: Record<string, ViewId> = {
-  "1": "dashboard",
-  "2": "workers",
-  "3": "worker-detail",
-  "4": "trade-monitor",
-  "5": "logs-viewer",
-  "6": "service-manager",
-  "7": "config-editor",
-  "8": "setup-wizard",
-  "9": "settings",
-};
-
-// ─── All view IDs for iteration ───────────────────────────────────────────────
-
-const ALL_VIEWS: ViewId[] = [
-  "dashboard",
-  "workers",
-  "worker-detail",
-  "trade-monitor",
-  "logs-viewer",
-  "service-manager",
-  "config-editor",
-  "setup-wizard",
-  "settings",
-];
+import {
+  getViewShortcutMap,
+  getCtrlAltViewMap,
+  getViewPaletteCommands,
+  VIEW_REGISTRY,
+} from "../../src/view-registry";
+import { ALL_VIEW_IDS } from "../../src/test-utils";
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -64,25 +43,30 @@ function resetStores() {
   });
 }
 
-/** Simulate a Ctrl+Number keyboard shortcut dispatch */
-function dispatchShortcut(key: string) {
-  const view = VIEW_SHORTCUTS[key];
+/** Simulate a Ctrl+digit keyboard shortcut via registry map */
+function dispatchDigitShortcut(key: string) {
+  const view = getViewShortcutMap()[key];
   if (view) {
     useUIStore.getState().setView(view);
   }
 }
 
-/** Simulate Ctrl+B (toggle sidebar) */
+/** Simulate Ctrl+Alt+letter chord */
+function dispatchCtrlAlt(letter: string) {
+  const view = getCtrlAltViewMap()[letter];
+  if (view) {
+    useUIStore.getState().setView(view);
+  }
+}
+
 function dispatchCtrlB() {
   useUIStore.getState().toggleSidebar();
 }
 
-/** Simulate Ctrl+P (command palette) */
 function dispatchCtrlP() {
   useUIStore.getState().openPalette();
 }
 
-/** Simulate Escape */
 function dispatchEscape() {
   const state = useUIStore.getState();
   if (state.commandPaletteOpen) {
@@ -99,31 +83,36 @@ describe("Navigation Integration", () => {
     resetStores();
   });
 
-  // ── View Switching ──────────────────────────────────────────────────────
-
   describe("view switching", () => {
     it("starts on dashboard", () => {
       expect(useUIStore.getState().activeView).toBe("dashboard");
     });
 
-    it("switches to all views via keyboard shortcuts", () => {
-      for (const [key, view] of Object.entries(VIEW_SHORTCUTS)) {
-        dispatchShortcut(key);
+    it("switches to all Ctrl+digit views via shortcuts", () => {
+      for (const [key, view] of Object.entries(getViewShortcutMap())) {
+        dispatchDigitShortcut(key);
+        expect(useUIStore.getState().activeView).toBe(view);
+      }
+    });
+
+    it("switches to all Ctrl+Alt chord views", () => {
+      for (const [letter, view] of Object.entries(getCtrlAltViewMap())) {
+        dispatchCtrlAlt(letter);
         expect(useUIStore.getState().activeView).toBe(view);
       }
     });
 
     it("tracks navigation history for back support", () => {
-      dispatchShortcut("2"); // workers
+      dispatchDigitShortcut("2"); // workers
       expect(useUIStore.getState().previousView).toBe("dashboard");
 
-      dispatchShortcut("4"); // trade-monitor
+      dispatchDigitShortcut("4"); // trade-monitor
       expect(useUIStore.getState().previousView).toBe("workers");
     });
 
     it("goBack returns to previous view", () => {
-      dispatchShortcut("2"); // workers
-      dispatchShortcut("4"); // trade-monitor
+      dispatchDigitShortcut("2");
+      dispatchDigitShortcut("4");
       useUIStore.getState().goBack();
 
       expect(useUIStore.getState().activeView).toBe("workers");
@@ -131,11 +120,10 @@ describe("Navigation Integration", () => {
     });
 
     it("double goBack after single navigation has no effect", () => {
-      dispatchShortcut("9"); // settings
+      dispatchDigitShortcut("9");
       useUIStore.getState().goBack();
 
       expect(useUIStore.getState().activeView).toBe("dashboard");
-      // second goBack should be no-op
       useUIStore.getState().goBack();
       expect(useUIStore.getState().activeView).toBe("dashboard");
     });
@@ -146,16 +134,14 @@ describe("Navigation Integration", () => {
     });
   });
 
-  // ── Keyboard Shortcut Dispatch ──────────────────────────────────────────
-
   describe("keyboard shortcuts", () => {
-    it("Ctrl+1 through Ctrl+9 switch all 9 views", () => {
-      for (let i = 1; i <= 9; i++) {
-        dispatchShortcut(String(i));
-        expect(useUIStore.getState().activeView).toBe(
-          VIEW_SHORTCUTS[String(i)]
-        );
+    it("Ctrl+1 through Ctrl+0 switch digit-bound views", () => {
+      const map = getViewShortcutMap();
+      for (const key of Object.keys(map)) {
+        dispatchDigitShortcut(key);
+        expect(useUIStore.getState().activeView).toBe(map[key]);
       }
+      expect(Object.keys(map)).toHaveLength(10);
     });
 
     it("Ctrl+B toggles sidebar", () => {
@@ -179,16 +165,14 @@ describe("Navigation Integration", () => {
 
     it("view switching auto-closes command palette", () => {
       dispatchCtrlP();
-      dispatchShortcut("5");
+      dispatchDigitShortcut("5");
       expect(useUIStore.getState().commandPaletteOpen).toBe(false);
     });
   });
 
-  // ── Focus Routing ───────────────────────────────────────────────────────
-
   describe("focus routing", () => {
-    it("each view can be activated independently", () => {
-      for (const view of ALL_VIEWS) {
+    it("each of 16 views can be activated independently", () => {
+      for (const view of ALL_VIEW_IDS) {
         useUIStore.getState().setView(view);
         expect(useUIStore.getState().activeView).toBe(view);
       }
@@ -218,22 +202,20 @@ describe("Navigation Integration", () => {
     });
   });
 
-  // ── Rapid Transitions ───────────────────────────────────────────────────
-
   describe("rapid transitions", () => {
-    it("handles rapid sequential view switches", () => {
-      for (const view of ALL_VIEWS) {
+    it("handles rapid sequential view switches across all 16", () => {
+      for (const view of ALL_VIEW_IDS) {
         useUIStore.getState().setView(view);
       }
-      // Should end on the last view
-      expect(useUIStore.getState().activeView).toBe("settings");
+      expect(useUIStore.getState().activeView).toBe(
+        ALL_VIEW_IDS[ALL_VIEW_IDS.length - 1]
+      );
     });
 
     it("handles rapid sidebar toggles", () => {
       for (let i = 0; i < 10; i++) {
         dispatchCtrlB();
       }
-      // 10 toggles from true: true→false→true→false→true→false→true→false→true→false→true
       expect(useUIStore.getState().sidebarExpanded).toBe(true);
     });
 
@@ -246,47 +228,54 @@ describe("Navigation Integration", () => {
     });
 
     it("state remains consistent after rapid mixed operations", () => {
-      dispatchShortcut("3");
+      dispatchDigitShortcut("3");
       dispatchCtrlB();
       dispatchCtrlP();
-      dispatchShortcut("7");
+      dispatchDigitShortcut("7");
       dispatchCtrlB();
-      // After switching views, palette should be closed
       expect(useUIStore.getState().commandPaletteOpen).toBe(false);
       expect(useUIStore.getState().activeView).toBe("config-editor");
     });
   });
 
-  // ── View Registry Completeness ──────────────────────────────────────────
-
-  describe("view registry", () => {
-    it("all 9 views are defined and reachable", () => {
-      expect(ALL_VIEWS).toHaveLength(9);
+  describe("view registry completeness", () => {
+    it("all 16 views are defined and reachable", () => {
+      expect(ALL_VIEW_IDS).toHaveLength(16);
+      expect(VIEW_REGISTRY).toHaveLength(16);
     });
 
-    it("shortcuts map 1:1 to views", () => {
-      const shortcutEntries = Object.entries(VIEW_SHORTCUTS);
-      expect(shortcutEntries.length).toBe(9);
-      // Every view is mapped
-      const mappedViews = new Set(Object.values(VIEW_SHORTCUTS));
-      expect(mappedViews.size).toBe(9);
+    it("digit shortcuts map 1:1 without collision", () => {
+      const map = getViewShortcutMap();
+      expect(Object.keys(map).length).toBe(10);
+      expect(new Set(Object.values(map)).size).toBe(10);
+    });
+
+    it("Ctrl+Alt chords map uniquely", () => {
+      const map = getCtrlAltViewMap();
+      expect(Object.keys(map).length).toBe(6);
+      expect(new Set(Object.values(map)).size).toBe(6);
+    });
+
+    it("palette view commands cover every ViewId", () => {
+      const ids = new Set(getViewPaletteCommands().map((c) => c.id));
+      for (const view of ALL_VIEW_IDS) {
+        expect(ids.has(view)).toBe(true);
+      }
     });
 
     it("each view ID has a valid type", () => {
-      for (const view of ALL_VIEWS) {
+      for (const view of ALL_VIEW_IDS) {
         expect(typeof view).toBe("string");
         expect(view.length).toBeGreaterThan(0);
       }
     });
   });
 
-  // ── Store Isolation ─────────────────────────────────────────────────────
-
   describe("store isolation", () => {
     it("UI state changes do not affect service state", () => {
       useServiceStore.setState({ connectionStatus: "connected" });
 
-      dispatchShortcut("5");
+      dispatchDigitShortcut("5");
       dispatchCtrlB();
 
       expect(useServiceStore.getState().connectionStatus).toBe("connected");

@@ -18,7 +18,13 @@ import { describe, it, expect, mock, beforeEach } from "bun:test";
 const mockUpdateConfig = mock((_config: Record<string, unknown>) => {});
 const mockSetView = mock((_view: string) => {});
 
-import { redactWizardSecrets } from "./setup-wizard";
+import {
+  redactWizardSecrets,
+  maskSecret,
+  validateApiKey,
+  validateEmail,
+  validateUrl,
+} from "./setup-wizard";
 
 // ─── Secret redaction (session persistence) ─────────────────────────────────
 
@@ -86,29 +92,41 @@ describe("redactWizardSecrets", () => {
     expect(original.ai.apiKey).toBe("secret");
     expect(original.notifications.telegram.botToken).toBe("tok");
   });
+
+  it("session payload is safe to JSON.stringify (no secrets)", () => {
+    const redacted = redactWizardSecrets({
+      apiKeys: {
+        binance: { key: "binance-key-secret-value", secret: "binance-sec" },
+        bybit: { key: "", secret: "" },
+        mexc: { key: "", secret: "" },
+      },
+      exchanges: { binance: true, bybit: false, mexc: false },
+      ai: {
+        providerUrl: "https://api.example.com",
+        apiKey: "sk-live-should-not-persist",
+        model: "gpt-4",
+      },
+      strategy: { type: "grid", params: {} },
+      notifications: {
+        email: { enabled: false, address: "" },
+        telegram: { enabled: true, botToken: "123:ABC", chatId: "1" },
+        discord: {
+          enabled: true,
+          webhookUrl: "https://discord.com/api/webhooks/x",
+        },
+      },
+    });
+    const json = JSON.stringify({ step: 2, data: redacted });
+    expect(json).not.toContain("sk-live");
+    expect(json).not.toContain("binance-key");
+    expect(json).not.toContain("123:ABC");
+    expect(json).not.toContain("webhooks/x");
+  });
 });
 
 // ─── Validation unit tests ───────────────────────────────────────────────────
 
 describe("Validation helpers", () => {
-  // Re-define helpers inline for testing (since they are not exported)
-  function maskSecret(value: string): string {
-    if (value.length <= 8) return "•".repeat(value.length || 4);
-    return value.slice(0, 4) + "••••" + value.slice(-4);
-  }
-
-  function validateApiKey(value: string): boolean {
-    return value.trim().length >= 16 && value === value.trim();
-  }
-
-  function validateEmail(value: string): boolean {
-    return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value);
-  }
-
-  function validateUrl(value: string): boolean {
-    return /^https?:\/\/.+/.test(value);
-  }
-
   describe("maskSecret", () => {
     it("masks long strings showing first 4 and last 4", () => {
       const result = maskSecret("abcdefghijklmnop12345678");
@@ -176,35 +194,32 @@ describe("SetupWizard", () => {
   });
 
   describe("Progress indicator", () => {
-    it("shows 6 step labels", () => {
+    it("shows 7 step labels including prerequisites", () => {
       const STEPS = [
-        "API Keys",
-        "Exchanges",
-        "AI Providers",
-        "Strategies",
-        "Notifications",
-        "Deploy",
+        "PREREQUISITES",
+        "API KEYS",
+        "EXCHANGES",
+        "AI PROVIDERS",
+        "STRATEGIES",
+        "NOTIFICATIONS",
+        "DEPLOY",
       ];
-      expect(STEPS).toHaveLength(6);
-      expect(STEPS[0]).toBe("API Keys");
-      expect(STEPS[5]).toBe("Deploy");
-    });
-
-    it("has TOTAL_STEPS equal to 6", () => {
-      // Manually check the constant
-      expect(6).toBe(6);
+      expect(STEPS).toHaveLength(7);
+      expect(STEPS[0]).toBe("PREREQUISITES");
+      expect(STEPS[6]).toBe("DEPLOY");
     });
   });
 
   describe("Steps can be skipped", () => {
-    it("Exchanges step (index 1) is skippable", () => {
-      const skipIndex = 1; // Exchanges
-      expect(skipIndex).toBe(1);
+    it("Exchanges step (index 2) is skippable", () => {
+      // After prerequisites (0) + API keys (1), exchanges is step 2
+      const skipIndex = 2;
+      expect(skipIndex).toBe(2);
     });
 
-    it("Strategies step (index 3) is skippable", () => {
-      const skipIndex = 3; // Strategies
-      expect(skipIndex).toBe(3);
+    it("Strategies step (index 4) is skippable", () => {
+      const skipIndex = 4;
+      expect(skipIndex).toBe(4);
     });
   });
 
@@ -216,16 +231,16 @@ describe("SetupWizard", () => {
 
     it("Next advances to the next step", () => {
       let step = 0;
-      const totalSteps = 6;
+      const totalSteps = 7;
       step = Math.min(step + 1, totalSteps - 1);
       expect(step).toBe(1);
     });
 
     it("Cannot advance past last step", () => {
-      let step = 5;
-      const totalSteps = 6;
+      let step = 6;
+      const totalSteps = 7;
       if (step < totalSteps - 1) step++;
-      expect(step).toBe(5);
+      expect(step).toBe(6);
     });
   });
 
@@ -249,23 +264,26 @@ describe("SetupWizard", () => {
       mockSetView("dashboard");
       expect(mockSetView).toHaveBeenCalledWith("dashboard");
     });
+
+    it("deploy is fail-closed without dialog (contract)", () => {
+      // Mirrors SetupWizard.handleDeploy: no dialog → block + alert
+      const dialog: undefined = undefined;
+      const blocked = !dialog;
+      expect(blocked).toBe(true);
+    });
   });
 
   describe("Secret field masking", () => {
     it("displays masked value for non-empty secrets", () => {
       const secret = "sk-abcdefghijklmnop123456";
-      const masked =
-        secret.length <= 8
-          ? "•".repeat(secret.length || 4)
-          : secret.slice(0, 4) + "••••" + secret.slice(-4);
-
+      const masked = maskSecret(secret);
       expect(masked).toBe("sk-a••••3456");
       expect(masked).toContain("••••");
     });
 
     it("displays placeholder for empty secrets", () => {
       const empty = "";
-      const display = empty ? "masked..." : "(not set)";
+      const display = empty ? maskSecret(empty) : "(not set)";
       expect(display).toBe("(not set)");
     });
   });

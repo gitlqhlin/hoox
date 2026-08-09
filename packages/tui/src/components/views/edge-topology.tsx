@@ -9,12 +9,17 @@ import {
   Colors,
   getHooxRepoPath,
   resolveHooxRuntimeRoot,
+  useUIStore,
 } from "@hoox-sh/hoox-shared";
 import { useKeyboard } from "@opentui/react";
 import * as fs from "fs";
 import * as path from "path";
 import { ErrorBoundary } from "../shared/error-boundary";
 import { ViewHeader } from "../shared/view-header";
+import { EmptyState } from "../shared/spinner";
+
+/** Cap default flow list so huge graphs stay responsive. */
+export const MAX_FLOWS_PREVIEW = 15;
 
 // Define types for the graph metadata
 interface GraphMetadata {
@@ -109,6 +114,9 @@ export function EdgeTopology() {
 }
 
 function EdgeTopologyInner() {
+  const activeView = useUIStore((s) => s.activeView);
+  const isActive = activeView === "edge-topology";
+
   const [metadata, setMetadata] = useState<GraphMetadata | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [selectedNode, setSelectedNode] = useState<string | null>(null);
@@ -116,19 +124,28 @@ function EdgeTopologyInner() {
   const [focusedIndex, setFocusedIndex] = useState<number>(0);
 
   useEffect(() => {
+    let cancelled = false;
     try {
       const graphPath = resolveGraphMetadataPath();
       if (!graphPath) {
-        setError(
-          "graph-metadata.json not found. Run `bun run graph` from the monorepo root, set HOOX_REPO, or `hoox doctor --fix-runtime`."
-        );
+        if (!cancelled) {
+          setError(
+            "graph-metadata.json not found. Run `bun run graph` from the monorepo root, set HOOX_REPO, or `hoox doctor --fix-runtime`."
+          );
+        }
         return;
       }
       const data = fs.readFileSync(graphPath, "utf-8");
-      setMetadata(JSON.parse(data));
+      if (cancelled) return;
+      setMetadata(JSON.parse(data) as GraphMetadata);
     } catch (err) {
-      setError(err instanceof Error ? err.message : String(err));
+      if (!cancelled) {
+        setError(err instanceof Error ? err.message : String(err));
+      }
     }
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   const workers = metadata ? Object.entries(metadata.workers) : [];
@@ -137,7 +154,12 @@ function EdgeTopologyInner() {
 
   // Combine all selectable items for keyboard navigation
   const selectableItems = useMemo(() => {
-    if (!metadata) return [];
+    if (!metadata)
+      return [] as Array<{
+        type: string;
+        id: string | null;
+        label?: string;
+      }>;
 
     // Filter nodes if a community is selected
     const visibleWorkers = activeCommunity
@@ -168,7 +190,19 @@ function EdgeTopologyInner() {
     ];
   }, [metadata, activeCommunity, workers, infra, communities]);
 
+  // Clamp focus when the selectable set shrinks (community filter)
+  useEffect(() => {
+    if (selectableItems.length === 0) {
+      setFocusedIndex(0);
+      return;
+    }
+    setFocusedIndex((prev) =>
+      Math.min(prev, Math.max(0, selectableItems.length - 1))
+    );
+  }, [selectableItems.length]);
+
   useKeyboard((key) => {
+    if (!isActive) return;
     if (key.name === "escape") {
       setSelectedNode(null);
       setActiveCommunity(null);
@@ -176,15 +210,16 @@ function EdgeTopologyInner() {
       return;
     }
 
+    const n = selectableItems.length;
+    if (n === 0) return;
+
     if (key.name === "right" || key.name === "tab") {
-      setFocusedIndex((prev) => (prev + 1) % selectableItems.length);
+      setFocusedIndex((prev) => (prev + 1) % n);
       return;
     }
 
     if (key.name === "left" || (key.name === "tab" && key.shift)) {
-      setFocusedIndex(
-        (prev) => (prev - 1 + selectableItems.length) % selectableItems.length
-      );
+      setFocusedIndex((prev) => (prev - 1 + n) % n);
       return;
     }
 
@@ -196,7 +231,7 @@ function EdgeTopologyInner() {
         setActiveCommunity(item.id);
         setSelectedNode(null);
         setFocusedIndex(0); // Reset focus when community changes
-      } else {
+      } else if (item.id) {
         setSelectedNode(item.id);
       }
     }
@@ -204,11 +239,13 @@ function EdgeTopologyInner() {
 
   if (error) {
     return (
-      <box flexDirection="column" padding={1}>
-        <text fg={Colors.error} bold>
-          Error loading topology data:
-        </text>
-        <text fg={Colors.error}>{error}</text>
+      <box flexDirection="column" padding={1} flexGrow={1}>
+        <ViewHeader title="EDGE TOPOLOGY" showDivider={false} />
+        <EmptyState
+          message="Error loading topology data:"
+          suggestion={error}
+          icon="⚠"
+        />
       </box>
     );
   }
@@ -231,9 +268,10 @@ function EdgeTopologyInner() {
   // (metadata is non-null here: the guard at the top of this branch returns early)
   let rightColumnContent;
   if (selectedNode) {
-    const isWorker = selectedNode.startsWith("workers/");
-    if (isWorker) {
-      const worker = metadata.workers[selectedNode];
+    const worker = metadata.workers[selectedNode];
+    const infraNode = metadata.infrastructure[selectedNode];
+
+    if (worker) {
       const inboundFlows = metadata.dataFlows.filter(
         (f) => f.target === selectedNode
       );
@@ -254,7 +292,7 @@ function EdgeTopologyInner() {
             TAGS
           </text>
           <box flexDirection="row" flexWrap="wrap" marginBottom={1}>
-            {worker.tags.map((t) => (
+            {(worker.tags ?? []).map((t) => (
               <text key={t} fg={Colors.info} marginRight={1}>
                 #{t}
               </text>
@@ -264,24 +302,33 @@ function EdgeTopologyInner() {
           <text bold fg={Colors.muted} marginTop={1}>
             {`INBOUND FLOWS (${inboundFlows.length})`}
           </text>
-          {inboundFlows.map((f, i) => (
+          {inboundFlows.slice(0, MAX_FLOWS_PREVIEW).map((f, i) => (
             <text key={i} fg={Colors.foreground} dim>
               ← {f.source.replace("workers/", "")}: {f.flowType}
             </text>
           ))}
+          {inboundFlows.length > MAX_FLOWS_PREVIEW && (
+            <text dim fg={Colors.muted}>
+              … +{inboundFlows.length - MAX_FLOWS_PREVIEW} more
+            </text>
+          )}
 
           <text bold fg={Colors.muted} marginTop={1}>
             {`OUTBOUND FLOWS (${outboundFlows.length})`}
           </text>
-          {outboundFlows.map((f, i) => (
+          {outboundFlows.slice(0, MAX_FLOWS_PREVIEW).map((f, i) => (
             <text key={i} fg={Colors.foreground} dim>
               → {f.target.replace("workers/", "")}: {f.flowType}
             </text>
           ))}
+          {outboundFlows.length > MAX_FLOWS_PREVIEW && (
+            <text dim fg={Colors.muted}>
+              … +{outboundFlows.length - MAX_FLOWS_PREVIEW} more
+            </text>
+          )}
         </box>
       );
-    } else {
-      const infraNode = metadata.infrastructure[selectedNode];
+    } else if (infraNode) {
       rightColumnContent = (
         <box flexDirection="column" flexGrow={1} overflow="hidden">
           <text bold fg={Colors.info} marginBottom={1}>
@@ -302,7 +349,7 @@ function EdgeTopologyInner() {
             TAGS
           </text>
           <box flexDirection="row" flexWrap="wrap" marginBottom={1}>
-            {infraNode.tags.map((t) => (
+            {(infraNode.tags ?? []).map((t) => (
               <text key={t} fg={Colors.info} marginRight={1}>
                 #{t}
               </text>
@@ -310,33 +357,48 @@ function EdgeTopologyInner() {
           </box>
         </box>
       );
+    } else {
+      rightColumnContent = (
+        <box flexDirection="column" flexGrow={1} overflow="hidden">
+          <text fg={Colors.warning}>
+            Node not found in metadata: {selectedNode}
+          </text>
+        </box>
+      );
     }
   } else {
     // Default flows view
     rightColumnContent = (
       <box flexDirection="column" flexGrow={1} overflow="hidden">
-        {metadata.dataFlows.slice(0, 15).map((flow, idx) => (
-          <box key={idx} flexDirection="column" marginBottom={1}>
-            <box flexDirection="row">
-              <text fg={Colors.success}>
-                {flow.source.replace("workers/", "")}
+        {metadata.dataFlows.length === 0 ? (
+          <EmptyState message="No data flows in graph metadata." icon="↔" />
+        ) : (
+          <>
+            {metadata.dataFlows.slice(0, MAX_FLOWS_PREVIEW).map((flow, idx) => (
+              <box key={idx} flexDirection="column" marginBottom={1}>
+                <box flexDirection="row">
+                  <text fg={Colors.success}>
+                    {flow.source.replace("workers/", "")}
+                  </text>
+                  <text fg={Colors.muted} marginX={1}>
+                    →
+                  </text>
+                  <text fg={Colors.info}>
+                    {flow.target.replace("workers/", "")}
+                  </text>
+                </box>
+                <text dim fg={Colors.muted}>
+                  {flow.flowType}
+                </text>
+              </box>
+            ))}
+            {metadata.dataFlows.length > MAX_FLOWS_PREVIEW && (
+              <text dim fg={Colors.muted}>
+                ... and {metadata.dataFlows.length - MAX_FLOWS_PREVIEW} more
+                flows
               </text>
-              <text fg={Colors.muted} marginX={1}>
-                →
-              </text>
-              <text fg={Colors.info}>
-                {flow.target.replace("workers/", "")}
-              </text>
-            </box>
-            <text dim fg={Colors.muted}>
-              {flow.flowType}
-            </text>
-          </box>
-        ))}
-        {metadata.dataFlows.length > 15 && (
-          <text dim fg={Colors.muted}>
-            ... and {metadata.dataFlows.length - 15} more flows
-          </text>
+            )}
+          </>
         )}
       </box>
     );

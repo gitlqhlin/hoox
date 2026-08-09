@@ -47,7 +47,7 @@
  *   - The total key count in the header reflects the *unfiltered* list
  *     while the table shows the filtered count.
  */
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useKeyboard } from "@opentui/react";
 import { Colors, useUIStore } from "@hoox-sh/hoox-shared";
 import { ErrorBoundary } from "../shared/error-boundary";
@@ -57,7 +57,33 @@ import { cliBridge } from "../../services/cli-bridge";
 import type { KvKey, KvKeySnapshot } from "../../services/cli-bridge";
 
 /** Auto-refresh interval in milliseconds. */
-const REFRESH_INTERVAL_MS = 5_000;
+export const REFRESH_INTERVAL_MS = 5_000;
+
+/** Cap rendered rows so large namespaces stay responsive. */
+export const MAX_VISIBLE_KEYS = 200;
+
+/** Search debounce for filter recompute. */
+const SEARCH_DEBOUNCE_MS = 150;
+
+/**
+ * Strip control characters from KV values before terminal display.
+ * Values are user-requested (reveal), but must not inject ESC sequences.
+ */
+export function sanitizeKvValue(value: string, maxLen = 4_000): string {
+  const cleaned = value.replace(
+    /[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F]/g,
+    ""
+  );
+  if (cleaned.length <= maxLen) return cleaned;
+  return cleaned.slice(0, maxLen - 1) + "\u2026";
+}
+
+/** Case-insensitive key name filter. */
+export function filterKvKeys(keys: readonly KvKey[], search: string): KvKey[] {
+  const q = search.trim().toLowerCase();
+  if (q.length === 0) return keys as KvKey[];
+  return keys.filter((k) => k.name.toLowerCase().includes(q));
+}
 
 /**
  * Format a byte size as a human-readable string (`4 B`, `1.2 KB`, …).
@@ -243,7 +269,7 @@ function DetailPane({
               (empty value)
             </text>
           ) : (
-            <text fg={Colors.foreground}>{value}</text>
+            <text fg={Colors.foreground}>{sanitizeKvValue(value)}</text>
           )}
         </box>
       ) : null}
@@ -347,7 +373,9 @@ export function KvViewer() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [search, setSearch] = useState("");
+  const [debouncedSearch, setDebouncedSearch] = useState("");
   const [searchActive, setSearchActive] = useState(false);
+  const searchTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const [selectedKeyName, setSelectedKeyName] = useState<string | null>(null);
   const [revealed, setRevealed] = useState(false);
@@ -355,11 +383,31 @@ export function KvViewer() {
   const [valueLoading, setValueLoading] = useState(false);
   const [valueError, setValueError] = useState<string | null>(null);
 
+  const listGenRef = useRef(0);
+  const revealGenRef = useRef(0);
+
+  // Debounce search
+  useEffect(() => {
+    if (searchTimerRef.current) clearTimeout(searchTimerRef.current);
+    searchTimerRef.current = setTimeout(() => {
+      setDebouncedSearch(search);
+      searchTimerRef.current = null;
+    }, SEARCH_DEBOUNCE_MS);
+    return () => {
+      if (searchTimerRef.current) {
+        clearTimeout(searchTimerRef.current);
+        searchTimerRef.current = null;
+      }
+    };
+  }, [search]);
+
   // ── Fetch handler ─────────────────────────────────────────────────────
-  const refresh = useCallback(async () => {
-    setLoading(true);
-    setError(null);
+  const refresh = useCallback(async (opts?: { soft?: boolean }) => {
+    const soft = opts?.soft === true;
+    const gen = ++listGenRef.current;
+    if (!soft) setLoading(true);
     const result = await cliBridge.configKvList();
+    if (gen !== listGenRef.current) return;
     if (result.success && result.data) {
       setSnapshot(result.data);
       setError(null);
@@ -369,44 +417,34 @@ export function KvViewer() {
     setLoading(false);
   }, []);
 
-  // Initial load on mount.
+  // Initial load on mount + invalidate in-flight on unmount.
   useEffect(() => {
-    let cancelled = false;
-    const run = async () => {
-      if (cancelled) return;
-      setLoading(true);
-      setError(null);
-      const result = await cliBridge.configKvList();
-      if (cancelled) return;
-      if (result.success && result.data) {
-        setSnapshot(result.data);
-      } else {
-        setError(result.stderr || result.stdout || "Failed to read KV keys");
-      }
-      if (!cancelled) setLoading(false);
-    };
-    void run();
+    void refresh({ soft: false });
     return () => {
-      cancelled = true;
+      listGenRef.current += 1;
+      revealGenRef.current += 1;
     };
-  }, []);
+  }, [refresh]);
 
-  // Auto-refresh every 5s while the view is the active view.
+  // Auto-refresh every 5s while the view is the active view (soft = no flicker).
   useEffect(() => {
     if (!isActive) return;
     const handle = setInterval(() => {
-      void refresh();
+      void refresh({ soft: true });
     }, REFRESH_INTERVAL_MS);
     return () => clearInterval(handle);
   }, [isActive, refresh]);
 
   // ── Derived data ─────────────────────────────────────────────────────
   const allKeys = snapshot?.keys ?? [];
-  const filteredKeys = useMemo(() => {
-    const q = search.trim().toLowerCase();
-    if (q.length === 0) return allKeys;
-    return allKeys.filter((k) => k.name.toLowerCase().includes(q));
-  }, [allKeys, search]);
+  const filteredKeys = useMemo(
+    () => filterKvKeys(allKeys, debouncedSearch),
+    [allKeys, debouncedSearch]
+  );
+  const visibleKeys = useMemo(
+    () => filteredKeys.slice(0, MAX_VISIBLE_KEYS),
+    [filteredKeys]
+  );
 
   const secretCount = useMemo(
     () => allKeys.filter((k) => k.isSecret).length,
@@ -418,22 +456,29 @@ export function KvViewer() {
     return allKeys.find((k) => k.name === selectedKeyName) ?? null;
   }, [allKeys, selectedKeyName]);
 
-  // When the selected key changes, reset the reveal/value state.
+  // When the selected key changes, reset the reveal/value state and
+  // invalidate any in-flight value fetch for the previous key.
   useEffect(() => {
+    revealGenRef.current += 1;
     setRevealed(false);
     setValue(null);
     setValueError(null);
+    setValueLoading(false);
   }, [selectedKeyName]);
 
   // ── Detail pane callbacks ────────────────────────────────────────────
   const handleReveal = useCallback(async () => {
     if (!selectedKey) return;
+    // Secret keys require explicit reveal; non-secrets also use reveal UX
+    // so we never auto-fetch values on selection (sensitive-value handling).
+    const gen = ++revealGenRef.current;
     setRevealed(true);
     setValueLoading(true);
     setValueError(null);
     const result = await cliBridge.configKvGet(selectedKey.name);
+    if (gen !== revealGenRef.current) return;
     if (result.success) {
-      setValue(result.data);
+      setValue(result.data ?? null);
     } else {
       setValueError(result.stderr || result.stdout || "Failed to read value");
     }
@@ -441,9 +486,11 @@ export function KvViewer() {
   }, [selectedKey]);
 
   const handleHide = useCallback(() => {
+    revealGenRef.current += 1; // cancel in-flight get
     setRevealed(false);
     setValue(null);
     setValueError(null);
+    setValueLoading(false);
   }, []);
 
   // ── Global keyboard handling (active only when this view is on top) ──
@@ -459,21 +506,21 @@ export function KvViewer() {
       return;
     }
     if (key.name === "up") {
-      if (filteredKeys.length === 0) return;
+      if (visibleKeys.length === 0) return;
       const idx = selectedKeyName
-        ? filteredKeys.findIndex((k) => k.name === selectedKeyName)
+        ? visibleKeys.findIndex((k) => k.name === selectedKeyName)
         : -1;
       const next = Math.max(0, idx - 1);
-      setSelectedKeyName(filteredKeys[next]?.name ?? null);
+      setSelectedKeyName(visibleKeys[next]?.name ?? null);
       return;
     }
     if (key.name === "down") {
-      if (filteredKeys.length === 0) return;
+      if (visibleKeys.length === 0) return;
       const idx = selectedKeyName
-        ? filteredKeys.findIndex((k) => k.name === selectedKeyName)
+        ? visibleKeys.findIndex((k) => k.name === selectedKeyName)
         : -1;
-      const next = Math.min(filteredKeys.length - 1, idx + 1);
-      setSelectedKeyName(filteredKeys[next]?.name ?? null);
+      const next = Math.min(visibleKeys.length - 1, idx + 1);
+      setSelectedKeyName(visibleKeys[next]?.name ?? null);
       return;
     }
     if (key.name === "return") {
@@ -496,9 +543,14 @@ export function KvViewer() {
               <text fg={Colors.muted} dim>
                 {`${allKeys.length} key${allKeys.length === 1 ? "" : "s"} · ${secretCount} secret`}
               </text>
-              {search.length > 0 ? (
+              {debouncedSearch.length > 0 ? (
                 <text fg={Colors.info} dim>
                   {`(${filteredKeys.length} match${filteredKeys.length === 1 ? "" : "es"})`}
+                </text>
+              ) : null}
+              {filteredKeys.length > MAX_VISIBLE_KEYS ? (
+                <text fg={Colors.muted} dim>
+                  {`showing ${MAX_VISIBLE_KEYS}`}
                 </text>
               ) : null}
               <text fg={Colors.warning} bold>
@@ -598,7 +650,7 @@ export function KvViewer() {
               </box>
             ) : (
               <scrollbox width="100%" flexGrow={1}>
-                {filteredKeys.map((k) => (
+                {visibleKeys.map((k) => (
                   <KvRow
                     key={k.name}
                     keyName={k.name}

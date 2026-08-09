@@ -20,7 +20,7 @@
  * Follows TUI Patterns 1 (View Composition), 2 (Store Subscription), 8 (ScrollBox).
  * Colors from @hoox-sh/hoox-shared tokens — no hardcoded hex.
  */
-import { useState, useMemo, useEffect, useCallback } from "react";
+import { useState, useMemo, useEffect, useCallback, useRef } from "react";
 import { useKeyboard } from "@opentui/react";
 import {
   Colors,
@@ -29,6 +29,10 @@ import {
   useUIStore,
 } from "@hoox-sh/hoox-shared";
 import { cliBridge } from "../../services/cli-bridge";
+import {
+  redactDevLogContext,
+  redactSecretsInText,
+} from "../../services/dev-log";
 import { ErrorBoundary } from "../shared/error-boundary";
 import { StatusDot, type StatusDotStatus } from "../shared/status-dot";
 import { ViewHeader } from "../shared/view-header";
@@ -56,11 +60,36 @@ const PANE_NAMES = [
   "Config Preview",
 ] as const;
 
+/** Keys that must never be shown cleartext in config preview. */
+const SECRET_CONFIG_KEY_RE =
+  /token|secret|password|passwd|authorization|api[_-]?key|private[_-]?key|client[_-]?secret|access[_-]?client|credential|cookie|session|webhook/i;
+
 // ── Types ────────────────────────────────────────────────────────────────────
 
 interface DemoConfigEntry {
   key: string;
   value: string;
+}
+
+/**
+ * Flatten CLI config into safe display entries.
+ * Secret-looking keys → `[redacted]`; free-text values scrubbed for tokens.
+ * Exported for unit tests.
+ */
+export function redactConfigEntries(
+  data: Record<string, unknown>
+): DemoConfigEntry[] {
+  const scrubbed = (redactDevLogContext(data) ?? {}) as Record<string, unknown>;
+  return Object.entries(scrubbed).map(([key, value]) => {
+    if (SECRET_CONFIG_KEY_RE.test(key)) {
+      return { key, value: "[redacted]" };
+    }
+    const raw =
+      typeof value === "object" && value !== null
+        ? JSON.stringify(value)
+        : String(value ?? "");
+    return { key, value: redactSecretsInText(raw) };
+  });
 }
 
 // ── Sub-components ───────────────────────────────────────────────────────────
@@ -232,7 +261,7 @@ function LogsPane({
   );
 }
 
-/** A single log line, color-coded by level */
+/** A single log line, color-coded by level. Message is scrubbed for secrets. */
 function LogLine({ log }: { log: Log }) {
   const color = LogLevelColor[log.level as Level] ?? Colors.foreground;
   const time = new Date(log.timestamp).toLocaleTimeString("en-US", {
@@ -241,10 +270,11 @@ function LogLine({ log }: { log: Log }) {
     minute: "2-digit",
     second: "2-digit",
   });
+  const safeMessage = redactSecretsInText(log.message ?? "");
 
   return (
     <text fg={color}>
-      {time} [{log.level.toUpperCase().padEnd(5)}] {log.message}
+      {time} [{log.level.toUpperCase().padEnd(5)}] {safeMessage}
     </text>
   );
 }
@@ -401,6 +431,18 @@ export function WorkerDetail() {
   const [configLoading, setConfigLoading] = useState(false);
   const [, setCliLogsLoading] = useState(false);
 
+  // Cancel in-flight on unmount / worker switch
+  const mountedRef = useRef(true);
+  const configGenRef = useRef(0);
+  const logsGenRef = useRef(0);
+
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => {
+      mountedRef.current = false;
+    };
+  }, []);
+
   // Store subscriptions (Pattern 2: selective selectors)
   const selectedWorkerId = useServiceStore((s) => s.selectedWorkerId);
   const workers = useServiceStore((s) => s.workers);
@@ -417,30 +459,29 @@ export function WorkerDetail() {
 
   const fetchConfig = useCallback(async () => {
     if (!worker) return;
+    const gen = ++configGenRef.current;
     setConfigLoading(true);
     try {
       const result = await cliBridge.configShow();
+      if (!mountedRef.current || gen !== configGenRef.current) return;
       if (result.success && result.data) {
         const data = result.data as Record<string, unknown>;
-        setConfigEntries(
-          Object.entries(data).map(([key, value]) => ({
-            key,
-            value:
-              typeof value === "object" ? JSON.stringify(value) : String(value),
-          }))
-        );
+        // Never display secrets cleartext in the TUI config pane
+        setConfigEntries(redactConfigEntries(data));
       }
-      useServiceStore.getState().addAlert({
-        id: `cfg-${Date.now()}`,
-        type: "config",
-        severity: result.success ? "info" : "warning",
-        message: result.success
-          ? `Config loaded (${(result.duration / 1000).toFixed(1)}s)`
-          : `Config load failed`,
-        timestamp: Date.now(),
-        acknowledged: false,
-      });
+      // Only alert on failure — success spam thrash on every mount/refresh
+      if (!result.success) {
+        useServiceStore.getState().addAlert({
+          id: `cfg-${Date.now()}`,
+          type: "config",
+          severity: "warning",
+          message: "Config load failed",
+          timestamp: Date.now(),
+          acknowledged: false,
+        });
+      }
     } catch {
+      if (!mountedRef.current || gen !== configGenRef.current) return;
       useServiceStore.getState().addAlert({
         id: `cfg-err-${Date.now()}`,
         type: "config",
@@ -450,33 +491,41 @@ export function WorkerDetail() {
         acknowledged: false,
       });
     } finally {
-      setConfigLoading(false);
+      if (mountedRef.current && gen === configGenRef.current) {
+        setConfigLoading(false);
+      }
     }
   }, [worker]);
 
   const fetchLogs = useCallback(async () => {
     if (!worker) return;
+    const gen = ++logsGenRef.current;
     setCliLogsLoading(true);
     try {
       const result = await cliBridge.workerLogs(worker.name);
+      if (!mountedRef.current || gen !== logsGenRef.current) return;
       if (result.success && Array.isArray(result.data)) {
         for (const log of result.data as Log[]) {
-          useServiceStore.getState().pushLog(log);
+          // Scrub free-text before it enters the ring buffer
+          useServiceStore.getState().pushLog({
+            ...log,
+            message: redactSecretsInText(log.message ?? ""),
+          });
         }
       }
-      useServiceStore.getState().addAlert({
-        id: `logs-${Date.now()}`,
-        type: "logs",
-        severity: result.success ? "info" : "warning",
-        message: result.success
-          ? `Logs loaded (${
-              Array.isArray(result.data) ? result.data.length : 0
-            } entries, ${(result.duration / 1000).toFixed(1)}s)`
-          : `Logs load failed`,
-        timestamp: Date.now(),
-        acknowledged: false,
-      });
+      // Alert only on failure to avoid thrashing the alerts panel
+      if (!result.success) {
+        useServiceStore.getState().addAlert({
+          id: `logs-${Date.now()}`,
+          type: "logs",
+          severity: "warning",
+          message: "Logs load failed",
+          timestamp: Date.now(),
+          acknowledged: false,
+        });
+      }
     } catch {
+      if (!mountedRef.current || gen !== logsGenRef.current) return;
       useServiceStore.getState().addAlert({
         id: `logs-err-${Date.now()}`,
         type: "logs",
@@ -486,26 +535,28 @@ export function WorkerDetail() {
         acknowledged: false,
       });
     } finally {
-      setCliLogsLoading(false);
+      if (mountedRef.current && gen === logsGenRef.current) {
+        setCliLogsLoading(false);
+      }
     }
   }, [worker]);
 
-  // Fetch live config on mount
+  // Fetch live config when worker changes
   useEffect(() => {
-    fetchConfig();
+    void fetchConfig();
   }, [fetchConfig]);
 
   // Fetch logs via CLI as fallback when SSE is not connected
   useEffect(() => {
     if (connectionStatus !== "connected") {
-      fetchLogs();
+      void fetchLogs();
     }
   }, [connectionStatus, fetchLogs]);
 
   const handleRefresh = useCallback(() => {
-    fetchConfig();
+    void fetchConfig();
     if (connectionStatus !== "connected") {
-      fetchLogs();
+      void fetchLogs();
     }
   }, [fetchConfig, fetchLogs, connectionStatus]);
 
@@ -545,6 +596,8 @@ export function WorkerDetail() {
               requests: 0,
               durableObjectCount: 0,
               edgeCount: 0,
+              version: "",
+              lastDeployed: 0,
             }}
           />
           <box

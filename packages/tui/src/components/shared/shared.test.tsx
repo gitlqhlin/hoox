@@ -170,24 +170,52 @@ describe("Shared Components", () => {
       expect(state.error?.message).toBe("Test render failure");
     });
 
-    it("accepts viewName prop", async () => {
-      const { ErrorBoundary } =
+    it("formatBoundaryErrorMessage redacts Bearer tokens", async () => {
+      const { formatBoundaryErrorMessage } =
         await import("@/components/shared/error-boundary");
-      // Verify the component accepts viewName and children props
+      const msg = formatBoundaryErrorMessage(
+        new Error("Authorization: Bearer super-secret-token-value failed")
+      );
+      expect(msg).not.toContain("super-secret-token-value");
+      expect(msg.toLowerCase()).toContain("redacted");
+    });
+
+    it("accepts viewName prop", async () => {
       const props = { viewName: "Dashboard", children: null };
       expect(props.viewName).toBe("Dashboard");
     });
 
     it("error state shows view name in error UI", () => {
-      // When an error occurs, the error UI shows "Failed to load {viewName}"
       const viewName = "Trade Monitor";
       const errorMessage = `Failed to load ${viewName}`;
       expect(errorMessage).toContain("Failed to load Trade Monitor");
     });
 
     it("error UI has retry action", () => {
-      // The error UI renders a [Retry] button with accent color
       expect("[Retry]").toBe("[Retry]");
+    });
+  });
+
+  // ── CrashScreen message formatting ─────────────────────────────────────
+
+  describe("CrashScreen", () => {
+    it("formatCrashMessage redacts env-style secrets", async () => {
+      const { formatCrashMessage } =
+        await import("@/components/shared/crash-screen");
+      const msg = formatCrashMessage(
+        new Error("HOOX_API_TOKEN=sk-live-abc123xyz boom")
+      );
+      expect(msg).not.toContain("sk-live-abc123xyz");
+      expect(msg).toContain("[redacted]");
+    });
+
+    it("formatCrashMessage caps long messages", async () => {
+      const { formatCrashMessage } =
+        await import("@/components/shared/crash-screen");
+      const long = "x".repeat(200);
+      const msg = formatCrashMessage(new Error(long), 40);
+      expect(msg.length).toBeLessThanOrEqual(40);
+      expect(msg.endsWith("…")).toBe(true);
     });
   });
 

@@ -31,6 +31,7 @@
  * Colors from @hoox-sh/hoox-shared design tokens. No CSS, no DOM.
  */
 import { existsSync } from "node:fs";
+import { isAbsolute, relative, resolve as pathResolve } from "node:path";
 import { useState, useCallback, useMemo, useRef, useEffect } from "react";
 import { useKeyboard } from "@opentui/react";
 import {
@@ -42,6 +43,7 @@ import {
 import { ErrorBoundary } from "../shared/error-boundary";
 import { ViewHeader } from "../shared/view-header";
 import { cliBridge } from "../../services/cli-bridge";
+import { redactSecretsInText } from "../../services/dev-log";
 
 // ─── Extracted submodules ─────────────────────────────────────────────────────
 
@@ -77,6 +79,12 @@ export {
 } from "./config-editor/code-editor";
 
 // ─── Constants ────────────────────────────────────────────────────────────────
+
+/** Hard cap on config files loaded into the editor (1 MiB). */
+export const MAX_CONFIG_FILE_BYTES = 1024 * 1024;
+
+/** Cap rendered lines so huge files do not freeze the TUI. */
+export const MAX_EDITOR_DISPLAY_LINES = 5_000;
 
 /**
  * Project-root candidates that may contain a `config/` directory.
@@ -203,34 +211,111 @@ function configDirExists(projectRoot: string): boolean {
   return false;
 }
 
-/** Join a blueprint-relative path onto the resolved project root. */
+/**
+ * Reject path traversal / absolute paths before any disk I/O.
+ * Blueprint paths must stay relative (e.g. `config/wrangler.toml`).
+ *
+ * @internal Exported for unit tests.
+ */
+export function isSafeConfigRelativePath(relativePath: string): boolean {
+  if (!relativePath || typeof relativePath !== "string") return false;
+  if (relativePath.includes("\0")) return false;
+  // Windows + POSIX absolute
+  if (isAbsolute(relativePath)) return false;
+  if (/^[a-zA-Z]:[\\/]/.test(relativePath)) return false;
+  const normalized = relativePath.replace(/\\/g, "/").replace(/^\.\//, "");
+  if (!normalized || normalized === ".") return false;
+  const parts = normalized.split("/").filter((p) => p.length > 0);
+  if (parts.some((p) => p === "..")) return false;
+  return true;
+}
+
+/**
+ * Truncate CLI / syntax error text for the status bar.
+ * Never echo full file bodies (may contain secrets from `.env`).
+ */
+export function sanitizeConfigStatus(message: string, maxLen = 160): string {
+  const scrubbed = redactSecretsInText(message).replace(/\s+/g, " ").trim();
+  if (scrubbed.length <= maxLen) return scrubbed;
+  return scrubbed.slice(0, maxLen - 1) + "…";
+}
+
+/**
+ * Join a blueprint-relative path onto the resolved project root.
+ * Throws when the path escapes the project root (path traversal).
+ */
 export function resolveConfigFilePath(relativePath: string): string {
+  if (!isSafeConfigRelativePath(relativePath)) {
+    throw new Error(`Unsafe config path rejected: ${relativePath}`);
+  }
   const root = resolveConfigDir();
   // Strip a leading `./` and collapse accidental double `config/config`
-  let rel = relativePath.replace(/^\.\//, "");
+  let rel = relativePath.replace(/^\.\//, "").replace(/\\/g, "/");
   if (root.endsWith("/config") && rel.startsWith("config/")) {
     rel = rel.slice("config/".length);
   }
-  return normalizePath(`${root}/${rel}`);
+  const rootAbs = pathResolve(root);
+  const fullAbs = pathResolve(rootAbs, rel);
+  const relToRoot = relative(rootAbs, fullAbs);
+  if (
+    !relToRoot ||
+    relToRoot.startsWith("..") ||
+    isAbsolute(relToRoot) ||
+    relToRoot.split(/[/\\]/).includes("..")
+  ) {
+    throw new Error(`Path escapes config root: ${relativePath}`);
+  }
+  return fullAbs;
 }
 
-/** Read a config file from disk. Returns empty string if the file doesn't exist. */
+/**
+ * Read a config file from disk.
+ * Enforces path safety + max size. Returns empty string if missing.
+ */
 async function loadFileContent(relativePath: string): Promise<string> {
-  const fullPath = resolveConfigFilePath(relativePath);
+  let fullPath: string;
+  try {
+    fullPath = resolveConfigFilePath(relativePath);
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : String(e);
+    return `# ${relativePath}\n# ${msg}\n`;
+  }
   try {
     const f = Bun.file(fullPath);
     const exists = await f.exists();
-    return exists ? await f.text() : "";
+    if (!exists) return "";
+    if (typeof f.size === "number" && f.size > MAX_CONFIG_FILE_BYTES) {
+      return (
+        `# ${relativePath}\n` +
+        `# File too large (${f.size} bytes > ${MAX_CONFIG_FILE_BYTES} max). ` +
+        `Edit externally.\n`
+      );
+    }
+    const text = await f.text();
+    // Defensive: size may be 0/unknown for some streams
+    if (text.length > MAX_CONFIG_FILE_BYTES) {
+      return (
+        `# ${relativePath}\n` +
+        `# File too large (${text.length} chars > ${MAX_CONFIG_FILE_BYTES} max). ` +
+        `Edit externally.\n`
+      );
+    }
+    return text;
   } catch {
     return `# ${relativePath}\n# File not found at ${fullPath}\n`;
   }
 }
 
-/** Write content to a config file on disk. */
+/** Write content to a config file on disk (path-safe). */
 async function saveFileContent(
   relativePath: string,
   content: string
 ): Promise<void> {
+  if (content.length > MAX_CONFIG_FILE_BYTES) {
+    throw new Error(
+      `Content exceeds max size (${MAX_CONFIG_FILE_BYTES} bytes); refuse to write`
+    );
+  }
   const fullPath = resolveConfigFilePath(relativePath);
   await Bun.write(fullPath, content);
 }
@@ -328,6 +413,19 @@ export function ConfigEditor() {
   const handleSave = useCallback(async () => {
     if (!selectedFile) return;
     try {
+      // Fail-closed: never write content with local syntax errors.
+      const localErrors = validateSyntax(currentContent, fileType);
+      setSyntaxErrors(localErrors);
+      if (localErrors.length > 0) {
+        const first = localErrors[0]!;
+        const errMsg = sanitizeConfigStatus(
+          `Save blocked: ${localErrors.length} syntax error(s) — Ln ${first.line}: ${first.message}`
+        );
+        setValidationError(errMsg);
+        setStatusMessage(errMsg);
+        return;
+      }
+
       await saveFileContent(selectedFile, currentContent);
       setOriginalContents((prev) =>
         new Map(prev).set(selectedFile, currentContent)
@@ -337,44 +435,53 @@ export function ConfigEditor() {
         next.delete(selectedFile);
         return next;
       });
-      setStatusMessage(`Saved: ${selectedFile}`);
       setValidationError(null);
+      setStatusMessage(`Saved: ${selectedFile}`);
+
+      // Project-level validation (CLI). Failure is reported but disk write already committed.
       const result = await cliBridge.configValidate();
       if (!result.success) {
-        const errMsg =
-          result.stderr || result.stdout || "Unknown validation error";
+        const errMsg = sanitizeConfigStatus(
+          result.stderr || result.stdout || "Unknown validation error"
+        );
         setValidationError(errMsg);
-        setStatusMessage(`Saved — Validation failed: ${errMsg}`);
+        setStatusMessage(`Saved — project validation failed: ${errMsg}`);
       } else {
         setValidationError(null);
         setStatusMessage("Saved — Config valid");
       }
     } catch (e) {
-      const msg = e instanceof Error ? e.message : String(e);
+      const msg = sanitizeConfigStatus(
+        e instanceof Error ? e.message : String(e)
+      );
       setStatusMessage(`Failed to save: ${msg}`);
     }
-  }, [selectedFile, currentContent]);
+  }, [selectedFile, currentContent, fileType]);
 
   const handleValidate = useCallback(async () => {
     if (!selectedFile) return;
     const errors = validateSyntax(currentContent, fileType);
     setSyntaxErrors(errors);
     setValidationError(null);
+    if (errors.length > 0) {
+      const first = errors[0]!;
+      setStatusMessage(
+        sanitizeConfigStatus(
+          `Found ${errors.length} syntax error${errors.length > 1 ? "s" : ""} — Ln ${first.line}: ${first.message}`
+        )
+      );
+      // Still run CLI validate for project-wide signal, but local failures take precedence.
+    }
     const result = await cliBridge.configValidate();
     if (!result.success) {
-      const errMsg =
-        result.stderr || result.stdout || "Unknown validation error";
+      const errMsg = sanitizeConfigStatus(
+        result.stderr || result.stdout || "Unknown validation error"
+      );
       setValidationError(errMsg);
       setStatusMessage(`Validation failed: ${errMsg}`);
-    } else {
+    } else if (errors.length === 0) {
       setValidationError(null);
-      if (errors.length === 0) {
-        setStatusMessage("Validation passed — Config is valid");
-      } else {
-        setStatusMessage(
-          `Found ${errors.length} syntax error${errors.length > 1 ? "s" : ""}`
-        );
-      }
+      setStatusMessage("Validation passed — Config is valid");
     }
   }, [selectedFile, currentContent, fileType]);
 
@@ -552,6 +659,7 @@ export function ConfigEditor() {
               fileName={selectedFile}
               syntaxErrors={syntaxErrors}
               scrollOffset={editorScrollOffset}
+              maxDisplayLines={MAX_EDITOR_DISPLAY_LINES}
             />
           </box>
         </box>
@@ -562,7 +670,9 @@ export function ConfigEditor() {
             <text fg={Colors.error} bold>
               ⚠
             </text>
-            <text fg={Colors.error}>Validation: {validationError}</text>
+            <text fg={Colors.error}>
+              Validation: {sanitizeConfigStatus(validationError, 200)}
+            </text>
           </box>
         )}
 

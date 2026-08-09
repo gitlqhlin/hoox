@@ -24,7 +24,7 @@
  *
  * Uses Colors tokens, useServiceStore, StatusDot, and showConfirm dialog.
  */
-import { useState, useCallback, useEffect } from "react";
+import { useState, useCallback, useEffect, useMemo, useRef } from "react";
 import { useServiceStore } from "@hoox-sh/hoox-shared/stores/service-store";
 import { Colors, ConnectionStatusColor } from "@hoox-sh/hoox-shared";
 import { StatusDot } from "../shared/status-dot";
@@ -38,6 +38,7 @@ import type { WorkerInfo } from "@hoox-sh/hoox-shared/types";
 import { cliBridge } from "../../services/cli-bridge";
 import type { KillSwitchStatus } from "../../services/cli-bridge";
 import type { CliResult } from "../../types";
+import { redactSecretsInText } from "../../services/dev-log";
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 
@@ -83,19 +84,25 @@ const EDGE_LOCATIONS: EdgeLocation[] = [
 const MAP_WIDTH = 60;
 const MAP_HEIGHT = 12;
 
+/** Prebuilt cell lookup — edge map data is static; avoid rebuilds every render. */
+const EDGE_LOCATION_BY_CELL: Map<string, EdgeLocation> = (() => {
+  const map = new Map<string, EdgeLocation>();
+  for (const loc of EDGE_LOCATIONS) {
+    map.set(`${loc.y},${loc.x}`, loc);
+  }
+  return map;
+})();
+
 // ─── Edge Map Component ─────────────────────────────────────────────────────
 
 function EdgeMap() {
   // Track which location is currently hovered/selected
   const [selectedCode, setSelectedCode] = useState<string | null>(null);
 
-  // Build a sparse grid: for each cell, find the location (if any)
-  const locationByCell = new Map<string, EdgeLocation>();
-  for (const loc of EDGE_LOCATIONS) {
-    locationByCell.set(`${loc.y},${loc.x}`, loc);
-  }
-
-  const selectedLocation = EDGE_LOCATIONS.find((l) => l.code === selectedCode);
+  const selectedLocation = useMemo(
+    () => EDGE_LOCATIONS.find((l) => l.code === selectedCode) ?? null,
+    [selectedCode]
+  );
 
   return (
     <box flexDirection="column" flexGrow={1} gap={0}>
@@ -120,7 +127,7 @@ function EdgeMap() {
         {Array.from({ length: MAP_HEIGHT }, (_, row) => (
           <box key={`map-row-${row}`} flexDirection="row" gap={0}>
             {Array.from({ length: MAP_WIDTH }, (_, col) => {
-              const loc = locationByCell.get(`${row},${col}`);
+              const loc = EDGE_LOCATION_BY_CELL.get(`${row},${col}`);
               if (loc) {
                 const isSelected = selectedCode === loc.code;
                 return (
@@ -418,30 +425,24 @@ function KillSwitchSection({ dialog, onAlert }: KillSwitchSectionProps) {
   const [status, setStatus] = useState<KillSwitchStatus | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const mountedRef = useRef(true);
+  const loadingRef = useRef(false);
 
-  const refresh = useCallback(async () => {
-    setLoading(true);
-    setError(null);
-    const result = await cliBridge.monitorKillSwitch("show");
-    if (result.success && result.data) {
-      setStatus(result.data);
-      setError(null);
-    } else {
-      setError(
-        result.stderr || result.stdout || "Failed to read kill switch status"
-      );
-    }
-    setLoading(false);
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => {
+      mountedRef.current = false;
+    };
   }, []);
 
-  // Auto-refresh on mount (with cancellation on unmount)
-  useEffect(() => {
-    let cancelled = false;
-    const run = async () => {
-      setLoading(true);
-      setError(null);
+  const refresh = useCallback(async () => {
+    if (loadingRef.current) return;
+    loadingRef.current = true;
+    setLoading(true);
+    setError(null);
+    try {
       const result = await cliBridge.monitorKillSwitch("show");
-      if (cancelled) return;
+      if (!mountedRef.current) return;
       if (result.success && result.data) {
         setStatus(result.data);
         setError(null);
@@ -450,17 +451,36 @@ function KillSwitchSection({ dialog, onAlert }: KillSwitchSectionProps) {
           result.stderr || result.stdout || "Failed to read kill switch status"
         );
       }
-      if (!cancelled) setLoading(false);
-    };
-    void run();
-    return () => {
-      cancelled = true;
-    };
+    } catch (err) {
+      if (!mountedRef.current) return;
+      setError(err instanceof Error ? err.message : "Kill switch probe failed");
+    } finally {
+      loadingRef.current = false;
+      if (mountedRef.current) setLoading(false);
+    }
   }, []);
+
+  // Auto-refresh on mount (with cancellation on unmount)
+  useEffect(() => {
+    void refresh();
+  }, [refresh]);
 
   const setEngaged = useCallback(
     async (engaged: boolean) => {
-      if (!dialog || loading) return;
+      // Fail closed without dialog — never flip kill switch silently
+      if (!dialog) {
+        useServiceStore.getState().addAlert({
+          id: `killswitch-noconfirm-${Date.now()}`,
+          type: "killswitch",
+          severity: "warning",
+          message:
+            "Kill switch action blocked: confirmation dialog unavailable",
+          timestamp: Date.now(),
+          acknowledged: false,
+        });
+        return;
+      }
+      if (loadingRef.current) return;
       const action: "engage" | "release" = engaged ? "engage" : "release";
       const verb = engaged ? "ENGAGE" : "RELEASE";
       const confirmTitle = engaged
@@ -477,42 +497,52 @@ function KillSwitchSection({ dialog, onAlert }: KillSwitchSectionProps) {
         confirmLabel: verb,
         cancelLabel: "Cancel",
       });
-      if (!confirmed) return;
+      if (!confirmed || !mountedRef.current) return;
 
+      loadingRef.current = true;
       setLoading(true);
       setError(null);
-      const result = await cliBridge.monitorKillSwitch(action);
-      if (result.success && result.data) {
-        setStatus(result.data);
-        setError(null);
-        onAlert(
-          `killswitch-${Date.now()}`,
-          "killswitch",
-          result,
-          `Kill switch ${engaged ? "engaged" : "released"} (${(result.duration / 1000).toFixed(1)}s)`,
-          `Kill switch ${engaged ? "engage" : "release"} failed: ${
-            result.stderr || result.stdout || "unknown error"
-          }`
-        );
-      } else {
-        setError(
-          result.stderr ||
-            result.stdout ||
-            `Failed to ${verb.toLowerCase()} kill switch`
-        );
-        onAlert(
-          `killswitch-err-${Date.now()}`,
-          "killswitch",
-          result,
-          `Kill switch ${engaged ? "engaged" : "released"}`,
-          `Kill switch ${engaged ? "engage" : "release"} error: ${
-            result.stderr || result.stdout || "unknown error"
-          }`
-        );
+      try {
+        const result = await cliBridge.monitorKillSwitch(action);
+        if (!mountedRef.current) return;
+        if (result.success && result.data) {
+          setStatus(result.data);
+          setError(null);
+          onAlert(
+            `killswitch-${Date.now()}`,
+            "killswitch",
+            result,
+            `Kill switch ${engaged ? "engaged" : "released"} (${(result.duration / 1000).toFixed(1)}s)`,
+            `Kill switch ${engaged ? "engage" : "release"} failed: ${
+              result.stderr || result.stdout || "unknown error"
+            }`
+          );
+        } else {
+          setError(
+            result.stderr ||
+              result.stdout ||
+              `Failed to ${verb.toLowerCase()} kill switch`
+          );
+          onAlert(
+            `killswitch-err-${Date.now()}`,
+            "killswitch",
+            result,
+            `Kill switch ${engaged ? "engaged" : "released"}`,
+            `Kill switch ${engaged ? "engage" : "release"} error: ${
+              result.stderr || result.stdout || "unknown error"
+            }`
+          );
+        }
+      } catch (err) {
+        if (!mountedRef.current) return;
+        const message = err instanceof Error ? err.message : String(err);
+        setError(message);
+      } finally {
+        loadingRef.current = false;
+        if (mountedRef.current) setLoading(false);
       }
-      setLoading(false);
     },
-    [dialog, loading, onAlert]
+    [dialog, onAlert]
   );
 
   // Visual state — unknown when status hasn't loaded yet
@@ -600,18 +630,31 @@ export function ServiceManager({ dialog }: ServiceManagerProps) {
   // Deploy/restart tracking state
   const [deployingWorker, setDeployingWorker] = useState<string | null>(null);
   const [deployProgress, setDeployProgress] = useState("");
+  const mountedRef = useRef(true);
+  const deployingRef = useRef(false);
+
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => {
+      mountedRef.current = false;
+    };
+  }, []);
 
   // Edge count from worker telemetry only — never invent a marketing "275+".
-  const totalEdgeCount = workers.reduce((sum, w) => sum + w.edgeCount, 0);
+  const totalEdgeCount = useMemo(
+    () => workers.reduce((sum, w) => sum + (w.edgeCount ?? 0), 0),
+    [workers]
+  );
   const displayEdgeCount = totalEdgeCount;
   const showPlus = false;
 
-  /** Shared progress callback */
+  /** Shared progress callback — scrub secrets from CLI streams */
   const onProgress = useCallback((chunk: string) => {
-    setDeployProgress((prev) => (prev + chunk).slice(-2000));
+    const safe = redactSecretsInText(chunk);
+    setDeployProgress((prev) => (prev + safe).slice(-2000));
   }, []);
 
-  /** Alert helper */
+  /** Alert helper — scrub failure payloads before they hit the UI */
   const addResultAlert = useCallback(
     (
       id: string,
@@ -625,7 +668,7 @@ export function ServiceManager({ dialog }: ServiceManagerProps) {
         id,
         type,
         severity: result.success ? "info" : "warning",
-        message: result.success ? successMsg : failMsg,
+        message: result.success ? successMsg : redactSecretsInText(failMsg),
         timestamp: Date.now(),
         acknowledged: false,
       });
@@ -633,90 +676,129 @@ export function ServiceManager({ dialog }: ServiceManagerProps) {
     []
   );
 
+  const blockWithoutDialog = useCallback((action: string, target: string) => {
+    useServiceStore.getState().addAlert({
+      id: `${action}-noconfirm-${Date.now()}`,
+      type: action,
+      severity: "warning",
+      message: `${action} blocked: confirmation dialog unavailable for ${target}`,
+      timestamp: Date.now(),
+      acknowledged: false,
+    });
+  }, []);
+
   // ── Per-worker action handlers ─────────────────────────────────────────
-  const handleDeploy = async (worker: WorkerInfo) => {
-    if (!dialog || deployingWorker) return;
-    const confirmed = await showConfirm(dialog, {
-      title: `Deploy ${worker.name}`,
-      message: `Trigger a new deployment for ${worker.name}? This will publish the latest code bundle to Cloudflare.`,
-      confirmLabel: "Deploy",
-      cancelLabel: "Cancel",
-    });
-    if (!confirmed) return;
-    setDeployingWorker(worker.name);
-    setDeployProgress("");
-    try {
-      const result = await cliBridge.deployWorker(worker.name, onProgress);
-      addResultAlert(
-        `deploy-${Date.now()}-${worker.name}`,
-        "deploy",
-        result,
-        `${worker.name} deployed (${(result.duration / 1000).toFixed(1)}s)`,
-        `${worker.name} deploy failed: ${result.stderr || result.stdout || "unknown error"}`
-      );
-      if (result.success) await useServiceStore.getState().fetchWorkers();
-    } catch (err) {
-      useServiceStore.getState().addAlert({
-        id: `deploy-err-${Date.now()}`,
-        type: "deploy",
-        severity: "error",
-        message: `${worker.name} deploy error: ${err instanceof Error ? err.message : String(err)}`,
-        timestamp: Date.now(),
-        acknowledged: false,
+  const handleDeploy = useCallback(
+    async (worker: WorkerInfo) => {
+      if (deployingRef.current) return;
+      if (!dialog) {
+        blockWithoutDialog("deploy", worker.name);
+        return;
+      }
+      const confirmed = await showConfirm(dialog, {
+        title: `Deploy ${worker.name}`,
+        message: `Trigger a new deployment for ${worker.name}? This will publish the latest code bundle to Cloudflare.`,
+        confirmLabel: "Deploy",
+        cancelLabel: "Cancel",
       });
-    } finally {
-      setDeployingWorker(null);
-    }
-  };
+      if (!confirmed || !mountedRef.current) return;
+      deployingRef.current = true;
+      setDeployingWorker(worker.name);
+      setDeployProgress("");
+      try {
+        const result = await cliBridge.deployWorker(worker.name, onProgress);
+        if (!mountedRef.current) return;
+        addResultAlert(
+          `deploy-${Date.now()}-${worker.name}`,
+          "deploy",
+          result,
+          `${worker.name} deployed (${(result.duration / 1000).toFixed(1)}s)`,
+          `${worker.name} deploy failed: ${result.stderr || result.stdout || "unknown error"}`
+        );
+        if (result.success) await useServiceStore.getState().fetchWorkers();
+      } catch (err) {
+        if (!mountedRef.current) return;
+        useServiceStore.getState().addAlert({
+          id: `deploy-err-${Date.now()}`,
+          type: "deploy",
+          severity: "error",
+          message: `${worker.name} deploy error: ${err instanceof Error ? err.message : String(err)}`,
+          timestamp: Date.now(),
+          acknowledged: false,
+        });
+      } finally {
+        deployingRef.current = false;
+        if (mountedRef.current) setDeployingWorker(null);
+      }
+    },
+    [dialog, onProgress, addResultAlert, blockWithoutDialog]
+  );
 
-  const handleRestart = async (worker: WorkerInfo) => {
-    if (!dialog || deployingWorker) return;
-    const confirmed = await showConfirm(dialog, {
-      title: `Restart ${worker.name}`,
-      message: `Restart the ${worker.name} worker? Running tasks will be gracefully drained before restart.`,
-      confirmLabel: "Restart",
-      cancelLabel: "Cancel",
-    });
-    if (!confirmed) return;
-    setDeployingWorker(worker.name);
-    setDeployProgress("");
-    try {
-      const result = await cliBridge.repairWorker(worker.name, onProgress);
-      addResultAlert(
-        `restart-${Date.now()}-${worker.name}`,
-        "restart",
-        result,
-        `${worker.name} restarted (${(result.duration / 1000).toFixed(1)}s)`,
-        `${worker.name} restart failed: ${result.stderr || result.stdout || "unknown error"}`
-      );
-      if (result.success) await useServiceStore.getState().fetchWorkers();
-    } catch (err) {
-      useServiceStore.getState().addAlert({
-        id: `restart-err-${Date.now()}`,
-        type: "restart",
-        severity: "error",
-        message: `${worker.name} restart error: ${err instanceof Error ? err.message : String(err)}`,
-        timestamp: Date.now(),
-        acknowledged: false,
+  const handleRestart = useCallback(
+    async (worker: WorkerInfo) => {
+      if (deployingRef.current) return;
+      if (!dialog) {
+        blockWithoutDialog("restart", worker.name);
+        return;
+      }
+      const confirmed = await showConfirm(dialog, {
+        title: `Restart ${worker.name}`,
+        message: `Restart the ${worker.name} worker? Running tasks will be gracefully drained before restart.`,
+        confirmLabel: "Restart",
+        cancelLabel: "Cancel",
       });
-    } finally {
-      setDeployingWorker(null);
-    }
-  };
+      if (!confirmed || !mountedRef.current) return;
+      deployingRef.current = true;
+      setDeployingWorker(worker.name);
+      setDeployProgress("");
+      try {
+        const result = await cliBridge.repairWorker(worker.name, onProgress);
+        if (!mountedRef.current) return;
+        addResultAlert(
+          `restart-${Date.now()}-${worker.name}`,
+          "restart",
+          result,
+          `${worker.name} restarted (${(result.duration / 1000).toFixed(1)}s)`,
+          `${worker.name} restart failed: ${result.stderr || result.stdout || "unknown error"}`
+        );
+        if (result.success) await useServiceStore.getState().fetchWorkers();
+      } catch (err) {
+        if (!mountedRef.current) return;
+        useServiceStore.getState().addAlert({
+          id: `restart-err-${Date.now()}`,
+          type: "restart",
+          severity: "error",
+          message: `${worker.name} restart error: ${err instanceof Error ? err.message : String(err)}`,
+          timestamp: Date.now(),
+          acknowledged: false,
+        });
+      } finally {
+        deployingRef.current = false;
+        if (mountedRef.current) setDeployingWorker(null);
+      }
+    },
+    [dialog, onProgress, addResultAlert, blockWithoutDialog]
+  );
 
-  const handleDeployAll = async () => {
-    if (!dialog || deployingWorker) return;
+  const handleDeployAll = useCallback(async () => {
+    if (deployingRef.current) return;
+    if (!dialog) {
+      blockWithoutDialog("deploy", "all workers");
+      return;
+    }
     const confirmed = await showConfirm(dialog, {
       title: "Deploy All Workers",
       message: `This will deploy the latest code to all ${workers.length} workers. Existing deployments will be replaced. Continue?`,
       confirmLabel: "Deploy All",
       cancelLabel: "Cancel",
     });
-    if (!confirmed) return;
+    if (!confirmed || !mountedRef.current) return;
+    deployingRef.current = true;
     setDeployingWorker("all");
     setDeployProgress("");
     try {
       const result = await cliBridge.deployAll(onProgress);
+      if (!mountedRef.current) return;
       addResultAlert(
         `deploy-all-${Date.now()}`,
         "deploy",
@@ -726,6 +808,7 @@ export function ServiceManager({ dialog }: ServiceManagerProps) {
       );
       if (result.success) await useServiceStore.getState().fetchWorkers();
     } catch (err) {
+      if (!mountedRef.current) return;
       useServiceStore.getState().addAlert({
         id: `deploy-all-err-${Date.now()}`,
         type: "deploy",
@@ -735,23 +818,30 @@ export function ServiceManager({ dialog }: ServiceManagerProps) {
         acknowledged: false,
       });
     } finally {
-      setDeployingWorker(null);
+      deployingRef.current = false;
+      if (mountedRef.current) setDeployingWorker(null);
     }
-  };
+  }, [dialog, workers.length, onProgress, addResultAlert, blockWithoutDialog]);
 
-  const handleRestartAll = async () => {
-    if (!dialog || deployingWorker) return;
+  const handleRestartAll = useCallback(async () => {
+    if (deployingRef.current) return;
+    if (!dialog) {
+      blockWithoutDialog("restart", "all workers");
+      return;
+    }
     const confirmed = await showConfirm(dialog, {
       title: "Restart All Workers",
       message: `This will restart all ${workers.length} workers. Active trades will be gracefully drained. Continue?`,
       confirmLabel: "Restart All",
       cancelLabel: "Cancel",
     });
-    if (!confirmed) return;
+    if (!confirmed || !mountedRef.current) return;
+    deployingRef.current = true;
     setDeployingWorker("all");
     setDeployProgress("");
     try {
       const result = await cliBridge.rebuild(onProgress);
+      if (!mountedRef.current) return;
       addResultAlert(
         `restart-all-${Date.now()}`,
         "restart",
@@ -761,6 +851,7 @@ export function ServiceManager({ dialog }: ServiceManagerProps) {
       );
       if (result.success) await useServiceStore.getState().fetchWorkers();
     } catch (err) {
+      if (!mountedRef.current) return;
       useServiceStore.getState().addAlert({
         id: `restart-all-err-${Date.now()}`,
         type: "restart",
@@ -770,9 +861,10 @@ export function ServiceManager({ dialog }: ServiceManagerProps) {
         acknowledged: false,
       });
     } finally {
-      setDeployingWorker(null);
+      deployingRef.current = false;
+      if (mountedRef.current) setDeployingWorker(null);
     }
-  };
+  }, [dialog, workers.length, onProgress, addResultAlert, blockWithoutDialog]);
 
   // ── Render ──────────────────────────────────────────────────────────────
   return (
@@ -843,7 +935,7 @@ export function ServiceManager({ dialog }: ServiceManagerProps) {
             <text fg={Colors.accent}>DEPLOYING {deployingWorker}...</text>
             {deployProgress && (
               <text fg={Colors.muted} dim>
-                {deployProgress.slice(-200)}
+                {redactSecretsInText(deployProgress.slice(-200))}
               </text>
             )}
           </box>

@@ -283,7 +283,22 @@ export function agentChatStream(
             SSE_RECONNECT_BASE_MS * Math.pow(2, attempt - 1),
             SSE_RECONNECT_MAX_MS
           );
-          await new Promise((resolve) => setTimeout(resolve, delay));
+          // Abortable backoff — unmount/cancel must not wait out full delay
+          await new Promise<void>((resolve) => {
+            if (abortController.signal.aborted) {
+              resolve();
+              return;
+            }
+            const timer = setTimeout(resolve, delay);
+            abortController.signal.addEventListener(
+              "abort",
+              () => {
+                clearTimeout(timer);
+                resolve();
+              },
+              { once: true }
+            );
+          });
         }
       }
     }

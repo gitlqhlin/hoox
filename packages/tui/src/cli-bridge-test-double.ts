@@ -102,7 +102,7 @@ function applyDefaults(): void {
     okCliResult({ secrets: [], timestamp: new Date().toISOString() })
   );
   cliBridgeDouble.agentHealthCheck.mockImplementation(() =>
-    okCliResult({ providers: [], overallStatus: "online" as const })
+    okCliResult({ providers: [], timestamp: new Date().toISOString() })
   );
   cliBridgeDouble.pyneHealthCheck.mockImplementation(() =>
     okCliResult({
@@ -162,7 +162,7 @@ export const cliBridgeDouble = {
     okCliResult({ secrets: [], timestamp: new Date().toISOString() })
   ),
   agentHealthCheck: mock(() =>
-    okCliResult({ providers: [], overallStatus: "online" as const })
+    okCliResult({ providers: [], timestamp: new Date().toISOString() })
   ),
   pyneHealthCheck: mock(() =>
     okCliResult({
@@ -188,10 +188,13 @@ export function resetCliBridgeDouble(): void {
   applyDefaults();
 }
 
-/** Factory for mock.module — re-exports real standalone helpers. */
+/** Factory for mock.module — re-exports real standalone + index helpers. */
 export async function createCliBridgeModuleMock(): Promise<
   Record<string, unknown>
 > {
+  // Load real module exports *before* mock.module is installed so tests that
+  // import tryParseJsonLoose / sanitizeCliArgsForLog still get the real fns.
+  const realBridge = await import("./services/cli-bridge/index");
   const standalone = await import("./services/cli-bridge/standalone");
   const types = await import("./services/cli-bridge/types");
   return {
@@ -199,6 +202,8 @@ export async function createCliBridgeModuleMock(): Promise<
     validateReadOnlySql: standalone.validateReadOnlySql,
     agentChatStream: standalone.agentChatStream,
     AI_MODEL_OPTIONS: standalone.AI_MODEL_OPTIONS,
+    tryParseJsonLoose: realBridge.tryParseJsonLoose,
+    sanitizeCliArgsForLog: realBridge.sanitizeCliArgsForLog,
     // Type re-exports are erased at runtime; keep values if any exist
     ...Object.fromEntries(
       Object.entries(types).filter(([, v]) => typeof v !== "undefined")

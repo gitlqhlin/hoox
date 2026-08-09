@@ -6,14 +6,10 @@
 /**
  * Formatters Utility Tests — Time formatting, number formatting.
  *
- * Tests the pure formatting functions used throughout the TUI:
- *   - formatRelativeTime (relative "X ago" strings)
- *   - formatDuration (compact duration strings)
- *
- * Also tests number formatting helpers used in views:
- *   - K/M suffix for large numbers
- *   - P&L sign prefix
- *   - Uptime formatting
+ * Sources of truth (no local mirror drift):
+ *   - formatRelativeTime / formatDuration (ms) → @hoox-sh/hoox-shared/format-time
+ *   - formatNumber, formatUptime, formatLatency, formatRequests, formatPercent
+ *     → @hoox-sh/hoox-shared formatters
  *
  * Uses Bun test runner.
  */
@@ -22,8 +18,16 @@ import {
   formatRelativeTime,
   formatDuration,
 } from "@hoox-sh/hoox-shared/format-time";
+import {
+  formatNumber,
+  formatLatency,
+  formatRequests,
+  formatPercent,
+  formatUptime,
+  formatDurationCompact,
+} from "@hoox-sh/hoox-shared";
 
-// ─── formatRelativeTime ──────────────────────────────────────────────────────
+// ─── formatRelativeTime (format-time: status bar / reconnection) ─────────────
 
 describe("formatRelativeTime", () => {
   const now = 2000000; // fixed "now" reference for deterministic tests
@@ -66,7 +70,6 @@ describe("formatRelativeTime", () => {
 
   it("uses Date.now() when nowMs is not provided", () => {
     const result = formatRelativeTime(Date.now() - 60000);
-    // Should be "1m ago" or similar depending on timing
     expect(result).toMatch(/^(< 1m|\d+m) ago$/);
   });
 
@@ -91,9 +94,9 @@ describe("formatRelativeTime", () => {
   });
 });
 
-// ─── formatDuration ──────────────────────────────────────────────────────────
+// ─── formatDuration (format-time: ms → compact downtime string) ──────────────
 
-describe("formatDuration", () => {
+describe("formatDuration (ms)", () => {
   it("formats seconds when under 1 minute", () => {
     expect(formatDuration(0)).toBe("0s");
     expect(formatDuration(1000)).toBe("1s");
@@ -116,9 +119,7 @@ describe("formatDuration", () => {
   });
 
   it("handles large durations", () => {
-    // 25 hours
     expect(formatDuration(90000000)).toBe("25h");
-    // 25 hours + 30 minutes
     expect(formatDuration(91800000)).toBe("25h 30m");
   });
 
@@ -128,125 +129,65 @@ describe("formatDuration", () => {
   });
 });
 
-// ─── Number Formatting Helpers ───────────────────────────────────────────────
+// ─── Shared number / uptime / latency formatters ─────────────────────────────
 
-describe("number formatting", () => {
-  /**
-   * Format large numbers with K/M suffixes.
-   * Mirrors the logic used in dashboard quick stats and worker overview.
-   */
-  function formatCompact(n: number, decimals: number = 1): string {
-    const abs = Math.abs(n);
-    const sign = n < 0 ? "-" : "";
-    if (abs >= 1_000_000)
-      return `${sign}${(abs / 1_000_000).toFixed(decimals)}M`;
-    if (abs >= 1_000) return `${sign}${(abs / 1_000).toFixed(decimals)}K`;
-    return `${sign}${abs.toFixed(decimals)}`;
-  }
-
+describe("formatNumber (shared)", () => {
   it("formats thousands with K suffix", () => {
-    expect(formatCompact(1500)).toBe("1.5K");
-    expect(formatCompact(2000)).toBe("2.0K");
-    expect(formatCompact(999000)).toBe("999.0K");
+    expect(formatNumber(1500)).toBe("1.5K");
+    expect(formatNumber(2000)).toBe("2.0K");
+    expect(formatNumber(999000)).toBe("999.0K");
   });
 
   it("formats millions with M suffix", () => {
-    expect(formatCompact(1500000)).toBe("1.5M");
-    expect(formatCompact(2000000)).toBe("2.0M");
-    expect(formatCompact(12345678)).toBe("12.3M");
+    expect(formatNumber(1500000)).toBe("1.5M");
+    expect(formatNumber(2000000)).toBe("2.0M");
   });
 
-  it("returns unchanged for numbers under 1000", () => {
-    expect(formatCompact(500)).toBe("500.0");
-    expect(formatCompact(0)).toBe("0.0");
-    expect(formatCompact(999)).toBe("999.0");
+  it("returns locale string for numbers under 1000", () => {
+    expect(formatNumber(500)).toBe((500).toLocaleString());
+    expect(formatNumber(0)).toBe((0).toLocaleString());
+    expect(formatNumber(999)).toBe((999).toLocaleString());
   });
 
-  it("handles negative numbers correctly", () => {
-    expect(formatCompact(-1500)).toBe("-1.5K");
-    expect(formatCompact(-1500000)).toBe("-1.5M");
-  });
-
-  it("prefixes P&L with + for positive and - for negative", () => {
-    function formatPnL(pnl: number): string {
-      const prefix = pnl >= 0 ? "+" : "-";
-      const abs = Math.abs(pnl);
-      if (abs >= 1_000_000) return `${prefix}${(abs / 1_000_000).toFixed(2)}M`;
-      if (abs >= 1_000) return `${prefix}${(abs / 1_000).toFixed(2)}K`;
-      return `${prefix}${abs.toFixed(2)}`;
-    }
-
-    expect(formatPnL(42500)).toBe("+42.50K");
-    expect(formatPnL(-3500)).toBe("-3.50K");
-    expect(formatPnL(1500000)).toBe("+1.50M");
-    expect(formatPnL(500)).toBe("+500.00");
-    expect(formatPnL(0)).toBe("+0.00");
+  it("handles non-finite", () => {
+    expect(formatNumber(NaN)).toBe("—");
+    expect(formatNumber(Infinity)).toBe("—");
   });
 });
 
-// ─── Uptime Formatting ───────────────────────────────────────────────────────
-
-describe("uptime formatting", () => {
-  /**
-   * Format uptime in seconds to a human-readable string.
-   * Used by worker-detail and workers-overview views.
-   */
-  function formatUptime(seconds: number): string {
-    if (seconds < 60) return `${seconds}s`;
-    if (seconds < 3600) return `${Math.floor(seconds / 60)}m`;
-    if (seconds < 86400) {
-      const h = Math.floor(seconds / 3600);
-      const m = Math.floor((seconds % 3600) / 60);
-      return `${h}h ${m}m`;
-    }
-    const d = Math.floor(seconds / 86400);
-    const h = Math.floor((seconds % 86400) / 3600);
-    return `${d}d ${h}h`;
-  }
-
+describe("formatUptime / formatDurationCompact (seconds)", () => {
   it("formats seconds", () => {
-    expect(formatUptime(0)).toBe("0s");
-    expect(formatUptime(30)).toBe("30s");
-    expect(formatUptime(59)).toBe("59s");
+    expect(formatDurationCompact(0)).toBe("0s");
+    expect(formatDurationCompact(30)).toBe("30s");
+    expect(formatDurationCompact(59)).toBe("59s");
   });
 
   it("formats minutes", () => {
-    expect(formatUptime(60)).toBe("1m");
-    expect(formatUptime(90)).toBe("1m");
-    expect(formatUptime(3599)).toBe("59m");
+    expect(formatDurationCompact(60)).toBe("1m");
+    expect(formatDurationCompact(90)).toBe("1m");
+    expect(formatDurationCompact(3599)).toBe("59m");
   });
 
   it("formats hours with minutes", () => {
-    expect(formatUptime(3600)).toBe("1h 0m");
-    expect(formatUptime(3661)).toBe("1h 1m");
-    expect(formatUptime(7200)).toBe("2h 0m");
+    expect(formatDurationCompact(3600)).toBe("1h 0m");
+    expect(formatDurationCompact(3661)).toBe("1h 1m");
+    expect(formatDurationCompact(7200)).toBe("2h 0m");
   });
 
   it("formats days with hours", () => {
-    expect(formatUptime(86400)).toBe("1d 0h");
-    expect(formatUptime(90000)).toBe("1d 1h");
-    expect(formatUptime(172800)).toBe("2d 0h");
-    expect(formatUptime(259200)).toBe("3d 0h");
+    expect(formatDurationCompact(86400)).toBe("1d 0h");
+    expect(formatDurationCompact(90000)).toBe("1d 1h");
+    expect(formatDurationCompact(172800)).toBe("2d 0h");
   });
 
-  it("handles large uptimes", () => {
-    expect(formatUptime(604800)).toBe("7d 0h"); // 7 days
-    expect(formatUptime(2592000)).toBe("30d 0h"); // 30 days
+  it("formatUptime delegates to full formatDuration (seconds)", () => {
+    // formatUptime uses multi-part formatDuration (d/h/m/s)
+    expect(formatUptime(125)).toBe("2m 5s");
+    expect(formatUptime(3661)).toBe("1h 1m 1s");
   });
 });
 
-// ─── Latency Formatting ──────────────────────────────────────────────────────
-
-describe("latency formatting", () => {
-  /**
-   * Format latency in milliseconds for trade monitor display.
-   */
-  function formatLatency(ms: number): string {
-    if (ms < 1) return "<1ms";
-    if (ms < 1000) return `${Math.round(ms)}ms`;
-    return `${(ms / 1000).toFixed(1)}s`;
-  }
-
+describe("formatLatency", () => {
   it("formats sub-millisecond latency", () => {
     expect(formatLatency(0)).toBe("<1ms");
     expect(formatLatency(0.5)).toBe("<1ms");
@@ -264,50 +205,32 @@ describe("latency formatting", () => {
     expect(formatLatency(2500)).toBe("2.5s");
     expect(formatLatency(15000)).toBe("15.0s");
   });
-});
 
-// ─── Percentage Formatting ───────────────────────────────────────────────────
-
-describe("percentage formatting", () => {
-  function formatPercent(value: number, decimals: number = 1): string {
-    return `${value.toFixed(decimals)}%`;
-  }
-
-  it("formats percentages with one decimal", () => {
-    expect(formatPercent(50)).toBe("50.0%");
-    expect(formatPercent(99.9)).toBe("99.9%");
-    expect(formatPercent(0)).toBe("0.0%");
-  });
-
-  it("handles edge values", () => {
-    expect(formatPercent(100)).toBe("100.0%");
-    expect(formatPercent(0.1)).toBe("0.1%");
+  it("handles non-finite", () => {
+    expect(formatLatency(NaN)).toBe("—");
   });
 });
 
-// ─── Request Count Formatting ────────────────────────────────────────────────
-
-describe("request count formatting", () => {
-  function formatRequests(requests: number): string {
-    if (requests >= 1_000_000) return `${(requests / 1_000_000).toFixed(1)}M`;
-    if (requests >= 1_000) return `${(requests / 1_000).toFixed(1)}K`;
-    return requests.toString();
-  }
-
-  it("formats small request counts as-is", () => {
-    expect(formatRequests(0)).toBe("0");
-    expect(formatRequests(42)).toBe("42");
-    expect(formatRequests(999)).toBe("999");
+describe("formatPercent", () => {
+  it("formats percentages with sign prefix", () => {
+    expect(formatPercent(50, 1)).toBe("+50.0%");
+    expect(formatPercent(99.9, 1)).toBe("+99.9%");
+    expect(formatPercent(0, 1)).toBe("+0.0%");
+    expect(formatPercent(-12.5, 1)).toBe("-12.5%");
   });
 
-  it("formats thousands with K suffix", () => {
+  it("handles non-finite", () => {
+    expect(formatPercent(NaN)).toBe("—");
+  });
+});
+
+describe("formatRequests", () => {
+  it("formats via formatNumber", () => {
+    expect(formatRequests(0)).toBe((0).toLocaleString());
+    expect(formatRequests(42)).toBe((42).toLocaleString());
+    expect(formatRequests(999)).toBe((999).toLocaleString());
     expect(formatRequests(1000)).toBe("1.0K");
     expect(formatRequests(1500)).toBe("1.5K");
-    expect(formatRequests(999000)).toBe("999.0K");
-  });
-
-  it("formats millions with M suffix", () => {
     expect(formatRequests(1000000)).toBe("1.0M");
-    expect(formatRequests(1200000)).toBe("1.2M");
   });
 });

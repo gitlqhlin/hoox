@@ -12,7 +12,7 @@
  * Uses service store logs (ring buffer) and workers list for filter checkboxes.
  * Color-coded by level using Hoox design tokens. Wrapped in ErrorBoundary.
  */
-import { useState, useMemo, useCallback, useEffect } from "react";
+import { useState, useMemo, useCallback, useEffect, useRef } from "react";
 import { useKeyboard } from "@opentui/react";
 import {
   Colors,
@@ -37,6 +37,12 @@ const LEVEL_LABEL: Record<LogLevel, string> = {
 
 const ALL_LEVELS: LogLevel[] = ["error", "warn", "info", "debug"];
 
+/** Max rows rendered in the stream (store ring is 1000). */
+export const MAX_VISIBLE_LOGS = 200;
+
+/** Search debounce so each keystroke doesn't refilter the whole buffer. */
+const SEARCH_DEBOUNCE_MS = 150;
+
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
 function formatTimestamp(ms: number): string {
@@ -50,6 +56,64 @@ function formatTimestamp(ms: number): string {
 function truncateRight(str: string, max: number): string {
   if (str.length <= max) return str;
   return str.slice(0, max - 1) + "\u2026";
+}
+
+/**
+ * Strip C0 control chars (except tab) so log payloads cannot inject
+ * terminal sequences into the TUI stream.
+ */
+export function sanitizeLogText(value: string, maxLen = 400): string {
+  const cleaned = value.replace(
+    /[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F]/g,
+    ""
+  );
+  // Collapse newlines/tabs to spaces so each log stays one row
+  const singleLine = cleaned.replace(/[\t\n\r]+/g, " ");
+  if (singleLine.length <= maxLen) return singleLine;
+  return singleLine.slice(0, maxLen - 1) + "\u2026";
+}
+
+/**
+ * Filter logs with AND logic: level ∩ worker ∩ text search.
+ * Exported for unit tests so the view and suite stay in lockstep.
+ */
+export function applyLogFilters(
+  entries: readonly LogEntry[],
+  options: {
+    allLevels: boolean;
+    levels: Set<LogLevel>;
+    selectedWorkers: Set<string>;
+    searchText: string;
+    workers: ReadonlyArray<{ id: string; name: string }>;
+  }
+): LogEntry[] {
+  const { allLevels, levels, selectedWorkers, searchText, workers } = options;
+  const activeLevels = allLevels ? new Set(ALL_LEVELS) : levels;
+  const query = searchText.toLowerCase().trim();
+
+  if (activeLevels.size === 0 && !allLevels) return [];
+
+  // Pre-index workers once for O(1) lookup
+  const workerById =
+    selectedWorkers.size > 0
+      ? new Map(workers.map((w) => [w.id, w.name] as const))
+      : null;
+
+  return entries.filter((entry) => {
+    if (!activeLevels.has(entry.level)) return false;
+
+    if (workerById) {
+      const name = entry.workerId ? workerById.get(entry.workerId) : undefined;
+      if (!name || !selectedWorkers.has(name)) return false;
+    }
+
+    if (query) {
+      const hay = `${entry.message} ${entry.source ?? ""}`.toLowerCase();
+      if (!hay.includes(query)) return false;
+    }
+
+    return true;
+  });
 }
 
 // ─── Filter Panel ────────────────────────────────────────────────────────────
@@ -178,14 +242,17 @@ function LogStream({ entries, paused }: LogStreamProps) {
   return (
     <scrollbox flexGrow={1} border={false}>
       {entries.map((entry) => {
-        const fg = LogLevelColor[entry.level];
+        const fg = LogLevelColor[entry.level] ?? Colors.foreground;
         const dim = entry.level === "debug";
-        const label = LEVEL_LABEL[entry.level];
+        const label = LEVEL_LABEL[entry.level] ?? String(entry.level);
         const time = formatTimestamp(entry.timestamp);
-        const src = entry.source ? ` [${truncateRight(entry.source, 12)}]` : "";
-        const workerTag = entry.workerId
-          ? ` (${truncateRight(entry.workerId, 10)})`
+        const src = entry.source
+          ? ` [${truncateRight(sanitizeLogText(entry.source, 24), 12)}]`
           : "";
+        const workerTag = entry.workerId
+          ? ` (${truncateRight(sanitizeLogText(entry.workerId, 20), 10)})`
+          : "";
+        const message = sanitizeLogText(entry.message ?? "");
 
         return (
           <box flexDirection="row" gap={1} key={entry.id}>
@@ -200,7 +267,7 @@ function LogStream({ entries, paused }: LogStreamProps) {
               {workerTag}
             </text>
             <text fg={dim ? Colors.dim : fg} selectable>
-              {entry.message}
+              {message}
             </text>
           </box>
         );
@@ -275,8 +342,11 @@ export function LogsViewer() {
     new Set()
   );
   const [searchText, setSearchText] = useState("");
+  /** Debounced copy used for filtering (avoids O(n) refilter per keystroke). */
+  const [debouncedSearch, setDebouncedSearch] = useState("");
   /** When true, printable keys append to searchText instead of being ignored. */
   const [searchActive, setSearchActive] = useState(false);
+  const searchTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // ── Store subscriptions (selectors only) ────────────────────────────────
   const allLogs = useServiceStore((s) => s.logs);
@@ -284,6 +354,22 @@ export function LogsViewer() {
   const connectionStatus = useServiceStore((s) => s.connectionStatus);
   const activeView = useUIStore((s) => s.activeView);
   const isActive = activeView === "logs-viewer";
+  const sseConnected = connectionStatus === "connected";
+
+  // Debounce search input; clear timer on unmount
+  useEffect(() => {
+    if (searchTimerRef.current) clearTimeout(searchTimerRef.current);
+    searchTimerRef.current = setTimeout(() => {
+      setDebouncedSearch(searchText);
+      searchTimerRef.current = null;
+    }, SEARCH_DEBOUNCE_MS);
+    return () => {
+      if (searchTimerRef.current) {
+        clearTimeout(searchTimerRef.current);
+        searchTimerRef.current = null;
+      }
+    };
+  }, [searchText]);
 
   // Derive unique worker names for checkboxes
   const workerNames = useMemo(() => workers.map((w) => w.name), [workers]);
@@ -407,31 +493,23 @@ export function LogsViewer() {
   }, []);
 
   // ── Filter logic (AND combination) ──────────────────────────────────────
-  const filteredLogs = useMemo(() => {
-    const activeLevels = allLevels ? new Set(ALL_LEVELS) : levels;
-    const query = searchText.toLowerCase().trim();
+  const filteredLogs = useMemo(
+    () =>
+      applyLogFilters(allLogs, {
+        allLevels,
+        levels,
+        selectedWorkers,
+        searchText: debouncedSearch,
+        workers,
+      }),
+    [allLogs, allLevels, levels, selectedWorkers, debouncedSearch, workers]
+  );
 
-    if (activeLevels.size === 0 && !allLevels) return [];
-
-    return allLogs.filter((entry) => {
-      // Level filter
-      if (!activeLevels.has(entry.level)) return false;
-
-      // Worker filter (empty set = pass all)
-      if (selectedWorkers.size > 0) {
-        const w = workers.find((w) => w.id === entry.workerId);
-        if (!w || !selectedWorkers.has(w.name)) return false;
-      }
-
-      // Text search filter (case-insensitive substring)
-      if (query && !entry.message.toLowerCase().includes(query)) return false;
-
-      return true;
-    });
-  }, [allLogs, allLevels, levels, selectedWorkers, searchText, workers]);
-
-  // Display newest-first so fresh entries appear at top in ScrollBox
-  const displayed = useMemo(() => [...filteredLogs].reverse(), [filteredLogs]);
+  // Display newest-first, capped for render performance
+  const displayed = useMemo(() => {
+    const newestFirst = filteredLogs.slice().reverse();
+    return newestFirst.slice(0, MAX_VISIBLE_LOGS);
+  }, [filteredLogs]);
 
   // ── Paused buffer ───────────────────────────────────────────────────────
   const [frozen, setFrozen] = useState<LogEntry[] | null>(null);
@@ -485,12 +563,25 @@ export function LogsViewer() {
           title="LOGS VIEWER"
           showDivider={false}
           meta={
-            <text dim fg={Colors.muted}>
-              {filteredLogs.length}/{allLogs.length} entries
-              {paused ? " [PAUSED]" : ""}
-              {searchActive ? " [SEARCH]" : ""}
-              {" · Space pause · / search"}
-            </text>
+            <box flexDirection="row" gap={2} alignItems="center">
+              <text dim fg={Colors.muted}>
+                {filteredLogs.length}/{allLogs.length} entries
+                {filteredLogs.length > MAX_VISIBLE_LOGS
+                  ? ` · showing ${MAX_VISIBLE_LOGS}`
+                  : ""}
+                {paused ? " [PAUSED]" : ""}
+                {searchActive ? " [SEARCH]" : ""}
+              </text>
+              <text
+                fg={sseConnected ? Colors.success : Colors.warning}
+                dim={!sseConnected}
+              >
+                {sseConnected ? "SSE" : "CLI"}
+              </text>
+              <text dim fg={Colors.dim}>
+                Space pause · / search
+              </text>
+            </box>
           }
         />
 
@@ -516,7 +607,7 @@ export function LogsViewer() {
           onTogglePause={() => setPaused((p) => !p)}
           onExport={handleExport}
           onClear={handleClear}
-          sseConnected={connectionStatus === "connected"}
+          sseConnected={sseConnected}
           onFetch={handleFetch}
         />
       </box>

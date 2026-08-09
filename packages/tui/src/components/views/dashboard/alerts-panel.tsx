@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { useKeyboard } from "@opentui/react";
 import {
   Colors,
@@ -50,6 +50,11 @@ function AlertsPanel() {
       .sort((a, b) => b.timestamp - a.timestamp)
       .slice(0, MAX_VISIBLE_ALERTS);
   }, [alerts]);
+
+  // Clamp selection when the alert list shrinks (ack/dismiss/race)
+  useEffect(() => {
+    setScrollOffset((o) => Math.min(o, Math.max(0, sortedAlerts.length - 1)));
+  }, [sortedAlerts.length]);
 
   // Keyboard: scroll through alerts
   useKeyboard((key) => {

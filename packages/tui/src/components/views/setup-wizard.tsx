@@ -323,22 +323,22 @@ const WIZARD_SESSION_PATH = resolveTuiStatePath(".wizard-session.json");
 // ─── Validation Helpers ─────────────────────────────────────────────────────
 
 /** Basic format check for exchange API keys (non-empty, no whitespace at ends) */
-function validateApiKey(value: string): boolean {
+export function validateApiKey(value: string): boolean {
   return value.trim().length >= 16 && value === value.trim();
 }
 
 /** Basic email format check */
-function validateEmail(value: string): boolean {
+export function validateEmail(value: string): boolean {
   return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value);
 }
 
 /** Basic URL format check */
-function validateUrl(value: string): boolean {
+export function validateUrl(value: string): boolean {
   return /^https?:\/\/.+/.test(value);
 }
 
 /** Mask a secret string: show first 4 and last 4 chars, fill middle with •••• */
-function maskSecret(value: string): string {
+export function maskSecret(value: string): string {
   if (value.length <= 8) return "•".repeat(value.length || 4);
   return value.slice(0, 4) + "••••" + value.slice(-4);
 }
@@ -416,9 +416,12 @@ export function SetupWizard({ dialog }: SetupWizardProps) {
   const [prereqs, setPrereqs] = useState<PrereqGroup[]>([]);
   const [prereqsRunning, setPrereqsRunning] = useState(true);
   const [cfAccountId, setCfAccountId] = useState("");
-  const [cfApiToken, setCfApiToken] = useState("");
+  /** Masked CF token display only — cleartext never retained in React state. */
+  const [cfApiTokenMasked, setCfApiTokenMasked] = useState<string | null>(null);
   const [deploying, setDeploying] = useState(false);
   const [deployLog, setDeployLog] = useState("");
+  /** Inline validation / navigation feedback (non-secret). */
+  const [stepHint, setStepHint] = useState<string | null>(null);
 
   const updateConfig = useConfigStore((s) => s.updateConfig);
   const setView = useUIStore((s) => s.setView);
@@ -462,8 +465,13 @@ export function SetupWizard({ dialog }: SetupWizardProps) {
           `${process.env.HOME ?? "~"}/.hoox/config.json`
         );
         if (await cfgFile.exists()) {
-          const cfg = JSON.parse(await cfgFile.text());
-          if (cfg.apiToken) setCfApiToken(cfg.apiToken);
+          const cfg = JSON.parse(await cfgFile.text()) as {
+            apiToken?: string;
+          };
+          // Mask immediately; discard cleartext so it never lives in state.
+          if (typeof cfg.apiToken === "string" && cfg.apiToken.length > 0) {
+            setCfApiTokenMasked(maskSecret(cfg.apiToken));
+          }
         }
       } catch {
         /* non-fatal */
@@ -567,6 +575,16 @@ export function SetupWizard({ dialog }: SetupWizardProps) {
           if (!results[secretPath]) allValid = false;
         }
       }
+    } else if (step === 3) {
+      // AI providers: if a URL is provided it must be valid; key optional but format-checked when set.
+      if (data.ai.providerUrl) {
+        results["ai.providerUrl"] = validateUrl(data.ai.providerUrl);
+        if (!results["ai.providerUrl"]) allValid = false;
+      }
+      if (data.ai.apiKey) {
+        results["ai.apiKey"] = validateApiKey(data.ai.apiKey);
+        if (!results["ai.apiKey"]) allValid = false;
+      }
     } else if (step === 5) {
       if (data.notifications.email.enabled) {
         results["notifications.email.address"] = data.notifications.email
@@ -601,13 +619,21 @@ export function SetupWizard({ dialog }: SetupWizardProps) {
       if (!prereqsRunning) {
         const next = 1;
         setStep(next);
+        setStepHint(null);
         persistSession(next, data, validation);
+      } else {
+        setStepHint("Wait for prerequisite checks to finish");
       }
       return;
     }
-    if (validateStep() && step < TOTAL_SETUP_STEPS - 1) {
+    if (!validateStep()) {
+      setStepHint("Fix validation errors before continuing");
+      return;
+    }
+    if (step < TOTAL_SETUP_STEPS - 1) {
       const next = step + 1;
       setStep(next);
+      setStepHint(null);
       persistSession(next, data, validation);
     }
   };
@@ -617,6 +643,7 @@ export function SetupWizard({ dialog }: SetupWizardProps) {
     if (step > 0) {
       const prev = step - 1;
       setStep(prev);
+      setStepHint(null);
       persistSession(prev, data, validation);
     }
   };
@@ -627,6 +654,7 @@ export function SetupWizard({ dialog }: SetupWizardProps) {
       if (step === 2 || step === 4) {
         const next = step + 1;
         setStep(next);
+        setStepHint(null);
         persistSession(next, data, validation);
       }
     }
@@ -839,10 +867,10 @@ export function SetupWizard({ dialog }: SetupWizardProps) {
               <text fg={Colors.muted} width={14}>
                 API Token:
               </text>
-              <text fg={cfApiToken ? Colors.success : Colors.dim}>
-                {cfApiToken ? maskSecret(cfApiToken) : "(not set)"}
+              <text fg={cfApiTokenMasked ? Colors.success : Colors.dim}>
+                {cfApiTokenMasked ?? "(not set)"}
               </text>
-              {cfApiToken && <text fg={Colors.success}> ✓</text>}
+              {cfApiTokenMasked && <text fg={Colors.success}> ✓</text>}
             </box>
           </box>
         </box>
@@ -1251,6 +1279,12 @@ export function SetupWizard({ dialog }: SetupWizardProps) {
         <scrollbox flexGrow={1} border={false}>
           {stepContent}
         </scrollbox>
+
+        {stepHint ? (
+          <text fg={Colors.warning} dim>
+            {stepHint}
+          </text>
+        ) : null}
 
         {/* Navigation Bar */}
         <box flexDirection="row" justifyContent="space-between" paddingTop={1}>

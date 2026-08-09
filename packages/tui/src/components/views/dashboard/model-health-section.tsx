@@ -119,30 +119,58 @@ function ModelHealthRow({
  * Auto-refreshes every 30 seconds when the dashboard is active.
  * Supports multiple providers: Workers AI, OpenAI, Anthropic, Google, Azure.
  * Click on a provider to expand detailed stats (latency, daily usage, error).
+ * Cancels in-flight probes on unmount; race-safe via generation counter.
  */
 function ModelHealthSection() {
   const [providers, setProviders] = useState<ModelHealth[]>([]);
   const [expandedIndex, setExpandedIndex] = useState<number | null>(null);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const [lastRefresh, setLastRefresh] = useState<number | null>(null);
 
-  const fetchHealth = useCallback(async () => {
-    const result = await cliBridge.agentHealthCheck();
-    if (result.success && result.data) {
-      setProviders(result.data.providers);
-      setLastRefresh(Date.now());
-    }
-    setLoading(false);
-  }, []);
-
-  // Initial fetch + 30s polling
+  // Initial fetch + 30s polling with cancel + race safety
   useEffect(() => {
+    let cancelled = false;
+    let generation = 0;
+    let inFlight = false;
+
+    const fetchHealth = async () => {
+      if (cancelled || inFlight) return;
+      inFlight = true;
+      const gen = ++generation;
+      try {
+        const result = await cliBridge.agentHealthCheck();
+        if (cancelled || gen !== generation) return;
+        if (result.success && result.data) {
+          setProviders(result.data.providers ?? []);
+          setError(null);
+          setLastRefresh(Date.now());
+        } else {
+          // Keep prior providers if any; surface probe failure distinctly
+          setError(
+            result.stderr ||
+              result.stdout ||
+              "AI health probe failed (CLI offline?)"
+          );
+        }
+      } catch (err) {
+        if (cancelled || gen !== generation) return;
+        setError(err instanceof Error ? err.message : String(err));
+      } finally {
+        inFlight = false;
+        if (!cancelled && gen === generation) setLoading(false);
+      }
+    };
+
     void fetchHealth();
     const interval = setInterval(() => {
       void fetchHealth();
     }, MODEL_HEALTH_POLL_MS);
-    return () => clearInterval(interval);
-  }, [fetchHealth]);
+    return () => {
+      cancelled = true;
+      clearInterval(interval);
+    };
+  }, []);
 
   const toggleExpand = useCallback((index: number) => {
     setExpandedIndex((prev) => (prev === index ? null : index));
@@ -167,8 +195,10 @@ function ModelHealthSection() {
         <text fg={Colors.foreground} bold dim>
           AI MODEL HEALTH
         </text>
-        <text fg={Colors.muted} dim paddingTop={1}>
-          No AI providers configured
+        <text fg={error ? Colors.warning : Colors.muted} dim paddingTop={1}>
+          {error
+            ? `Unavailable: ${error.length > 50 ? error.slice(0, 47) + "…" : error}`
+            : "No AI providers configured"}
         </text>
       </box>
     );
@@ -201,6 +231,12 @@ function ModelHealthSection() {
         {offlineCount > 0 && (
           <text fg={Colors.error} dim>
             {offlineCount} offline
+          </text>
+        )}
+
+        {error && (
+          <text fg={Colors.warning} dim>
+            probe warn
           </text>
         )}
 

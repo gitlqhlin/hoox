@@ -26,9 +26,13 @@ export function usePolling(options: UsePollingOptions): void {
   callbackRef.current = callback;
 
   useEffect(() => {
-    if (!enabled) return;
+    if (!enabled) {
+      // Reset backoff when disabled so resume starts clean
+      retryCount.current = 0;
+      return;
+    }
 
-    let timeoutId: Timer;
+    let timeoutId: ReturnType<typeof setTimeout> | undefined;
     let cancelled = false;
     const MAX_BACKOFF = 16_000;
 
@@ -36,8 +40,10 @@ export function usePolling(options: UsePollingOptions): void {
       if (cancelled) return;
       try {
         await callbackRef.current();
+        if (cancelled) return;
         retryCount.current = 0;
       } catch {
+        if (cancelled) return;
         retryCount.current++;
       }
       if (cancelled) return;
@@ -51,15 +57,17 @@ export function usePolling(options: UsePollingOptions): void {
     };
 
     if (immediate) {
-      poll();
+      void poll();
     } else {
       const initialInterval = useConfigStore.getState().refreshIntervalMs;
-      timeoutId = setTimeout(poll, initialInterval);
+      timeoutId = setTimeout(() => {
+        void poll();
+      }, initialInterval);
     }
 
     return () => {
       cancelled = true;
-      clearTimeout(timeoutId);
+      if (timeoutId !== undefined) clearTimeout(timeoutId);
     };
   }, [intervalMs, enabled, immediate]);
 }

@@ -38,7 +38,7 @@ describe("connection-toasts messages", () => {
 
   it("auth messages are explicit", () => {
     expect(messageAuthRequired("remote", "gw")).toContain("Auth failed");
-    expect(messageAuthMissing("gw")).toContain("No API token");
+    expect(messageAuthMissing("gw")).toContain("No API credentials");
   });
 
   it("offline startup distinguishes auth", () => {

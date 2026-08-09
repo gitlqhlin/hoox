@@ -19,7 +19,7 @@
  * Colors use Hoox design tokens — no hardcoded hex.
  * Keyboard handling via @opentui/react useKeyboard hook.
  */
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { useKeyboard } from "@opentui/react";
 import { Colors } from "@hoox-sh/hoox-shared";
 
@@ -150,6 +150,25 @@ export function CommandPalette({
     [commands, query]
   );
 
+  // Clamp selection when the filtered list shrinks (e.g. tighter query)
+  const safeIndex =
+    filtered.length === 0 ? 0 : Math.min(selectedIndex, filtered.length - 1);
+
+  // Reset local state when the palette is dismissed so next open is clean
+  useEffect(() => {
+    if (!visible) {
+      setQuery("");
+      setSelectedIndex(0);
+    }
+  }, [visible]);
+
+  // Keep selectedIndex in range after filter changes
+  useEffect(() => {
+    if (selectedIndex !== safeIndex) {
+      setSelectedIndex(safeIndex);
+    }
+  }, [safeIndex, selectedIndex]);
+
   // ── Keyboard handling (active only when visible) ─────────────────────
 
   useKeyboard((key) => {
@@ -165,19 +184,25 @@ export function CommandPalette({
 
     // Navigate
     if (key.name === "up") {
-      setSelectedIndex((i) =>
-        i > 0 ? i - 1 : Math.max(0, filtered.length - 1)
-      );
+      setSelectedIndex((i) => {
+        const last = Math.max(0, filtered.length - 1);
+        const cur = Math.min(i, last);
+        return cur > 0 ? cur - 1 : last;
+      });
       return;
     }
     if (key.name === "down") {
-      setSelectedIndex((i) => (i < filtered.length - 1 ? i + 1 : 0));
+      setSelectedIndex((i) => {
+        const last = Math.max(0, filtered.length - 1);
+        const cur = Math.min(i, last);
+        return cur < last ? cur + 1 : 0;
+      });
       return;
     }
 
-    // Select
-    if (key.name === "return") {
-      const selected = filtered[selectedIndex];
+    // Select (return / enter)
+    if (key.name === "return" || key.name === "enter") {
+      const selected = filtered[safeIndex];
       if (selected) {
         setQuery("");
         setSelectedIndex(0);
@@ -277,23 +302,22 @@ export function CommandPalette({
           ) : (
             filtered.map((cmd, idx) => (
               <box
+                key={cmd.id}
                 flexDirection="row"
                 justifyContent="space-between"
-                paddingLeft={idx === selectedIndex ? 1 : 2}
+                paddingLeft={idx === safeIndex ? 1 : 2}
                 paddingRight={1}
-                bg={idx === selectedIndex ? Colors.card : undefined}
+                bg={idx === safeIndex ? Colors.card : undefined}
               >
                 {/* Left side: selection arrow + name + category badge */}
                 <box flexDirection="row" gap={1}>
-                  {idx === selectedIndex ? (
+                  {idx === safeIndex ? (
                     <text fg={Colors.accent}>▶</text>
                   ) : (
                     <text> </text>
                   )}
                   <text
-                    fg={
-                      idx === selectedIndex ? Colors.foreground : Colors.muted
-                    }
+                    fg={idx === safeIndex ? Colors.foreground : Colors.muted}
                     bold
                   >
                     {cmd.name}
@@ -301,7 +325,7 @@ export function CommandPalette({
                   {/* Category badge */}
                   <text
                     fg={CATEGORY_BADGE[cmd.category].color}
-                    dim={idx !== selectedIndex}
+                    dim={idx !== safeIndex}
                   >
                     {CATEGORY_BADGE[cmd.category].label}
                   </text>

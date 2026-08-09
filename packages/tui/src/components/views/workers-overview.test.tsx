@@ -196,6 +196,30 @@ describe("WorkersOverview", () => {
 
       expect(outputContains(text, "[VIEW DETAILS]", "[LOGS]")).toBe(true);
     });
+
+    it("renders [DEPLOY] and [RESTART] per card", async () => {
+      useServiceStore.setState({
+        workers: [makeWorker({ id: "w1" })],
+      });
+
+      const text = await renderWorkersOverview();
+
+      expect(outputContains(text, "[DEPLOY]", "[RESTART]")).toBe(true);
+    });
+  });
+
+  describe("empty state chrome", () => {
+    it("uses ViewHeader title and total count when empty", async () => {
+      useServiceStore.setState({
+        workers: [],
+        connectionStatus: "connected",
+      });
+      const text = await renderWorkersOverview();
+      // Header title is uppercase via ViewHeader styling in some themes;
+      // bare "Workers" / total meta must still appear.
+      expect(text).toContain("Workers");
+      expect(text).toContain("0 total");
+    });
   });
 
   describe("scroll behavior", () => {

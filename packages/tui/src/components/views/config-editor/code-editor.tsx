@@ -452,6 +452,8 @@ interface CodeEditorProps {
   fileName: string | null;
   syntaxErrors: SyntaxErrorEntry[];
   scrollOffset: number;
+  /** Cap rendered lines (perf); remaining lines summarized at bottom. */
+  maxDisplayLines?: number;
 }
 
 export function CodeEditor({
@@ -460,8 +462,14 @@ export function CodeEditor({
   fileName,
   syntaxErrors,
   scrollOffset: _scrollOffset,
+  maxDisplayLines = 5_000,
 }: CodeEditorProps) {
   const lines = useMemo(() => content.split("\n"), [content]);
+  const truncated = lines.length > maxDisplayLines;
+  const visibleLines = useMemo(
+    () => (truncated ? lines.slice(0, maxDisplayLines) : lines),
+    [lines, maxDisplayLines, truncated]
+  );
 
   // Build a set of error line numbers for inline highlighting
   const errorLineSet = useMemo(() => {
@@ -487,7 +495,9 @@ export function CodeEditor({
       {/* Header — file name (view-first: free typing not supported) */}
       <box paddingLeft={1} paddingRight={1} paddingTop={0} paddingBottom={0}>
         <text fg={Colors.foreground}>
-          {fileName ? `Viewing: ${fileName}` : "No file selected"}
+          {fileName
+            ? `Viewing: ${fileName}${truncated ? ` (${lines.length} lines, showing first ${maxDisplayLines})` : ""}`
+            : "No file selected"}
         </text>
       </box>
 
@@ -498,47 +508,55 @@ export function CodeEditor({
       {/* Editor content with line numbers */}
       {fileName ? (
         <scrollbox width="100%" flexGrow={1} border={false}>
-          {lines.length === 0 ? (
+          {visibleLines.length === 0 ? (
             <text fg={Colors.muted} dim>
               {" ".repeat(paddingLeft)}Empty file
             </text>
           ) : (
-            lines.map((line, idx) => {
-              const lineNum = idx + 1;
-              const lineNumStr = String(lineNum).padStart(maxLineWidth);
-              const hasError = errorLineSet.has(lineNum);
-              const tokens = tokenizeLine(line, fileType, lineNum, []);
+            <>
+              {visibleLines.map((line, idx) => {
+                const lineNum = idx + 1;
+                const lineNumStr = String(lineNum).padStart(maxLineWidth);
+                const hasError = errorLineSet.has(lineNum);
+                const tokens = tokenizeLine(line, fileType, lineNum, []);
 
-              return (
-                <box key={idx} flexDirection="row" gap={0}>
-                  {/* Line number */}
-                  <text
-                    fg={hasError ? Colors.error : Colors.muted}
-                    dim={!hasError}
-                  >
-                    {lineNumStr}
-                  </text>
-                  {/* Separator */}
-                  <text fg={Colors.border} dim>
-                    {" │ "}
-                  </text>
-                  {/* Tokenized line content */}
-                  <text fg={Colors.foreground}>
-                    {tokens.map((span, si) => (
-                      <span key={si} fg={span.color}>
-                        {span.text}
-                      </span>
-                    ))}
-                  </text>
-                  {/* Error indicator */}
-                  {hasError && (
-                    <text fg={Colors.error} bold>
-                      {"  ←"}
+                return (
+                  <box key={idx} flexDirection="row" gap={0}>
+                    {/* Line number */}
+                    <text
+                      fg={hasError ? Colors.error : Colors.muted}
+                      dim={!hasError}
+                    >
+                      {lineNumStr}
                     </text>
-                  )}
-                </box>
-              );
-            })
+                    {/* Separator */}
+                    <text fg={Colors.border} dim>
+                      {" │ "}
+                    </text>
+                    {/* Tokenized line content */}
+                    <text fg={Colors.foreground}>
+                      {tokens.map((span, si) => (
+                        <span key={si} fg={span.color}>
+                          {span.text}
+                        </span>
+                      ))}
+                    </text>
+                    {/* Error indicator */}
+                    {hasError && (
+                      <text fg={Colors.error} bold>
+                        {"  ←"}
+                      </text>
+                    )}
+                  </box>
+                );
+              })}
+              {truncated && (
+                <text fg={Colors.warning} dim>
+                  … {lines.length - maxDisplayLines} more lines not rendered
+                  (edit externally for full file)
+                </text>
+              )}
+            </>
           )}
         </scrollbox>
       ) : (
@@ -547,12 +565,12 @@ export function CodeEditor({
             Select a file from the tree to view (Format / Save available)
           </text>
           <text fg={Colors.dim} dim>
-            ↑↓ navigate · Enter select · Tab switch pane
+            ↑↓ navigate · Enter select · Tab switch pane · Ctrl+S save
           </text>
         </box>
       )}
 
-      {/* Syntax error summary */}
+      {/* Syntax error summary (messages scrubbed of secret-like patterns) */}
       {syntaxErrors.length > 0 && (
         <box flexDirection="column" paddingTop={0} paddingLeft={1}>
           <text fg={Colors.error} bold>
@@ -561,7 +579,10 @@ export function CodeEditor({
           </text>
           {syntaxErrors.slice(0, 3).map((err, i) => (
             <text key={i} fg={Colors.error}>
-              Ln {err.line}, Col {err.column}: {err.message}
+              Ln {err.line}, Col {err.column}:{" "}
+              {err.message.length > 120
+                ? err.message.slice(0, 117) + "…"
+                : err.message}
             </text>
           ))}
           {syntaxErrors.length > 3 && (

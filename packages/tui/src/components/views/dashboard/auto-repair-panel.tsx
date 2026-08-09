@@ -4,6 +4,7 @@
  */
 
 /** @jsxImportSource @opentui/react */
+import { useMemo } from "react";
 import { Colors } from "@hoox-sh/hoox-shared";
 
 // ─── Types ─────────────────────────────────────────────────────────────────────
@@ -93,6 +94,17 @@ export function AutoRepairPanel({
   onDismiss: () => void;
   onRerun: () => void;
 }) {
+  const resultCounts = useMemo(() => {
+    if (state.kind !== "results") return { applied: 0, failed: 0 };
+    let applied = 0;
+    let failed = 0;
+    for (const item of state.items) {
+      if (item.error) failed += 1;
+      else if (item.applied) applied += 1;
+    }
+    return { applied, failed };
+  }, [state]);
+
   return (
     <box
       flexDirection="column"
@@ -112,17 +124,13 @@ export function AutoRepairPanel({
         {state.kind === "results" && (
           <>
             <text fg={Colors.success} bold>
-              {state.items.filter((i) => i.applied).length} applied
+              {resultCounts.applied} applied
             </text>
             <text
-              fg={
-                state.items.filter((i) => i.error).length > 0
-                  ? Colors.error
-                  : Colors.muted
-              }
-              bold={state.items.filter((i) => i.error).length > 0}
+              fg={resultCounts.failed > 0 ? Colors.error : Colors.muted}
+              bold={resultCounts.failed > 0}
             >
-              {state.items.filter((i) => i.error).length} failed
+              {resultCounts.failed} failed
             </text>
             <text fg={Colors.muted} dim>
               {`(${(state.durationMs / 1000).toFixed(1)}s)`}
@@ -135,7 +143,12 @@ export function AutoRepairPanel({
           </text>
         )}
         <text fg={Colors.muted}>{"  "}</text>
-        <text fg={Colors.accent} bold onMouseUp={onRerun}>
+        <text
+          fg={state.kind === "running" ? Colors.muted : Colors.accent}
+          bold={state.kind !== "running"}
+          dim={state.kind === "running"}
+          onMouseUp={state.kind === "running" ? undefined : onRerun}
+        >
           [ RE-RUN ]
         </text>
         <text fg={Colors.warning} bold onMouseUp={onDismiss}>

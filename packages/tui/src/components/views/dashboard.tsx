@@ -17,7 +17,7 @@
  * Follows Pattern 1 (View Composition) and Pattern 2 (Store Subscription).
  * Colors from design tokens via @hoox-sh/hoox-shared. No CSS, no DOM.
  */
-import { useEffect, useMemo, useState, useCallback } from "react";
+import { useEffect, useMemo, useState, useCallback, useRef } from "react";
 import { useKeyboard } from "@opentui/react";
 import { Colors, useServiceStore } from "@hoox-sh/hoox-shared";
 import { ErrorBoundary } from "../shared/error-boundary";
@@ -81,12 +81,16 @@ function KillSwitchStatusBadge() {
   useEffect(() => {
     let cancelled = false;
     const refresh = async () => {
-      const result = await cliBridge.monitorKillSwitch("show");
-      if (cancelled) return;
-      if (result.success && result.data) {
-        setState(result.data.engaged ? "engaged" : "released");
-      } else {
-        setState("unknown");
+      try {
+        const result = await cliBridge.monitorKillSwitch("show");
+        if (cancelled) return;
+        if (result.success && result.data) {
+          setState(result.data.engaged ? "engaged" : "released");
+        } else {
+          setState("unknown");
+        }
+      } catch {
+        if (!cancelled) setState("unknown");
       }
     };
     void refresh();
@@ -199,14 +203,35 @@ function DashboardHeader({
  */
 function ServiceHealthGrid() {
   const workers = useServiceStore((s) => s.workers);
+  const connectionStatus = useServiceStore((s) => s.connectionStatus);
 
   // Show first 10 workers (dashboard is an overview)
   const visibleWorkers = useMemo(() => workers.slice(0, 10), [workers]);
+  const emptySlots = useMemo(
+    () =>
+      visibleWorkers.length < 10
+        ? Array.from({ length: 10 - visibleWorkers.length }, (_, i) => i)
+        : [],
+    [visibleWorkers.length]
+  );
 
   if (workers.length === 0) {
+    const offline =
+      connectionStatus === "offline" || connectionStatus === "reconnecting";
     return (
-      <box flexDirection="column" paddingY={1} alignItems="center">
-        <Spinner label="Waiting for worker data..." />
+      <box flexDirection="column" gap={0}>
+        <text fg={Colors.foreground} bold dim>
+          SERVICE HEALTH
+        </text>
+        <box flexDirection="column" paddingY={1} alignItems="center">
+          {offline ? (
+            <text fg={Colors.warning} dim>
+              CLI/API offline — no worker health data
+            </text>
+          ) : (
+            <Spinner label="Waiting for worker data..." />
+          )}
+        </box>
       </box>
     );
   }
@@ -226,7 +251,7 @@ function ServiceHealthGrid() {
         paddingTop={1}
         paddingBottom={1}
       >
-        {visibleWorkers.map((worker, i) => (
+        {visibleWorkers.map((worker) => (
           <box
             key={worker.id}
             flexDirection="row"
@@ -237,20 +262,14 @@ function ServiceHealthGrid() {
           >
             <StatusDot status={worker.status} />
             <text fg={Colors.foreground}>{worker.name}</text>
-            {/* Fill remaining space with muted dots for alignment */}
-            {i >= visibleWorkers.length && (
-              <text fg={Colors.dim} dim>
-                —
-              </text>
-            )}
           </box>
         ))}
       </box>
 
       {/* Fill empty slots in grid to maintain 10-card layout */}
-      {visibleWorkers.length < 10 && (
+      {emptySlots.length > 0 && (
         <box flexDirection="row" flexWrap="wrap" gap={1}>
-          {Array.from({ length: 10 - visibleWorkers.length }).map((_, i) => (
+          {emptySlots.map((i) => (
             <box
               key={`empty-${i}`}
               flexDirection="row"
@@ -379,16 +398,36 @@ function QuickStatsRow() {
 export function DashboardView({ dialog }: DashboardViewProps = {}) {
   const [repairState, setRepairState] = useState<RepairState>({ kind: "idle" });
 
-  const handleRefresh = async () => {
-    const result = await cliBridge.monitorStatus();
-    if (result.success) {
-      // Clear any previous CLI error and refresh the data view.
-      // Note: failed CLI calls propagate to the status bar automatically
-      // via the global error sink registered in app.tsx.
-      useServiceStore.getState().setLastErrorDetails(null);
-      await useServiceStore.getState().fetchWorkers();
+  // Mount lifetime: cancel async work so unmount never setStates after teardown
+  const mountedRef = useRef(true);
+  // Race-safe refresh generation (stale monitorStatus/fetchWorkers ignored)
+  const refreshGenRef = useRef(0);
+  // Guard double-submit without re-creating handleRunAutoRepair every state flip
+  const repairRunningRef = useRef(false);
+
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => {
+      mountedRef.current = false;
+    };
+  }, []);
+
+  const handleRefresh = useCallback(async () => {
+    const gen = ++refreshGenRef.current;
+    try {
+      const result = await cliBridge.monitorStatus();
+      if (!mountedRef.current || gen !== refreshGenRef.current) return;
+      if (result.success) {
+        // Clear any previous CLI error and refresh the data view.
+        // Note: failed CLI calls propagate to the status bar automatically
+        // via the global error sink registered in app.tsx.
+        useServiceStore.getState().setLastErrorDetails(null);
+        await useServiceStore.getState().fetchWorkers();
+      }
+    } catch {
+      // Global error sink handles CLI failures; never throw into the view tree.
     }
-  };
+  }, []);
 
   const handleRunAutoRepair = useCallback(async () => {
     // Fail closed: never mutate config without an interactive confirm surface.
@@ -403,6 +442,9 @@ export function DashboardView({ dialog }: DashboardViewProps = {}) {
       });
       return;
     }
+    // Prevent double-submit while a repair is already running
+    if (repairRunningRef.current) return;
+
     const confirmed = await showConfirm(dialog, {
       title: "Run Auto-Repair?",
       message:
@@ -412,11 +454,13 @@ export function DashboardView({ dialog }: DashboardViewProps = {}) {
       confirmLabel: "Run Repair",
       cancelLabel: "Cancel",
     });
-    if (!confirmed) return;
+    if (!confirmed || !mountedRef.current) return;
 
+    repairRunningRef.current = true;
     setRepairState({ kind: "running" });
     try {
       const result = await cliBridge.checkFix();
+      if (!mountedRef.current) return;
       if (!result.success) {
         setRepairState({
           kind: "error",
@@ -484,6 +528,7 @@ export function DashboardView({ dialog }: DashboardViewProps = {}) {
         acknowledged: false,
       });
     } catch (err) {
+      if (!mountedRef.current) return;
       const message = err instanceof Error ? err.message : String(err);
       setRepairState({ kind: "error", message });
       useServiceStore.getState().addAlert({
@@ -494,6 +539,8 @@ export function DashboardView({ dialog }: DashboardViewProps = {}) {
         timestamp: Date.now(),
         acknowledged: false,
       });
+    } finally {
+      repairRunningRef.current = false;
     }
   }, [dialog]);
 
@@ -514,15 +561,24 @@ export function DashboardView({ dialog }: DashboardViewProps = {}) {
   });
 
   useEffect(() => {
+    let cancelled = false;
     const runHealthCheck = async () => {
-      const health = await cliBridge.checkHealth();
-      if (health.success) {
-        useServiceStore.getState().setLastErrorDetails(null);
-        await useServiceStore.getState().fetchWorkers();
+      try {
+        const health = await cliBridge.checkHealth();
+        if (cancelled) return;
+        if (health.success) {
+          useServiceStore.getState().setLastErrorDetails(null);
+          await useServiceStore.getState().fetchWorkers();
+        }
+        // Failure path: handled by the global error sink in app.tsx.
+      } catch {
+        // Fail gracefully when CLI is offline
       }
-      // Failure path: handled by the global error sink in app.tsx.
     };
-    runHealthCheck();
+    void runHealthCheck();
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   return (

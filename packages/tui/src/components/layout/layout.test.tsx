@@ -4,22 +4,20 @@
  */
 
 /**
- * Layout Component Tests — Sidebar, TabBar, StatusBar integration.
- *
- * Since the layout shell is defined inline in app.tsx (Sidebar, StatusBar
- * are sub-components), these tests validate that the structure is correct:
- *   - Sidebar shows navigation dots when collapsed
- *   - Sidebar shows full labels when expanded
- *   - StatusBar shows connection metrics
- *   - TabBar-like view navigation through store works
- *
- * Tests are structural — verifying store state manipulation and
- * expected rendering patterns without full TUI render.
+ * Layout Component Tests — Sidebar + StatusBar structure aligned with
+ * view-registry (single source of truth for nav items).
  */
-import { describe, it, expect, beforeEach, vi } from "bun:test";
+import { describe, it, expect, beforeEach } from "bun:test";
 import { useUIStore } from "@hoox-sh/hoox-shared/stores/ui-store";
 import { useServiceStore } from "@hoox-sh/hoox-shared/stores/service-store";
 import type { ViewId } from "@hoox-sh/hoox-shared";
+import {
+  SIDEBAR_ITEMS,
+  getViewShortcutMap,
+  getCtrlAltViewMap,
+  REGISTERED_VIEW_IDS,
+} from "../../view-registry";
+import { SIDEBAR_WIDTH } from "./sidebar";
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -42,20 +40,6 @@ function resetStores() {
   });
 }
 
-// ─── Sidebar items (mirrors app.tsx) ──────────────────────────────────────────
-
-const SIDEBAR_ITEMS: { id: ViewId; label: string; shortcut: string }[] = [
-  { id: "dashboard", label: "Dashboard", shortcut: "1" },
-  { id: "workers", label: "Workers", shortcut: "2" },
-  { id: "worker-detail", label: "Worker Detail", shortcut: "3" },
-  { id: "trade-monitor", label: "Trade Monitor", shortcut: "4" },
-  { id: "logs-viewer", label: "Logs Viewer", shortcut: "5" },
-  { id: "service-manager", label: "Service Manager", shortcut: "6" },
-  { id: "config-editor", label: "Config Editor", shortcut: "7" },
-  { id: "setup-wizard", label: "Setup Wizard", shortcut: "8" },
-  { id: "settings", label: "Settings", shortcut: "9" },
-];
-
 // ─── Test Suite ───────────────────────────────────────────────────────────────
 
 describe("Layout", () => {
@@ -66,37 +50,36 @@ describe("Layout", () => {
   // ── Sidebar ──────────────────────────────────────────────────────────────
 
   describe("Sidebar", () => {
-    it("has 9 navigation items", () => {
-      expect(SIDEBAR_ITEMS).toHaveLength(9);
+    it("lists every registered view", () => {
+      expect(SIDEBAR_ITEMS).toHaveLength(REGISTERED_VIEW_IDS.length);
+      expect(SIDEBAR_ITEMS.map((i) => i.id)).toEqual(REGISTERED_VIEW_IDS);
     });
 
     it("all items have unique view IDs", () => {
       const ids = SIDEBAR_ITEMS.map((i) => i.id);
-      expect(new Set(ids).size).toBe(9);
+      expect(new Set(ids).size).toBe(SIDEBAR_ITEMS.length);
     });
 
-    it("first item is Dashboard with shortcut 1", () => {
-      expect(SIDEBAR_ITEMS[0].label).toBe("Dashboard");
-      expect(SIDEBAR_ITEMS[0].id).toBe("dashboard");
-      expect(SIDEBAR_ITEMS[0].shortcut).toBe("1");
+    it("first item is DASHBOARD with shortcut 1", () => {
+      expect(SIDEBAR_ITEMS[0]?.label).toBe("DASHBOARD");
+      expect(SIDEBAR_ITEMS[0]?.id).toBe("dashboard");
+      expect(SIDEBAR_ITEMS[0]?.shortcut).toBe("1");
     });
 
-    it("last item is Settings with shortcut 9", () => {
-      expect(SIDEBAR_ITEMS[8].label).toBe("Settings");
-      expect(SIDEBAR_ITEMS[8].id).toBe("settings");
-      expect(SIDEBAR_ITEMS[8].shortcut).toBe("9");
+    it("includes Ctrl+0 queues and Ctrl+Alt letter views", () => {
+      const byId = Object.fromEntries(SIDEBAR_ITEMS.map((i) => [i.id, i]));
+      expect(byId["queue-depth"]?.shortcut).toBe("0");
+      expect(byId["kv-viewer"]?.shortcut).toBe("^K");
+      expect(byId["secrets-viewer"]?.shortcut).toBe("^S");
     });
 
     it("sidebar shows all items when expanded", () => {
       expect(useUIStore.getState().sidebarExpanded).toBe(true);
-      // In the full app, Sidebar returns all nav items when expanded
-      // The store reflects this correctly
     });
 
-    it("sidebar returns null when collapsed", () => {
+    it("sidebar collapses via store", () => {
       useUIStore.getState().toggleSidebar();
       expect(useUIStore.getState().sidebarExpanded).toBe(false);
-      // In the full app, Sidebar component returns null when sidebarExpanded is false
     });
 
     it("setView updates activeView correctly for each sidebar item", () => {
@@ -107,10 +90,7 @@ describe("Layout", () => {
     });
 
     it("active view is highlighted via accent color indicator", () => {
-      // Dashboard is active by default
       expect(useUIStore.getState().activeView).toBe("dashboard");
-
-      // Switch to trade-monitor
       useUIStore.getState().setView("trade-monitor");
       expect(useUIStore.getState().activeView).toBe("trade-monitor");
     });
@@ -118,9 +98,12 @@ describe("Layout", () => {
     it("sidebar toggle preserves active view", () => {
       useUIStore.getState().setView("workers");
       useUIStore.getState().toggleSidebar();
-
       expect(useUIStore.getState().activeView).toBe("workers");
       expect(useUIStore.getState().sidebarExpanded).toBe(false);
+    });
+
+    it("uses fixed width of 24 columns", () => {
+      expect(SIDEBAR_WIDTH).toBe(24);
     });
   });
 
@@ -173,64 +156,28 @@ describe("Layout", () => {
     });
 
     it("shows keyboard hints in status bar", () => {
-      // The status bar footer always shows: Ctrl+P palette · Ctrl+B sidebar · Ctrl+Q quit
-      // This is a structural assertion about the UI
       const hints = ["Ctrl+P", "Ctrl+B", "Ctrl+Q"];
       expect(hints).toHaveLength(3);
     });
+  });
 
-    it("status colors map correctly", () => {
-      // These color mappings are used in app.tsx StatusBar
-      const statusColors: Record<string, string> = {
-        connected: "Colors.success",
-        polling: "Colors.accent",
-        reconnecting: "Colors.warning",
-        offline: "Colors.error",
-      };
-      for (const [status, color] of Object.entries(statusColors)) {
-        expect(color).toBeDefined();
-        expect(typeof color).toBe("string");
+  // ── View Switching ───────────────────────────────────────────────────────
+
+  describe("view switching", () => {
+    it("Ctrl digit map covers dashboard…queue-depth", () => {
+      const map = getViewShortcutMap();
+      expect(map["1"]).toBe("dashboard");
+      expect(map["2"]).toBe("workers");
+      expect(map["0"]).toBe("queue-depth");
+      for (const view of Object.values(map)) {
+        useUIStore.getState().setView(view);
+        expect(useUIStore.getState().activeView).toBe(view);
       }
     });
 
-    it("reconnecting shows retry count and backoff delay", () => {
-      useServiceStore.setState({
-        connectionStatus: "reconnecting",
-        retryCount: 2,
-        reconnectDelay: 2000,
-      });
-      expect(useServiceStore.getState().retryCount).toBe(2);
-      expect(useServiceStore.getState().reconnectDelay).toBe(2000);
-    });
-  });
-
-  // ── View Switching (TabBar mimic) ────────────────────────────────────────
-
-  describe("view switching", () => {
-    it("Ctrl+1 navigates to dashboard", () => {
-      useUIStore.getState().setView("workers");
-      useUIStore.getState().setView("dashboard");
-      expect(useUIStore.getState().activeView).toBe("dashboard");
-    });
-
-    it("Ctrl+2 navigates to workers", () => {
-      useUIStore.getState().setView("workers");
-      expect(useUIStore.getState().activeView).toBe("workers");
-    });
-
-    it("all 9 views are reachable via shortcuts", () => {
-      const shortcutMap: Record<string, ViewId> = {
-        "1": "dashboard",
-        "2": "workers",
-        "3": "worker-detail",
-        "4": "trade-monitor",
-        "5": "logs-viewer",
-        "6": "service-manager",
-        "7": "config-editor",
-        "8": "setup-wizard",
-        "9": "settings",
-      };
-      for (const [key, view] of Object.entries(shortcutMap)) {
+    it("Ctrl+Alt map covers letter-chord views", () => {
+      const map = getCtrlAltViewMap();
+      for (const view of Object.values(map) as ViewId[]) {
         useUIStore.getState().setView(view);
         expect(useUIStore.getState().activeView).toBe(view);
       }
@@ -246,21 +193,13 @@ describe("Layout", () => {
   // ── Layout Structure ─────────────────────────────────────────────────────
 
   describe("layout structure", () => {
-    it("sidebar has fixed width of 18 columns", () => {
-      // The Sidebar component uses width={18} in app.tsx
-      const SIDEBAR_WIDTH = 18;
-      expect(SIDEBAR_WIDTH).toBe(18);
-    });
-
-    it("status bar is always 1 row tall", () => {
+    it("status bar is always 1 row tall (summary line)", () => {
       const STATUSBAR_HEIGHT = 1;
       expect(STATUSBAR_HEIGHT).toBe(1);
     });
 
-    it("brand header is HOOX in accent color", () => {
-      // The brand header renders "HOOX" with Colors.accent
-      const brandText = "HOOX";
-      expect(brandText).toBe("HOOX");
+    it("brand header is HOOX", () => {
+      expect("HOOX").toBe("HOOX");
     });
   });
 });

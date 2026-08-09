@@ -18,7 +18,13 @@
 import { describe, it, expect, beforeEach, afterEach } from "bun:test";
 import { createRoot } from "@opentui/react";
 import { createCliRenderer } from "@opentui/core";
-import { KvViewer } from "./kv-viewer";
+import {
+  KvViewer,
+  filterKvKeys,
+  sanitizeKvValue,
+  MAX_VISIBLE_KEYS,
+  REFRESH_INTERVAL_MS,
+} from "./kv-viewer";
 import { Colors, type ViewId } from "@hoox-sh/hoox-shared";
 import { useUIStore } from "@hoox-sh/hoox-shared/stores/ui-store";
 import {
@@ -27,6 +33,7 @@ import {
   failCliResult,
   okCliResult,
 } from "../../test-utils";
+import type { KvKey } from "../../services/cli-bridge";
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
 
@@ -118,10 +125,37 @@ describe("KvViewer", () => {
   // ── Pattern contract (mirrors queue-depth subtask 02) ──────────────────
 
   it("auto-refreshes every 5 seconds while active", () => {
-    // 5s is the documented REFRESH_INTERVAL_MS — captured here so a
-    // careless refactor that bumps the interval trips a test.
-    const REFRESH_INTERVAL_MS = 5_000;
     expect(REFRESH_INTERVAL_MS).toBe(5_000);
+  });
+
+  it("filters keys case-insensitively by name", () => {
+    const keys: KvKey[] = [
+      {
+        name: "trade:kill_switch",
+        valueSize: 4,
+        lastModified: null,
+        isSecret: false,
+        manifestType: "boolean",
+      },
+      {
+        name: "agent:openai_key",
+        valueSize: 51,
+        lastModified: null,
+        isSecret: true,
+        manifestType: "string",
+      },
+    ];
+    expect(filterKvKeys(keys, "OPENAI")).toHaveLength(1);
+    expect(filterKvKeys(keys, "  ")).toHaveLength(2);
+  });
+
+  it("sanitizes revealed KV values (no ESC injection)", () => {
+    expect(sanitizeKvValue("secret\x1b[0mvalue")).toBe("secret[0mvalue");
+  });
+
+  it("caps visible key rows", () => {
+    expect(MAX_VISIBLE_KEYS).toBeGreaterThan(0);
+    expect(MAX_VISIBLE_KEYS).toBeLessThanOrEqual(1000);
   });
 
   it("is registered as ViewId 'kv-viewer' in the shared types", () => {

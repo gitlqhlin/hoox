@@ -6,12 +6,15 @@
 /** @jsxImportSource @opentui/react */
 
 import { Colors, useUIStore } from "@hoox-sh/hoox-shared";
-import { getSidebarItems } from "../../view-registry";
+import { SIDEBAR_ITEMS } from "../../view-registry";
 import { CoolBrackets, CoolGlyph } from "../shared/cool-brackets";
+
+/** Fixed sidebar width (columns). */
+export const SIDEBAR_WIDTH = 24;
 
 /**
  * Sidebar — left navigation panel with view links.
- * Near-black surface, cool animated brand brackets, indigo active state.
+ * Items and shortcut hints come from the view registry (single source of truth).
  */
 export function Sidebar() {
   const activeView = useUIStore((s) => s.activeView);
@@ -20,12 +23,10 @@ export function Sidebar() {
 
   if (!sidebarExpanded) return null;
 
-  const items = getSidebarItems();
-
   return (
     <box
       flexDirection="column"
-      width={24}
+      width={SIDEBAR_WIDTH}
       padding={1}
       gap={0}
       border={true}
@@ -33,7 +34,7 @@ export function Sidebar() {
       borderColor={Colors.border}
       backgroundColor={Colors.card}
     >
-      {/* Brand header — cool animated brackets */}
+      {/* Brand header — static accent brackets */}
       <CoolBrackets open="┌" close="┐" gap={1}>
         <text fg={Colors.foreground} bold>
           HOOX
@@ -41,8 +42,8 @@ export function Sidebar() {
       </CoolBrackets>
       <text fg={Colors.dim}>─────────────────</text>
 
-      {/* Navigation items */}
-      {items.map((item) => {
+      {/* Navigation items (registry order) */}
+      {SIDEBAR_ITEMS.map((item) => {
         const isActive = item.id === activeView;
         return (
           <box flexDirection="row" gap={1} key={item.id}>
@@ -58,7 +59,7 @@ export function Sidebar() {
         );
       })}
 
-      {/* Shortcut hints */}
+      {/* Shortcut hints — digits are Ctrl; letter chords are Ctrl+Alt */}
       <box flexGrow={1} />
       <text fg={Colors.dim} dim>
         Ctrl+0-9 · Ctrl+Alt+…

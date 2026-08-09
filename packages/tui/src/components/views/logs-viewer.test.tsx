@@ -22,11 +22,13 @@ import {
   type TestWorkerInfo,
   type LogLevel,
 } from "../../test-utils";
+import {
+  applyLogFilters,
+  sanitizeLogText,
+  MAX_VISIBLE_LOGS,
+} from "./logs-viewer";
 
-// ─── Filter logic extracted for pure unit testing ────────────────────────────
-
-const ALL_LEVELS: LogLevel[] = ["error", "warn", "info", "debug"];
-
+// Thin alias so historical test names keep calling applyFilters
 function applyFilters(
   entries: TestLogEntry[],
   options: {
@@ -37,24 +39,7 @@ function applyFilters(
     workers: TestWorkerInfo[];
   }
 ): TestLogEntry[] {
-  const { allLevels, levels, selectedWorkers, searchText, workers } = options;
-  const activeLevels = allLevels ? new Set(ALL_LEVELS) : levels;
-  const query = searchText.toLowerCase().trim();
-
-  if (activeLevels.size === 0 && !allLevels) return [];
-
-  return entries.filter((entry) => {
-    if (!activeLevels.has(entry.level)) return false;
-
-    if (selectedWorkers.size > 0) {
-      const w = workers.find((w) => w.id === entry.workerId);
-      if (!w || !selectedWorkers.has(w.name)) return false;
-    }
-
-    if (query && !entry.message.toLowerCase().includes(query)) return false;
-
-    return true;
-  });
+  return applyLogFilters(entries, options) as TestLogEntry[];
 }
 
 // ─── Tests ───────────────────────────────────────────────────────────────────
@@ -252,5 +237,37 @@ describe("LogsViewer empty state", () => {
       workers: [makeWorker()],
     });
     expect(result).toHaveLength(0);
+  });
+});
+
+describe("LogsViewer sanitization & caps", () => {
+  it("strips control characters and collapses newlines", () => {
+    expect(sanitizeLogText("ok\x1b[31m\nline")).toBe("ok[31m line");
+  });
+
+  it("searches source field as well as message", () => {
+    const entries = [
+      makeLog({
+        id: "1",
+        level: "info",
+        message: "hello",
+        source: "trade-engine",
+      }),
+      makeLog({ id: "2", level: "info", message: "other", source: "gateway" }),
+    ];
+    const result = applyLogFilters(entries, {
+      allLevels: true,
+      levels: new Set(),
+      selectedWorkers: new Set(),
+      searchText: "trade",
+      workers: [],
+    });
+    expect(result).toHaveLength(1);
+    expect(result[0].id).toBe("1");
+  });
+
+  it("caps visible render window below store ring buffer (1000)", () => {
+    expect(MAX_VISIBLE_LOGS).toBeLessThanOrEqual(1000);
+    expect(MAX_VISIBLE_LOGS).toBeGreaterThan(0);
   });
 });

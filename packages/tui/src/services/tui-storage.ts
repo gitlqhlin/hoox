@@ -9,8 +9,12 @@
  * Bun has no `localStorage` global. Persist small TUI state under
  * `$HOME/.hoox/.tui-state/` (via hoox-path-service) so chat history,
  * query history, and similar UI state survive restarts.
+ *
+ * Writes are atomic (temp file + rename) to avoid truncated JSON on crash.
+ * Paths are constrained under the TUI state directory (no secret material
+ * is written here — only UI state).
  */
-import { unlink } from "fs/promises";
+import { rename, unlink } from "fs/promises";
 import { ensureTuiStateDir, resolveTuiStatePath } from "./hoox-path-service";
 
 /** Well-known state file names under `.tui-state/`. */
@@ -40,19 +44,31 @@ export async function readJsonState<T>(
 }
 
 /**
- * Write a JSON document to the TUI state directory.
+ * Write a JSON document to the TUI state directory (atomic rename).
  * Failures are silent — persistence is best-effort.
  */
 export async function writeJsonState(
   filename: string,
   value: unknown
 ): Promise<void> {
+  let tmpPath: string | null = null;
   try {
     await ensureTuiStateDir();
     const path = resolveTuiStatePath(filename);
-    await Bun.write(path, JSON.stringify(value, null, 0));
+    // Unique temp sibling so concurrent writers don't clobber each other.
+    tmpPath = `${path}.${process.pid}.${Date.now()}.tmp`;
+    await Bun.write(tmpPath, JSON.stringify(value, null, 0));
+    await rename(tmpPath, path);
+    tmpPath = null;
   } catch {
-    // Non-fatal: disk full, permissions, etc.
+    // Non-fatal: disk full, permissions, path traversal, etc.
+    if (tmpPath) {
+      try {
+        await unlink(tmpPath);
+      } catch {
+        /* ignore */
+      }
+    }
   }
 }
 

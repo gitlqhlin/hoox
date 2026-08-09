@@ -40,9 +40,13 @@ const SYSTEM_CLIPBOARD_CANDIDATES: { bin: string; args: string[] }[] = [
   { bin: "clip", args: [] },
 ];
 
+/** Hang-guard for clipboard utilities (X11/Wayland can block forever). */
+const CLIPBOARD_SPAWN_TIMEOUT_MS = 2_000;
+
 /**
  * Write text to the system clipboard via a known clipboard utility.
  * Returns the tool name on success, or null if none worked.
+ * Each candidate is hard-killed after {@link CLIPBOARD_SPAWN_TIMEOUT_MS}.
  */
 export async function copyViaSystemClipboard(
   text: string
@@ -57,8 +61,20 @@ export async function copyViaSystemClipboard(
       });
       proc.stdin.write(text);
       proc.stdin.end();
+
+      let timedOut = false;
+      const timer = setTimeout(() => {
+        timedOut = true;
+        try {
+          if (!proc.killed) proc.kill();
+        } catch {
+          /* already dead */
+        }
+      }, CLIPBOARD_SPAWN_TIMEOUT_MS);
+
       const code = await proc.exited;
-      if (code === 0) return bin;
+      clearTimeout(timer);
+      if (!timedOut && code === 0) return bin;
     } catch {
       // try next tool
     }

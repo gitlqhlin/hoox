@@ -21,9 +21,9 @@
  * Follows Pattern 1 (View Composition), Pattern 2 (Store Subscription).
  * Colors from @hoox-sh/hoox-shared design tokens. No CSS, no DOM.
  */
-import { useState, useMemo, useRef } from "react";
+import { useState, useMemo, useRef, useEffect } from "react";
 import { useKeyboard } from "@opentui/react";
-import { Colors, useServiceStore } from "@hoox-sh/hoox-shared";
+import { Colors, useServiceStore, useUIStore } from "@hoox-sh/hoox-shared";
 import type { Trade, TradeSide } from "@hoox-sh/hoox-shared";
 import { ErrorBoundary } from "../shared/error-boundary";
 import { Spinner, EmptyState } from "../shared/spinner";
@@ -32,8 +32,15 @@ import { Panel } from "../shared/panel";
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
-/** Maximum trades rendered in the live feed display */
-const MAX_VISIBLE_TRADES = 500;
+/**
+ * Maximum trades rendered in the live feed. Store ring buffer is 500;
+ * rendering all 500 on every SSE tick is expensive in OpenTUI, so we
+ * virtualize by rendering only the newest slice.
+ */
+export const MAX_VISIBLE_TRADES = 120;
+
+/** Store ring-buffer capacity (documented contract; owned by service-store). */
+export const TRADE_RING_BUFFER_CAP = 500;
 
 /** Side-based display color tokens */
 const SIDE_COLOR: Record<TradeSide, string> = {
@@ -92,6 +99,20 @@ function formatNum(value: number, decimals = 0): string {
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
+/**
+ * Strip C0 control characters (except tab/newline) so untrusted stream
+ * fields cannot inject terminal control sequences into the TUI.
+ * XSS is N/A in a terminal, but `\x1b` / CR / BEL can still corrupt the UI.
+ */
+export function sanitizeTerminalText(value: string, maxLen = 80): string {
+  const cleaned = value.replace(
+    /[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F]/g,
+    ""
+  );
+  if (cleaned.length <= maxLen) return cleaned;
+  return cleaned.slice(0, maxLen - 1) + "\u2026";
+}
+
 /** Get Unix timestamp for midnight today (local time) */
 function startOfToday(): number {
   const d = new Date();
@@ -112,10 +133,23 @@ function startOfDaysAgo(days: number): number {
  * This is feed staleness, not exchange round-trip latency.
  * Returns null if trade is in the future (clock skew).
  */
-function calcLatency(tradeTs: number): number | null {
-  const now = Date.now();
+export function calcLatency(tradeTs: number, now = Date.now()): number | null {
   const latency = now - tradeTs;
   return latency >= 0 ? latency : null;
+}
+
+/**
+ * Newest-first slice of the trade stream for rendering.
+ * Store keeps newest last; we reverse only the visible window.
+ */
+export function selectVisibleTrades(
+  stream: readonly Trade[],
+  maxVisible: number = MAX_VISIBLE_TRADES
+): Trade[] {
+  if (stream.length === 0) return [];
+  const start = Math.max(0, stream.length - maxVisible);
+  const slice = stream.slice(start);
+  return slice.reverse();
 }
 
 // ─── Sub-Components ──────────────────────────────────────────────────────────
@@ -126,10 +160,30 @@ function calcLatency(tradeTs: number): number | null {
 function TradeMonitorHeader({
   paused,
   tradeCount,
+  connectionStatus,
 }: {
   paused: boolean;
   tradeCount: number;
+  connectionStatus: string;
 }) {
+  const offline = connectionStatus === "offline";
+  const liveLabel = paused
+    ? "PAUSED"
+    : offline
+      ? "OFFLINE"
+      : connectionStatus === "reconnecting"
+        ? "RECONNECT"
+        : connectionStatus === "polling"
+          ? "POLL"
+          : "LIVE";
+  const liveColor = paused
+    ? Colors.warning
+    : offline || connectionStatus === "reconnecting"
+      ? Colors.error
+      : connectionStatus === "polling"
+        ? Colors.warning
+        : Colors.success;
+
   return (
     <ViewHeader
       title="TRADE MONITOR"
@@ -137,19 +191,16 @@ function TradeMonitorHeader({
       meta={
         <box flexDirection="row" gap={2}>
           <box flexDirection="row" gap={1}>
-            <text
-              fg={paused ? Colors.warning : Colors.success}
-              bold
-              blink={!paused}
-            >
-              {paused ? "▌" : "█"}
+            <text fg={liveColor} bold blink={!paused && !offline}>
+              {paused || offline ? "▌" : "█"}
             </text>
-            <text fg={paused ? Colors.warning : Colors.success}>
-              {paused ? "PAUSED" : "LIVE"}
-            </text>
+            <text fg={liveColor}>{liveLabel}</text>
           </box>
           <text fg={Colors.muted} dim>
             {`${tradeCount} trades`}
+            {tradeCount > MAX_VISIBLE_TRADES
+              ? ` · showing ${MAX_VISIBLE_TRADES}`
+              : ""}
           </text>
           <text fg={Colors.dim} dim>
             Space to {paused ? "resume" : "pause"}
@@ -170,7 +221,15 @@ function TradeMonitorHeader({
  * Selected row highlighted with accent border color and card background.
  * Feed is capped at the store's ring buffer size (500).
  */
-function LiveTradeFeed({ paused }: { paused: boolean }) {
+function LiveTradeFeed({
+  paused,
+  isActive,
+  offline,
+}: {
+  paused: boolean;
+  isActive: boolean;
+  offline: boolean;
+}) {
   const tradeStream = useServiceStore((s) => s.tradeStream);
   const [selectedIndex, setSelectedIndex] = useState(0);
 
@@ -190,18 +249,24 @@ function LiveTradeFeed({ paused }: { paused: boolean }) {
   // Use frozen snapshot when paused, live stream when not
   const effectiveStream = paused ? frozenRef.current : tradeStream;
 
-  // Newest first, reversed (store stores newest last)
-  const sortedTrades = useMemo(() => {
-    return [...effectiveStream].reverse().slice(0, MAX_VISIBLE_TRADES);
-  }, [effectiveStream]);
+  // Newest first, only the render window (store is newest-last)
+  const sortedTrades = useMemo(
+    () => selectVisibleTrades(effectiveStream, MAX_VISIBLE_TRADES),
+    [effectiveStream]
+  );
 
   const maxIndex = Math.max(0, sortedTrades.length - 1);
 
-  // Clamp selected index when data changes
+  // Keep selection in range when the stream shrinks/grows
+  useEffect(() => {
+    setSelectedIndex((i) => Math.min(i, maxIndex));
+  }, [maxIndex]);
+
   const safeIndex = Math.min(selectedIndex, maxIndex);
 
-  // Keyboard: navigate trade rows
+  // Keyboard: navigate trade rows only while this view is active
   useKeyboard((key) => {
+    if (!isActive) return;
     if (key.name === "up") {
       setSelectedIndex((i) => Math.max(0, i - 1));
     } else if (key.name === "down") {
@@ -246,7 +311,15 @@ function LiveTradeFeed({ paused }: { paused: boolean }) {
           justifyContent="center"
           flexGrow={1}
         >
-          <Spinner label="Waiting for live data..." />
+          {offline ? (
+            <EmptyState
+              message="Feed offline — no live trades"
+              suggestion="Check SSE connection in status bar"
+              icon="📡"
+            />
+          ) : (
+            <Spinner label="Waiting for live data..." />
+          )}
         </box>
       ) : (
         <scrollbox
@@ -257,8 +330,8 @@ function LiveTradeFeed({ paused }: { paused: boolean }) {
           paddingY={0}
         >
           {sortedTrades.map((trade, i) => {
-            const color = SIDE_COLOR[trade.side];
-            const label = SIDE_LABEL[trade.side];
+            const color = SIDE_COLOR[trade.side] ?? Colors.foreground;
+            const label = SIDE_LABEL[trade.side] ?? String(trade.side);
             const latency = calcLatency(trade.timestamp);
             const isSelected = i === safeIndex;
             const latencyStr =
@@ -267,6 +340,8 @@ function LiveTradeFeed({ paused }: { paused: boolean }) {
                   ? `${latency}ms`
                   : `${(latency / 1000).toFixed(1)}s`
                 : "—";
+            const symbol = sanitizeTerminalText(trade.symbol ?? "?", 12);
+            const exchange = sanitizeTerminalText(trade.exchange ?? "—", 16);
 
             return (
               <box
@@ -291,7 +366,7 @@ function LiveTradeFeed({ paused }: { paused: boolean }) {
                   bold={isSelected}
                   selectable
                 >
-                  {trade.symbol.padEnd(6)}
+                  {symbol.padEnd(6)}
                 </text>
 
                 {/* Quantity @ Price */}
@@ -301,7 +376,7 @@ function LiveTradeFeed({ paused }: { paused: boolean }) {
 
                 {/* Exchange */}
                 <text fg={Colors.muted} dim selectable>
-                  {trade.exchange}
+                  {exchange}
                 </text>
 
                 {/* Latency */}
@@ -606,9 +681,14 @@ function PerformanceSummary() {
 export function TradeMonitor() {
   const [paused, setPaused] = useState(false);
   const tradeStream = useServiceStore((s) => s.tradeStream);
+  const connectionStatus = useServiceStore((s) => s.connectionStatus);
+  const activeView = useUIStore((s) => s.activeView);
+  const isActive = activeView === "trade-monitor";
+  const offline = connectionStatus === "offline";
 
-  // Keyboard: space toggles pause/resume
+  // Keyboard: space toggles pause/resume only while this view is active
   useKeyboard((key) => {
+    if (!isActive) return;
     if (key.name === "space") {
       setPaused((p) => !p);
     }
@@ -618,7 +698,11 @@ export function TradeMonitor() {
     <ErrorBoundary viewName="Trade Monitor">
       <box flexDirection="column" flexGrow={1} padding={1} gap={1}>
         {/* 1. Header */}
-        <TradeMonitorHeader paused={paused} tradeCount={tradeStream.length} />
+        <TradeMonitorHeader
+          paused={paused}
+          tradeCount={tradeStream.length}
+          connectionStatus={connectionStatus}
+        />
 
         {/* Divider */}
         <text fg={Colors.border} dim>
@@ -629,7 +713,11 @@ export function TradeMonitor() {
         <box flexDirection="row" flexGrow={1} gap={1}>
           {/* Left: Live Trade Feed */}
           <box flexDirection="column" flexGrow={1}>
-            <LiveTradeFeed paused={paused} />
+            <LiveTradeFeed
+              paused={paused}
+              isActive={isActive}
+              offline={offline}
+            />
           </box>
 
           {/* Divider between panels */}

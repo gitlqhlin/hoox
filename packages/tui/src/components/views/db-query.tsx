@@ -36,7 +36,7 @@
  *   - Wraps content in <ErrorBoundary viewName="DB Query">
  *   - Renders an explicit empty/error state instead of throwing
  */
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useKeyboard } from "@opentui/react";
 import { Colors, useUIStore } from "@hoox-sh/hoox-shared";
 import { ErrorBoundary } from "../shared/error-boundary";
@@ -57,7 +57,10 @@ import {
 // ─── Constants ────────────────────────────────────────────────────────────────
 
 /** Maximum number of history entries to persist. */
-const MAX_HISTORY = 20;
+export const MAX_HISTORY = 20;
+
+/** Cap rendered result rows so huge SELECTs don't freeze the TUI. */
+export const MAX_VISIBLE_ROWS = 200;
 
 /** Column width strategy: auto-computed from data. */
 const COLUMN_WIDTH_STRATEGY: {
@@ -89,14 +92,46 @@ function formatExecutionTime(ms: number | null): string {
   return `${(ms / 1000).toFixed(2)}s`;
 }
 
+/**
+ * Strip C0 control characters from cell text so query results cannot
+ * inject terminal control sequences into the TUI table.
+ */
+export function sanitizeCellText(value: string): string {
+  return value.replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F]/g, "");
+}
+
 /** Format a value for table cell display. Truncates long strings. */
-function formatCell(value: unknown, maxWidth: number): string {
+export function formatCell(value: unknown, maxWidth: number): string {
   if (value === null || value === undefined) return "NULL";
   if (typeof value === "boolean") return value ? "true" : "false";
-  if (typeof value === "number") return String(value);
-  const str = String(value);
+  if (typeof value === "number") {
+    if (!Number.isFinite(value)) return String(value);
+    return String(value);
+  }
+  const str = sanitizeCellText(String(value)).replace(/[\t\n\r]+/g, " ");
   if (str.length > maxWidth) return str.slice(0, maxWidth - 1) + "…";
   return str;
+}
+
+/**
+ * Compare two cell values for client-side sort.
+ * Nulls always sort last (stable UX for sparse columns).
+ */
+export function compareCells(
+  av: unknown,
+  bv: unknown,
+  dir: "asc" | "desc"
+): number {
+  const aNull = av === null || av === undefined;
+  const bNull = bv === null || bv === undefined;
+  if (aNull && bNull) return 0;
+  if (aNull) return 1;
+  if (bNull) return -1;
+  const cmp =
+    typeof av === "number" && typeof bv === "number"
+      ? av - bv
+      : String(av).localeCompare(String(bv));
+  return dir === "asc" ? cmp : -cmp;
 }
 
 /**
@@ -433,6 +468,8 @@ export function DbQueryView() {
   const [sortCol, setSortCol] = useState<string | null>(null);
   const [sortDir, setSortDir] = useState<"asc" | "desc">("asc");
   const [selectedRow, setSelectedRow] = useState(0);
+  /** Invalidates in-flight query results after unmount or re-execute. */
+  const queryGenRef = useRef(0);
 
   // Load query history from disk on mount.
   useEffect(() => {
@@ -450,6 +487,7 @@ export function DbQueryView() {
     })();
     return () => {
       cancelled = true;
+      queryGenRef.current += 1;
     };
   }, []);
 
@@ -464,17 +502,21 @@ export function DbQueryView() {
     const trimmed = query.trim();
     if (trimmed.length === 0) return;
 
-    // Client-side pre-validation (defence in depth).
+    // Client-side pre-validation (defence in depth). UI cannot bypass this —
+    // cliBridge.dbQuery also re-validates before spawning the CLI.
     const v = validateReadOnlySql(trimmed);
     setValidation(v);
     if (!v.readonly) {
-      setQueryError(null);
+      setResult(null);
+      setQueryError(v.reason ?? "Query rejected: not read-only");
       return;
     }
 
+    const gen = ++queryGenRef.current;
     setLoading(true);
     setQueryError(null);
     const res = await cliBridge.dbQuery(trimmed);
+    if (gen !== queryGenRef.current) return; // superseded or unmounted
     if (res.success && res.data) {
       setResult(res.data);
       setQueryError(null);
@@ -608,22 +650,24 @@ export function DbQueryView() {
   const columns = result?.columns ?? [];
   const rows = result?.rows ?? [];
 
-  // Client-side sort if a sort column is selected.
-  const sortedRows =
-    sortCol && rows.length > 0
-      ? [...rows].sort((a, b) => {
-          const av = a[sortCol];
-          const bv = b[sortCol];
-          const cmp =
-            typeof av === "number" && typeof bv === "number"
-              ? av - bv
-              : String(av).localeCompare(String(bv));
-          return sortDir === "asc" ? cmp : -cmp;
-        })
-      : rows;
+  // Client-side sort if a sort column is selected; then cap for render.
+  const sortedRows = useMemo(() => {
+    if (!sortCol || rows.length === 0) return rows;
+    return [...rows].sort((a, b) =>
+      compareCells(a[sortCol], b[sortCol], sortDir)
+    );
+  }, [rows, sortCol, sortDir]);
 
-  // Compute column widths from data.
-  const columnWidths = computeColumnWidths(columns, sortedRows);
+  const visibleRows = useMemo(
+    () => sortedRows.slice(0, MAX_VISIBLE_ROWS),
+    [sortedRows]
+  );
+
+  // Compute column widths from the visible window (not the full result set).
+  const columnWidths = useMemo(
+    () => computeColumnWidths(columns, visibleRows),
+    [columns, visibleRows]
+  );
 
   // Total table width (for separator lines).
   const totalWidth = columns.reduce(
@@ -644,6 +688,9 @@ export function DbQueryView() {
               {result ? (
                 <text fg={Colors.muted} dim>
                   {result.rowCount} row{result.rowCount === 1 ? "" : "s"}
+                  {sortedRows.length > MAX_VISIBLE_ROWS
+                    ? ` · showing ${MAX_VISIBLE_ROWS}`
+                    : ""}
                 </text>
               ) : null}
               <text fg={Colors.success} dim>
@@ -731,14 +778,20 @@ export function DbQueryView() {
               <text fg={Colors.border} dim>
                 {"─".repeat(Math.min(totalWidth, 120))}
               </text>
-              {/* Data rows */}
+              {/* Data rows (capped) */}
               <TableBody
                 columns={columns}
-                rows={sortedRows}
+                rows={visibleRows}
                 widths={columnWidths}
                 selectedRow={selectedRow}
                 onSelectRow={setSelectedRow}
               />
+              {sortedRows.length > MAX_VISIBLE_ROWS ? (
+                <text fg={Colors.muted} dim>
+                  Showing first {MAX_VISIBLE_ROWS} of {sortedRows.length} rows.
+                  Add LIMIT to your query for full control.
+                </text>
+              ) : null}
             </>
           )}
         </box>
@@ -759,7 +812,7 @@ export function DbQueryView() {
                   in {formatExecutionTime(result.executionTimeMs)}
                 </text>
               </>
-            ) : queryError && rows.length > 0 ? (
+            ) : queryError ? (
               <text fg={Colors.warning} dim>
                 !{" "}
                 {queryError.length > 50

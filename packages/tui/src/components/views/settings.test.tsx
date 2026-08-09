@@ -187,16 +187,22 @@ async function renderSettingsWithCheck(
     // Initial render - triggers useEffect which starts checkSetup
     await renderOnce();
 
-    // Wait for the async checkSetup to complete by polling for the results panel.
-    // The mock returns Promise.resolve() which schedules a microtask, but the
-    // state update happens in that microtask which is outside act(). We need to
-    // wait for the re-render to complete.
-    for (let i = 0; i < 20; i++) {
+    // Wait until the check settles. The panel header appears immediately in
+    // the "running..." state, so only treat report/error content as ready.
+    for (let i = 0; i < 40; i++) {
       await new Promise((r) => queueMicrotask(r));
-      await new Promise((r) => setTimeout(r, 10));
+      await new Promise((r) => setTimeout(r, 15));
       await renderOnce();
       const frame = captureCharFrame();
-      if (frame.includes("SETUP CHECK RESULTS")) {
+      const settled =
+        frame.includes("SETUP CHECK RESULTS") &&
+        !frame.includes("running...") &&
+        (frame.includes("passed") ||
+          frame.includes("failed to run") ||
+          frame.includes("did not return a valid CheckReport") ||
+          frame.includes("[PASS]") ||
+          frame.includes("[FAIL]"));
+      if (settled) {
         return frame;
       }
     }
@@ -252,12 +258,22 @@ describe("SettingsView", () => {
   });
 
   it("shows connection readout without secrets", async () => {
-    const output = await renderSettings(120);
-    expect(output).toContain("CONNECTION");
-    expect(output).toMatch(/LOCAL|REMOTE/);
-    expect(output).toMatch(/public|access|mtls|tunnel/);
-    expect(output).toContain("Auth");
-    expect(output).toContain("hx config transport");
+    const prevToken = process.env.HOOX_API_TOKEN;
+    process.env.HOOX_API_TOKEN = "super-secret-test-token-do-not-leak";
+    try {
+      const output = await renderSettings(120);
+      expect(output).toContain("CONNECTION");
+      expect(output).toMatch(/LOCAL|REMOTE/);
+      expect(output).toMatch(/public|access|mtls|tunnel/);
+      expect(output).toContain("Auth");
+      expect(output).toContain("hx config transport");
+      // Must never echo the raw token or Bearer value
+      expect(output).not.toContain("super-secret-test-token-do-not-leak");
+      expect(output).not.toMatch(/Bearer\s+super-secret/i);
+    } finally {
+      if (prevToken === undefined) delete process.env.HOOX_API_TOKEN;
+      else process.env.HOOX_API_TOKEN = prevToken;
+    }
   });
 
   it("shows current refresh rate with 500ms default", async () => {

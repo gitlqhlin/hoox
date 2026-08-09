@@ -27,6 +27,7 @@ import {
   type TestLogEntry,
   type ConnectionStatus,
 } from "../../test-utils";
+import { redactConfigEntries } from "./worker-detail";
 
 /** Reset stores to initial state before each test */
 function resetStores() {
@@ -248,5 +249,41 @@ describe("WorkerDetail", () => {
     expect(LogLevelColor.info).toBe(Colors.foreground);
     expect(LogLevelColor.warn).toBe(Colors.warning);
     expect(LogLevelColor.error).toBe(Colors.error);
+  });
+
+  test("redactConfigEntries never surfaces secret-looking keys cleartext", () => {
+    const entries = redactConfigEntries({
+      name: "trade-executor",
+      status: "operational",
+      apiKey: "sk-live-super-secret-value",
+      HOOX_API_TOKEN: "token-abc-12345678",
+      nested: { client_secret: "shh", mode: "prod" },
+      note: "Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.payload",
+    });
+
+    const byKey = Object.fromEntries(entries.map((e) => [e.key, e.value]));
+    expect(byKey.name).toBe("trade-executor");
+    expect(byKey.status).toBe("operational");
+    expect(byKey.apiKey).toBe("[redacted]");
+    expect(byKey.HOOX_API_TOKEN).toBe("[redacted]");
+    // Nested secret keys redacted by redactDevLogContext
+    expect(byKey.nested).not.toContain("shh");
+    expect(byKey.note).toContain("[redacted]");
+    expect(byKey.note).not.toContain("eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9");
+  });
+
+  test("redactConfigEntries preserves non-secret identity fields", () => {
+    const entries = redactConfigEntries({
+      version: "1.2.3",
+      edgeCount: 12,
+      strategy: "grid",
+    });
+    expect(entries).toEqual(
+      expect.arrayContaining([
+        { key: "version", value: "1.2.3" },
+        { key: "edgeCount", value: "12" },
+        { key: "strategy", value: "grid" },
+      ])
+    );
   });
 });

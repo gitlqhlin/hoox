@@ -39,10 +39,13 @@ import type {
   PyneHealthResult,
 } from "./types";
 import { validateReadOnlySql } from "./standalone";
-import { tuiDevLog } from "../dev-log";
+import { tuiDevLog, redactSecretsInText } from "../dev-log";
 
 /** Cap stderr/stdout capture per command to keep the store lightweight. */
 const MAX_OUTPUT_CHARS = 4096;
+
+/** After SIGTERM on timeout/abort, escalate to SIGKILL if still alive. */
+const KILL_GRACE_MS = 1_500;
 
 /** Default max depth for visualization (clamps the fill-bar). */
 const DEFAULT_QUEUE_MAX = 1000;
@@ -51,6 +54,120 @@ const DEPTH_PER_PRODUCER = 100;
 /** Status thresholds (see {@link QueueDepthStatus} for semantics). */
 const HEALTHY_THRESHOLD = 100;
 const CRITICAL_THRESHOLD = 500;
+
+/**
+ * Best-effort JSON parse for CLI stdout that may include leading noise
+ * (wrangler banners, progress lines). Never throws.
+ *
+ * Exported for unit tests.
+ */
+export function tryParseJsonLoose(stdout: string): unknown | null {
+  const cleaned = stdout.trim();
+  if (!cleaned) return null;
+
+  try {
+    return JSON.parse(cleaned);
+  } catch {
+    /* fall through — try noise-tolerant strategies */
+  }
+
+  // Drop leading non-JSON lines (progress / ANSI stripped banners)
+  const lines = cleaned.split("\n");
+  for (let i = 0; i < lines.length; i++) {
+    const candidate = lines.slice(i).join("\n").trim();
+    if (!candidate.startsWith("{") && !candidate.startsWith("[")) continue;
+    try {
+      return JSON.parse(candidate);
+    } catch {
+      /* try next start line */
+    }
+  }
+
+  // Bracket-balanced extract from first `{` or `[`
+  const startObj = cleaned.indexOf("{");
+  const startArr = cleaned.indexOf("[");
+  const start =
+    startObj === -1
+      ? startArr
+      : startArr === -1
+        ? startObj
+        : Math.min(startObj, startArr);
+  if (start < 0) return null;
+
+  const open = cleaned[start];
+  const close = open === "{" ? "}" : "]";
+  let depth = 0;
+  let inString = false;
+  let escape = false;
+  for (let i = start; i < cleaned.length; i++) {
+    const ch = cleaned[i]!;
+    if (escape) {
+      escape = false;
+      continue;
+    }
+    if (inString) {
+      if (ch === "\\") escape = true;
+      else if (ch === '"') inString = false;
+      continue;
+    }
+    if (ch === '"') {
+      inString = true;
+      continue;
+    }
+    if (ch === open) depth++;
+    else if (ch === close) {
+      depth--;
+      if (depth === 0) {
+        try {
+          return JSON.parse(cleaned.slice(start, i + 1));
+        } catch {
+          return null;
+        }
+      }
+    }
+  }
+  return null;
+}
+
+/**
+ * Redact CLI argv values that are likely secrets before logging or
+ * surfacing in the status bar (`command` field).
+ *
+ * - Values after `set` / `put` / `login` subcommands
+ * - Args that look like Bearer tokens or env-style secret assignments
+ *
+ * Exported for unit tests.
+ */
+export function sanitizeCliArgsForLog(args: readonly string[]): string[] {
+  const out = args.map((a) => redactSecretsInText(a));
+  const writeVerbs = new Set(["set", "put", "login", "create-token"]);
+  for (let i = 0; i < out.length; i++) {
+    const token = (args[i] ?? "").toLowerCase();
+    if (!writeVerbs.has(token)) continue;
+    // `… set <key> <value>` — redact value (index i+2)
+    if (i + 2 < out.length) {
+      out[i + 2] = "[redacted]";
+    }
+    // `… put <value>` or single-arg write — redact next arg when no third
+    else if (i + 1 < out.length && token !== "set") {
+      out[i + 1] = "[redacted]";
+    }
+  }
+  return out;
+}
+
+/** Best-effort kill of a Bun subprocess (never throws). */
+function killProc(
+  proc: { kill: (exitCode?: number) => void; killed?: boolean },
+  signal: number = 15 // SIGTERM
+): void {
+  try {
+    if (proc.killed) return;
+    proc.kill(signal);
+  } catch {
+    /* process already reaped */
+  }
+}
 
 /**
  * Convert the structured JSON envelope emitted by `wrangler d1 execute
@@ -73,19 +190,7 @@ function parseDbQueryResult(stdout: string): DbQueryResult {
     };
   }
 
-  let parsed: unknown;
-  try {
-    parsed = JSON.parse(cleaned);
-  } catch {
-    return {
-      columns: [],
-      rows: [],
-      rowCount: 0,
-      executionTimeMs: null,
-      meta: null,
-    };
-  }
-
+  const parsed = tryParseJsonLoose(cleaned);
   if (!Array.isArray(parsed) || parsed.length === 0) {
     return {
       columns: [],
@@ -185,13 +290,7 @@ function parseQueueDepths(stdout: string): QueueDepth[] {
   const cleaned = stdout.trim();
   if (!cleaned) return [];
 
-  let parsed: unknown;
-  try {
-    parsed = JSON.parse(cleaned);
-  } catch {
-    return [];
-  }
-
+  const parsed = tryParseJsonLoose(cleaned);
   if (
     parsed === null ||
     typeof parsed !== "object" ||
@@ -254,12 +353,8 @@ function parseSecretsList(stdout: string): SecretMetadata[] {
   const cleaned = stdout.trim();
   if (!cleaned) return [];
 
-  let parsed: unknown;
-  try {
-    parsed = JSON.parse(cleaned);
-  } catch {
-    return [];
-  }
+  const parsed = tryParseJsonLoose(cleaned);
+  if (parsed === null) return [];
 
   // Single-worker envelope: { worker: string, secrets: string[] }
   if (
@@ -365,12 +460,8 @@ function parseKvList(
   const cleaned = stdout.trim();
   if (!cleaned) return [];
 
-  let parsed: unknown;
-  try {
-    parsed = JSON.parse(cleaned);
-  } catch {
-    return [];
-  }
+  const parsed = tryParseJsonLoose(cleaned);
+  if (parsed === null) return [];
 
   let records: unknown;
   if (Array.isArray(parsed)) {
@@ -429,12 +520,8 @@ function parseKvManifest(
   const cleaned = stdout.trim();
   if (!cleaned) return map;
 
-  let parsed: unknown;
-  try {
-    parsed = JSON.parse(cleaned);
-  } catch {
-    return map;
-  }
+  const parsed = tryParseJsonLoose(cleaned);
+  if (parsed === null) return map;
 
   // Manifest shape: { namespace: "CONFIG_KV", keys: [{ key, type, default, ... }] }
   const keys =
@@ -534,10 +621,18 @@ function parseKillSwitchStatus(
   return { engaged: false, rawValue: null, timestamp, action };
 }
 
+/** Handle for one in-flight CLI spawn (abort + hard kill). */
+interface TrackedCommand {
+  aborter: AbortController;
+  kill: () => void;
+}
+
 class CliBridgeImpl {
   private binaryPath: string | null = null;
-  /** Maps tag → set of AbortControllers for concurrent commands with same tag */
-  private activeCommands = new Map<string, Set<AbortController>>();
+  /** Cached monorepo root from {@link findMonorepoRoot} (path resolution). */
+  private monorepoRoot: string | null = null;
+  /** Maps tag → set of tracked commands for concurrent runs with the same tag */
+  private activeCommands = new Map<string, Set<TrackedCommand>>();
   /**
    * Global error sinks invoked on every CLI bridge failure. Listeners
    * receive a fully-formed `CliErrorDetails` payload so callers don't
@@ -587,14 +682,14 @@ class CliBridgeImpl {
   }
 
   /** Track a new command under a tag. Returns a cleanup function. */
-  private trackCommand(tag: string, aborter: AbortController): () => void {
+  private trackCommand(tag: string, tracked: TrackedCommand): () => void {
     const controllers = this.activeCommands.get(tag) ?? new Set();
-    controllers.add(aborter);
+    controllers.add(tracked);
     this.activeCommands.set(tag, controllers);
     return () => {
       const set = this.activeCommands.get(tag);
       if (set) {
-        set.delete(aborter);
+        set.delete(tracked);
         if (set.size === 0) this.activeCommands.delete(tag);
       }
     };
@@ -602,6 +697,7 @@ class CliBridgeImpl {
 
   invalidateCache(): void {
     this.binaryPath = null;
+    this.monorepoRoot = null;
   }
 
   /**
@@ -655,10 +751,16 @@ class CliBridgeImpl {
   /**
    * Locate the hoox-setup monorepo (local checkout or $HOME/.hoox/repo).
    * Prefers resolveHooxRuntimeRoot so the TUI works outside the checkout.
+   * Result is cached for the process lifetime (invalidated via invalidateCache).
    */
   private async findMonorepoRoot(): Promise<string> {
+    if (this.monorepoRoot) return this.monorepoRoot;
+
     const runtime = resolveHooxRuntimeRoot();
-    if (runtime.root) return runtime.root;
+    if (runtime.root) {
+      this.monorepoRoot = runtime.root;
+      return runtime.root;
+    }
 
     // Fallback: walk-up for any package.json with workspaces
     let dir = process.cwd();
@@ -668,7 +770,10 @@ class CliBridgeImpl {
         const pkg = JSON.parse(await Bun.file(pkgPath).text()) as {
           workspaces?: string[];
         };
-        if (pkg.workspaces) return dir;
+        if (pkg.workspaces) {
+          this.monorepoRoot = dir;
+          return dir;
+        }
       } catch {
         /* not found or invalid JSON */
       }
@@ -677,6 +782,7 @@ class CliBridgeImpl {
         // Last resort: global managed clone path even if markers incomplete
         const globalRepo = getHooxRepoPath();
         if (await Bun.file(path.join(globalRepo, "package.json")).exists()) {
+          this.monorepoRoot = globalRepo;
           return globalRepo;
         }
         throw new Error(
@@ -711,12 +817,15 @@ class CliBridgeImpl {
       result.success ? "exec ok" : "exec fail",
       {
         tag: options?.tag ?? args[0] ?? "unknown",
-        args,
+        // Never log raw argv values that may be secrets (kv set, tokens, …)
+        args: sanitizeCliArgsForLog(args),
         success: result.success,
         exitCode: result.exitCode,
         durationMs: Math.round(result.duration),
         errorType: result.errorType ?? null,
-        stderr: result.success ? undefined : result.stderr || undefined,
+        stderr: result.success
+          ? undefined
+          : redactSecretsInText(result.stderr || "") || undefined,
       }
     );
     return result;
@@ -727,6 +836,9 @@ class CliBridgeImpl {
    * `CliResult` — never throws. All failure modes (spawn, abort,
    * timeout, non-zero exit, JSON parse) are classified into
    * `errorType` so the wrapper can fan out to listeners.
+   *
+   * On timeout/abort the subprocess is SIGTERM'd then SIGKILL'd after
+   * {@link KILL_GRACE_MS} so hung CLI children cannot pin the TUI process.
    */
   private async execCore<T>(
     args: string[],
@@ -735,20 +847,62 @@ class CliBridgeImpl {
     const start = performance.now();
     const tag = options?.tag ?? args[0] ?? "unknown";
     const aborter = new AbortController();
-    const cleanup = this.trackCommand(tag, aborter);
 
     const cmdArgs = [...args];
     if (options?.json) cmdArgs.push("--json");
     if (options?.yes) cmdArgs.push("--yes");
 
-    // Stable command label for the "binary not found" path where the
-    // resolved binary path is unknown.
-    const baseCommand = `hoox ${args.join(" ")}`;
+    // Secret-safe command label for status bar / error panel (never raw values).
+    const baseCommand = `hoox ${sanitizeCliArgsForLog(args).join(" ")}`;
+
+    // Early exit if the caller already aborted.
+    if (options?.signal?.aborted) {
+      return {
+        success: false,
+        exitCode: -1,
+        stdout: "",
+        stderr: "Command was aborted",
+        data: null,
+        duration: performance.now() - start,
+        command: baseCommand,
+        errorType: "aborted",
+      };
+    }
+
+    let proc: ReturnType<typeof Bun.spawn> | null = null;
+    let forceKillTimer: ReturnType<typeof setTimeout> | null = null;
+    let timeoutTimer: ReturnType<typeof setTimeout> | null = null;
+    let timedOut = false;
+    let externallyAborted = false;
+
+    const hardKill = () => {
+      if (!proc) return;
+      killProc(proc, 15); // SIGTERM
+      if (forceKillTimer) return;
+      forceKillTimer = setTimeout(() => {
+        if (proc) killProc(proc, 9); // SIGKILL
+      }, KILL_GRACE_MS);
+    };
+
+    const tracked: TrackedCommand = {
+      aborter,
+      kill: hardKill,
+    };
+    const cleanup = this.trackCommand(tag, tracked);
+
+    const onExternalAbort = () => {
+      externallyAborted = true;
+      hardKill();
+      if (!aborter.signal.aborted) aborter.abort();
+    };
+    options?.signal?.addEventListener("abort", onExternalAbort, {
+      once: true,
+    });
 
     try {
       const binary = await this.resolveBinary();
-      const command = `${binary} ${cmdArgs.join(" ")}`;
-      let proc: ReturnType<typeof Bun.spawn>;
+      const command = `${binary} ${sanitizeCliArgsForLog(cmdArgs).join(" ")}`;
+
       try {
         proc = Bun.spawn([binary, ...cmdArgs], {
           stdout: "pipe",
@@ -756,14 +910,12 @@ class CliBridgeImpl {
           signal: aborter.signal,
         });
       } catch (spawnErr) {
-        // Bun.spawn itself failed (EACCES, ENOENT, etc.) — classify it.
-        cleanup();
         const stderr = (spawnErr as Error).message;
         return {
           success: false,
           exitCode: -1,
           stdout: "",
-          stderr,
+          stderr: this.truncateOutput(stderr),
           data: null,
           duration: performance.now() - start,
           command,
@@ -772,15 +924,15 @@ class CliBridgeImpl {
       }
 
       const timeoutMs = options?.timeout ?? 30_000;
-      let timedOut = false;
-      const timer = setTimeout(() => {
+      timeoutTimer = setTimeout(() => {
         timedOut = true;
-        aborter.abort();
+        hardKill();
+        if (!aborter.signal.aborted) aborter.abort();
       }, timeoutMs);
 
       let stderrResult = "";
       const readStderr = async () => {
-        const reader = (proc.stderr as ReadableStream<Uint8Array>).getReader();
+        const reader = (proc!.stderr as ReadableStream<Uint8Array>).getReader();
         const decoder = new TextDecoder();
         try {
           while (true) {
@@ -791,8 +943,8 @@ class CliBridgeImpl {
             options?.onProgress?.(chunk);
           }
         } catch (streamErr) {
-          // Stream closing due to abort is expected
-          if (!aborter.signal.aborted) throw streamErr;
+          // Stream closing due to abort/kill is expected
+          if (!aborter.signal.aborted && !timedOut) throw streamErr;
         }
       };
 
@@ -802,21 +954,13 @@ class CliBridgeImpl {
       ]);
 
       const exitCode = await proc.exited;
-      clearTimeout(timer);
-      cleanup();
 
-      // Streams are already fully consumed above (via getReader/Response),
-      // so they're naturally closed. Cancel is not needed here — the
-      // readers already hold the locks and .cancel() on a locked stream
-      // throws TypeError: "Invalid state: ReadableStream is locked".
+      // Streams are fully consumed above (getReader / Response.text).
 
       let data: T | null = null;
       if (options?.json && exitCode === 0 && stdout.trim()) {
-        try {
-          data = JSON.parse(stdout) as T;
-        } catch {
-          /* non-JSON output even with --json flag */
-        }
+        const parsed = tryParseJsonLoose(stdout);
+        if (parsed !== null) data = parsed as T;
       }
 
       // Classify the failure (success leaves errorType=null).
@@ -825,7 +969,7 @@ class CliBridgeImpl {
           ? null
           : timedOut
             ? "timeout"
-            : aborter.signal.aborted
+            : externallyAborted || aborter.signal.aborted
               ? "aborted"
               : "non-zero-exit";
 
@@ -840,41 +984,56 @@ class CliBridgeImpl {
         errorType,
       };
     } catch (err) {
-      cleanup();
+      hardKill();
       const isAbort = err instanceof Error && err.name === "AbortError";
       // Distinguish "binary not found" from generic spawn-time errors so
       // the status bar can suggest `bun install` rather than a runtime fix.
-      const errorType: CliErrorType = isAbort
-        ? "aborted"
-        : (err as Error).message.includes("not found")
-          ? "binary-not-found"
-          : "spawn-error";
+      const errorType: CliErrorType = timedOut
+        ? "timeout"
+        : isAbort || externallyAborted || aborter.signal.aborted
+          ? "aborted"
+          : (err as Error).message.includes("not found")
+            ? "binary-not-found"
+            : "spawn-error";
       return {
         success: false,
         exitCode: -1,
         stdout: "",
         stderr: this.truncateOutput(
-          isAbort ? "Command timed out or was aborted" : (err as Error).message
+          timedOut || isAbort || externallyAborted
+            ? "Command timed out or was aborted"
+            : (err as Error).message
         ),
         data: null,
         duration: performance.now() - start,
         command: baseCommand,
         errorType,
       };
+    } finally {
+      if (timeoutTimer) clearTimeout(timeoutTimer);
+      if (forceKillTimer) clearTimeout(forceKillTimer);
+      options?.signal?.removeEventListener("abort", onExternalAbort);
+      cleanup();
     }
   }
 
   abort(tag: string): void {
-    const controllers = this.activeCommands.get(tag);
-    if (controllers) {
-      for (const aborter of controllers) aborter.abort();
+    const tracked = this.activeCommands.get(tag);
+    if (tracked) {
+      for (const entry of tracked) {
+        entry.kill();
+        entry.aborter.abort();
+      }
       this.activeCommands.delete(tag);
     }
   }
 
   dispose(): void {
-    for (const [, controllers] of this.activeCommands) {
-      for (const aborter of controllers) aborter.abort();
+    for (const [, tracked] of this.activeCommands) {
+      for (const entry of tracked) {
+        entry.kill();
+        entry.aborter.abort();
+      }
     }
     this.activeCommands.clear();
   }
@@ -1108,16 +1267,21 @@ class CliBridgeImpl {
       // with the validation reason in stderr. The view's existing error
       // rendering surfaces this without any special-casing.
       const reason = (validation as { reason: string }).reason;
-      return Promise.resolve({
+      // Truncate SQL in the command label so long payloads don't bloat the bar.
+      const sqlPreview =
+        trimmed.length > 120 ? `${trimmed.slice(0, 117)}…` : trimmed;
+      const result: CliResult<DbQueryResult> = {
         success: false,
         exitCode: 1,
         stdout: "",
         stderr: `Read-only validation failed: ${reason}`,
         data: null,
         duration: 0,
-        command: `hoox db query ${JSON.stringify(trimmed)}`,
+        command: `hoox db query ${JSON.stringify(sqlPreview)}`,
         errorType: "non-zero-exit",
-      });
+      };
+      this.notifyError(result);
+      return Promise.resolve(result);
     }
 
     return this.exec(["db", "query", trimmed], {
@@ -1369,28 +1533,12 @@ function parsePyneHealth(stdout: string): PyneHealthResult {
       timestamp,
     };
   }
-  try {
-    const parsed = JSON.parse(cleaned) as Record<string, unknown>;
-    const statusRaw = parsed.status;
-    const status: PyneHealthResult["status"] =
-      statusRaw === "healthy" ||
-      statusRaw === "degraded" ||
-      statusRaw === "down"
-        ? statusRaw
-        : "down";
-    return {
-      worker: typeof parsed.worker === "string" ? parsed.worker : "pyne-worker",
-      url: typeof parsed.url === "string" ? parsed.url : "",
-      status,
-      httpStatus:
-        typeof parsed.httpStatus === "number" ? parsed.httpStatus : undefined,
-      latencyMs:
-        typeof parsed.latencyMs === "number" ? parsed.latencyMs : undefined,
-      body: parsed.body,
-      error: typeof parsed.error === "string" ? parsed.error : undefined,
-      timestamp,
-    };
-  } catch {
+  const parsedLoose = tryParseJsonLoose(cleaned);
+  if (
+    parsedLoose === null ||
+    typeof parsedLoose !== "object" ||
+    Array.isArray(parsedLoose)
+  ) {
     return {
       worker: "pyne-worker",
       url: "",
@@ -1399,6 +1547,24 @@ function parsePyneHealth(stdout: string): PyneHealthResult {
       timestamp,
     };
   }
+  const parsed = parsedLoose as Record<string, unknown>;
+  const statusRaw = parsed.status;
+  const status: PyneHealthResult["status"] =
+    statusRaw === "healthy" || statusRaw === "degraded" || statusRaw === "down"
+      ? statusRaw
+      : "down";
+  return {
+    worker: typeof parsed.worker === "string" ? parsed.worker : "pyne-worker",
+    url: typeof parsed.url === "string" ? parsed.url : "",
+    status,
+    httpStatus:
+      typeof parsed.httpStatus === "number" ? parsed.httpStatus : undefined,
+    latencyMs:
+      typeof parsed.latencyMs === "number" ? parsed.latencyMs : undefined,
+    body: parsed.body,
+    error: typeof parsed.error === "string" ? parsed.error : undefined,
+    timestamp,
+  };
 }
 
 function parseAgentHealth(stdout: string): AgentHealthResult {
@@ -1408,13 +1574,7 @@ function parseAgentHealth(stdout: string): AgentHealthResult {
     return { providers: [], timestamp };
   }
 
-  let parsed: unknown;
-  try {
-    parsed = JSON.parse(cleaned);
-  } catch {
-    return { providers: [], timestamp };
-  }
-
+  const parsed = tryParseJsonLoose(cleaned);
   if (
     parsed === null ||
     typeof parsed !== "object" ||
@@ -1480,6 +1640,7 @@ export {
   agentChatStream,
   AI_MODEL_OPTIONS,
 } from "./standalone";
+// tryParseJsonLoose + sanitizeCliArgsForLog exported above for tests
 export type {
   ExecOptions,
   KillSwitchAction,

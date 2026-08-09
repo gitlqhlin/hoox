@@ -15,7 +15,10 @@
  */
 import { appendFile, mkdir } from "node:fs/promises";
 import { join } from "node:path";
-import { getTuiStateDir } from "./hoox-path-service";
+import {
+  getTuiStateDir,
+  resetHooxPathCacheForTests,
+} from "./hoox-path-service";
 
 export type DevLogLevel = "debug" | "info" | "warn" | "error";
 
@@ -31,13 +34,17 @@ const DEBUG_LOG_FILE = "debug.log";
 
 let enabledCache: boolean | null = null;
 let logPathCache: string | null = null;
+let logPathCacheKey: string | null = null;
 let ensureDirPromise: Promise<string> | null = null;
 
 /** Reset caches (tests only). */
 export function resetDevLogForTests(): void {
   enabledCache = null;
   logPathCache = null;
+  logPathCacheKey = null;
   ensureDirPromise = null;
+  // Dev log path is under getTuiStateDir(); clear path cache when HOOX_HOME changes in tests.
+  resetHooxPathCacheForTests();
 }
 
 /**
@@ -53,14 +60,17 @@ export function isDevLogEnabled(): boolean {
 
 /** Absolute path to the debug log file (even if logging is disabled). */
 export function getDevLogPath(): string {
-  if (logPathCache) return logPathCache;
-  logPathCache = join(getTuiStateDir(), DEBUG_LOG_FILE);
+  const dir = getTuiStateDir();
+  if (logPathCache && logPathCacheKey === dir) return logPathCache;
+  logPathCache = join(dir, DEBUG_LOG_FILE);
+  logPathCacheKey = dir;
   return logPathCache;
 }
 
 async function ensureLogDir(): Promise<string> {
-  if (!ensureDirPromise) {
-    const dir = getTuiStateDir();
+  const dir = getTuiStateDir();
+  // Re-bind ensure promise if the state dir moved (HOOX_HOME override in tests).
+  if (!ensureDirPromise || logPathCacheKey !== dir) {
     ensureDirPromise = mkdir(dir, { recursive: true }).then(() => dir);
   }
   return ensureDirPromise;

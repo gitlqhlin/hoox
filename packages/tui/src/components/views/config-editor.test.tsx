@@ -17,6 +17,10 @@ import {
   resolveConfigDir,
   resolveConfigFilePath,
   resetResolvedConfigDir,
+  isSafeConfigRelativePath,
+  sanitizeConfigStatus,
+  MAX_CONFIG_FILE_BYTES,
+  MAX_EDITOR_DISPLAY_LINES,
 } from "./config-editor";
 import type { FileNode } from "./config-editor";
 
@@ -38,6 +42,57 @@ describe("ConfigEditor", () => {
         // If root is config dir, relative paths must strip config/ — covered above
         expect(full.includes(`${root}/config/`)).toBe(false);
       }
+    });
+
+    it("rejects path traversal attempts", () => {
+      resetResolvedConfigDir();
+      expect(() => resolveConfigFilePath("../etc/passwd")).toThrow(
+        /Unsafe|escapes/i
+      );
+      expect(() => resolveConfigFilePath("config/../../etc/passwd")).toThrow(
+        /Unsafe|escapes/i
+      );
+      expect(() => resolveConfigFilePath("/etc/passwd")).toThrow(/Unsafe/i);
+    });
+  });
+
+  describe("isSafeConfigRelativePath", () => {
+    it("accepts blueprint-style relative paths", () => {
+      expect(isSafeConfigRelativePath("config/wrangler.toml")).toBe(true);
+      expect(
+        isSafeConfigRelativePath("config/strategies/grid.config.json")
+      ).toBe(true);
+      expect(isSafeConfigRelativePath("config/.env")).toBe(true);
+    });
+
+    it("rejects absolute and traversal paths", () => {
+      expect(isSafeConfigRelativePath("/etc/passwd")).toBe(false);
+      expect(isSafeConfigRelativePath("../secret")).toBe(false);
+      expect(isSafeConfigRelativePath("config/../../../etc/passwd")).toBe(
+        false
+      );
+      expect(isSafeConfigRelativePath("")).toBe(false);
+      expect(isSafeConfigRelativePath("foo\0bar")).toBe(false);
+    });
+  });
+
+  describe("sanitizeConfigStatus", () => {
+    it("redacts bearer tokens and truncates long messages", () => {
+      const out = sanitizeConfigStatus(
+        "error Authorization: Bearer sk-live-supersecret-token-value more detail " +
+          "x".repeat(200),
+        80
+      );
+      expect(out).not.toContain("sk-live-supersecret");
+      expect(out.toLowerCase()).toContain("redacted");
+      expect(out.length).toBeLessThanOrEqual(80);
+    });
+  });
+
+  describe("size limits", () => {
+    it("exports sane max file and display line caps", () => {
+      expect(MAX_CONFIG_FILE_BYTES).toBe(1024 * 1024);
+      expect(MAX_EDITOR_DISPLAY_LINES).toBe(5_000);
     });
   });
 

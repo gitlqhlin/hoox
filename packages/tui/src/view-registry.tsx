@@ -234,6 +234,16 @@ export const VIEW_REGISTRY: ViewRegistryEntry[] = [
   },
 ];
 
+/** All ViewIds in registry order (single source for exhaustiveness checks). */
+export const REGISTERED_VIEW_IDS: ViewId[] = VIEW_REGISTRY.map((e) => e.id);
+
+const REGISTERED_VIEW_ID_SET = new Set<string>(REGISTERED_VIEW_IDS);
+
+/** True when `id` is a known primary view (safe for setView / session restore). */
+export function isRegisteredViewId(id: unknown): id is ViewId {
+  return typeof id === "string" && REGISTERED_VIEW_ID_SET.has(id);
+}
+
 /** Compile-time exhaustiveness helper (call once at module load). */
 function assertFullCoverage(entries: ViewRegistryEntry[]): void {
   const ids = new Set(entries.map((e) => e.id));
@@ -258,19 +268,42 @@ function assertFullCoverage(entries: ViewRegistryEntry[]): void {
   for (const id of required) {
     if (!ids.has(id)) throw new Error(`view-registry missing ViewId: ${id}`);
   }
+  // Unique keyboard bindings within each modifier class
+  const ctrlKeys = new Set<string>();
+  const ctrlAltKeys = new Set<string>();
+  for (const e of entries) {
+    if (e.keyMod === "ctrl") {
+      if (ctrlKeys.has(e.key)) {
+        throw new Error(`view-registry duplicate Ctrl+${e.key}`);
+      }
+      ctrlKeys.add(e.key);
+    } else {
+      if (ctrlAltKeys.has(e.key)) {
+        throw new Error(`view-registry duplicate Ctrl+Alt+${e.key}`);
+      }
+      ctrlAltKeys.add(e.key);
+    }
+  }
 }
 assertFullCoverage(VIEW_REGISTRY);
+
+/** Cached sidebar rows (registry is static). */
+export const SIDEBAR_ITEMS: {
+  id: ViewId;
+  label: string;
+  shortcut: string;
+}[] = VIEW_REGISTRY.map((e) => ({
+  id: e.id,
+  label: e.shortLabel,
+  shortcut: e.shortcut,
+}));
 
 export function getSidebarItems(): {
   id: ViewId;
   label: string;
   shortcut: string;
 }[] {
-  return VIEW_REGISTRY.map((e) => ({
-    id: e.id,
-    label: e.shortLabel,
-    shortcut: e.shortcut,
-  }));
+  return SIDEBAR_ITEMS;
 }
 
 export function getViewShortcutMap(): Record<string, ViewId> {
@@ -291,6 +324,7 @@ export function getCtrlAltViewMap(): Record<string, ViewId> {
 
 export function getViewFactory(id: ViewId): ViewFactory {
   const entry = VIEW_REGISTRY.find((e) => e.id === id);
+  // Fail soft to dashboard when store has a stale/unknown id
   return entry?.factory ?? VIEW_REGISTRY[0]!.factory;
 }
 

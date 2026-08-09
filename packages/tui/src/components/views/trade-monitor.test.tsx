@@ -15,9 +15,17 @@
 import { describe, it, expect, beforeAll, afterEach } from "bun:test";
 import { testRender } from "@opentui/react/test-utils";
 import { useServiceStore } from "@hoox-sh/hoox-shared/stores/service-store";
+import { useUIStore } from "@hoox-sh/hoox-shared/stores/ui-store";
 import { makeTrade, type TestTrade } from "../../test-utils";
 
-import { TradeMonitor } from "./trade-monitor";
+import {
+  TradeMonitor,
+  sanitizeTerminalText,
+  selectVisibleTrades,
+  calcLatency,
+  MAX_VISIBLE_TRADES,
+  TRADE_RING_BUFFER_CAP,
+} from "./trade-monitor";
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -44,6 +52,7 @@ describe("TradeMonitor", () => {
       metrics: null,
       connectionStatus: "offline",
     });
+    useUIStore.setState({ activeView: "trade-monitor" });
   });
 
   afterEach(() => {
@@ -51,6 +60,50 @@ describe("TradeMonitor", () => {
       tradeStream: [],
       metrics: null,
       connectionStatus: "offline",
+    });
+  });
+
+  // ── Pure helpers ────────────────────────────────────────────────────────
+
+  describe("sanitizeTerminalText", () => {
+    it("strips ESC and other C0 control characters", () => {
+      expect(sanitizeTerminalText("BTC\x1b[31m")).toBe("BTC[31m");
+      expect(sanitizeTerminalText("a\u0000b\u0007c")).toBe("abc");
+    });
+
+    it("truncates long strings", () => {
+      const long = "x".repeat(100);
+      expect(sanitizeTerminalText(long, 10).length).toBe(10);
+      expect(sanitizeTerminalText(long, 10).endsWith("\u2026")).toBe(true);
+    });
+  });
+
+  describe("selectVisibleTrades", () => {
+    it("returns newest first and respects maxVisible", () => {
+      const stream = [
+        makeTrade({ id: "a", timestamp: 1 }),
+        makeTrade({ id: "b", timestamp: 2 }),
+        makeTrade({ id: "c", timestamp: 3 }),
+      ];
+      const visible = selectVisibleTrades(stream, 2);
+      expect(visible.map((t) => t.id)).toEqual(["c", "b"]);
+    });
+
+    it("returns empty for empty stream", () => {
+      expect(selectVisibleTrades([], 10)).toEqual([]);
+    });
+
+    it("documents render cap below store ring buffer", () => {
+      expect(MAX_VISIBLE_TRADES).toBeLessThanOrEqual(TRADE_RING_BUFFER_CAP);
+      expect(TRADE_RING_BUFFER_CAP).toBe(500);
+    });
+  });
+
+  describe("calcLatency", () => {
+    it("returns age in ms and null for future timestamps", () => {
+      const now = 1_000_000;
+      expect(calcLatency(now - 50, now)).toBe(50);
+      expect(calcLatency(now + 10, now)).toBeNull();
     });
   });
 
@@ -67,9 +120,22 @@ describe("TradeMonitor", () => {
   });
 
   it("renders empty state when no trades in stream", async () => {
-    useServiceStore.setState({ tradeStream: [] });
+    useServiceStore.setState({
+      tradeStream: [],
+      connectionStatus: "connected",
+    });
     const output = await renderTradeMonitor();
     expect(output).toContain("Waiting for live data");
+  });
+
+  it("renders offline empty state when disconnected with no trades", async () => {
+    useServiceStore.setState({
+      tradeStream: [],
+      connectionStatus: "offline",
+    });
+    const output = await renderTradeMonitor();
+    expect(output).toContain("OFFLINE");
+    expect(output).toMatch(/offline|no live trades/i);
   });
 
   // ── Live Trade Feed ─────────────────────────────────────────────────────

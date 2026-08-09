@@ -3,12 +3,13 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { describe, it, expect, beforeEach, afterEach } from "bun:test";
+import { describe, it, expect, afterEach } from "bun:test";
 import { testRender } from "@opentui/react/test-utils";
 import * as path from "path";
 import * as fs from "fs";
 import * as os from "os";
-import { EdgeTopology } from "./edge-topology";
+import { useUIStore } from "@hoox-sh/hoox-shared/stores/ui-store";
+import { EdgeTopology, MAX_FLOWS_PREVIEW } from "./edge-topology";
 
 const mockMetadata = {
   workers: {
@@ -107,7 +108,12 @@ describe("EdgeTopology View", () => {
     cleanup = null;
   });
 
+  it("caps flow preview for large graphs", () => {
+    expect(MAX_FLOWS_PREVIEW).toBe(15);
+  });
+
   it("renders the topology view with workers and infrastructure", async () => {
+    useUIStore.setState({ activeView: "edge-topology" });
     const fixture = withGraphFixture(JSON.stringify(mockMetadata));
     cleanup = fixture.cleanup;
 

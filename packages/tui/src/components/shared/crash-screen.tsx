@@ -17,6 +17,7 @@
  * Colors use Hoox design tokens via @hoox-sh/hoox-shared.
  */
 import { Colors } from "@hoox-sh/hoox-shared";
+import { redactSecretsInText } from "../../services/dev-log";
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -31,6 +32,15 @@ export interface CrashScreenProps {
   safeMode?: boolean;
 }
 
+/** Safe, single-line display text for crash UI (secrets scrubbed, length capped). */
+export function formatCrashMessage(error: Error, maxLen = 120): string {
+  const first = (error.message || "Unknown error").split("\n")[0] ?? "";
+  const scrubbed = redactSecretsInText(first).trim() || "Unknown error";
+  return scrubbed.length > maxLen
+    ? `${scrubbed.slice(0, maxLen - 1)}…`
+    : scrubbed;
+}
+
 // ─── Component ───────────────────────────────────────────────────────────────
 
 export function CrashScreen({
@@ -38,6 +48,14 @@ export function CrashScreen({
   onAction,
   safeMode = false,
 }: CrashScreenProps) {
+  const messageLine = formatCrashMessage(error);
+  const secondRaw = error.message.includes("\n")
+    ? error.message.split("\n")[1]
+    : undefined;
+  const secondLine = secondRaw
+    ? redactSecretsInText(secondRaw).slice(0, 80)
+    : undefined;
+
   return (
     <box
       flexDirection="column"
@@ -74,19 +92,18 @@ export function CrashScreen({
         {/* Safe mode indicator */}
         {safeMode && (
           <text fg={Colors.warning} bold>
-            (Running in Safe Mode — minimal config, no API calls)
+            (Safe Mode — UI only, no API / CLI / SSE)
           </text>
         )}
 
-        {/* Error message */}
+        {/* Error message (redacted — never show tokens) */}
         <box paddingTop={1} flexDirection="column" alignItems="center">
-          <text fg={Colors.muted}>{error.message.split("\n")[0]}</text>
-          {/* Show second line if present (e.g. stack trace hint) */}
-          {error.message.includes("\n") && (
+          <text fg={Colors.muted}>{messageLine}</text>
+          {secondLine ? (
             <text fg={Colors.dim} dim>
-              {error.message.split("\n")[1]?.slice(0, 80)}
+              {secondLine}
             </text>
-          )}
+          ) : null}
         </box>
       </box>
 

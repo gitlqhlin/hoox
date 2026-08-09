@@ -24,9 +24,15 @@
 export interface ExecOptions {
   json?: boolean;
   yes?: boolean;
+  /** Wall-clock timeout in ms (default 30_000). On expiry the subprocess is killed. */
   timeout?: number;
   onProgress?: (chunk: string) => void;
   tag?: string;
+  /**
+   * Optional external abort signal (view unmount, user cancel).
+   * Combined with the bridge's internal timeout controller — either aborts the spawn.
+   */
+  signal?: AbortSignal;
 }
 
 /**

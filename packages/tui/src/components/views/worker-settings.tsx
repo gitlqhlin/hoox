@@ -90,6 +90,13 @@ export function WorkerSettingsView() {
   const [saving, setSaving] = useState(false);
   const [status, setStatus] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  /**
+   * Field key awaiting a second Enter for dangerous writes.
+   * Cleared on navigation / cancel (Escape).
+   */
+  const [pendingDangerousKey, setPendingDangerousKey] = useState<string | null>(
+    null
+  );
   /** Monotonic generation so out-of-order loadValues results are ignored. */
   const loadGeneration = useRef(0);
 
@@ -200,6 +207,7 @@ export function WorkerSettingsView() {
       if (idx < 0 || idx >= manifests.length) return;
       setWorkerIndex(idx);
       setFieldIndex(0);
+      setPendingDangerousKey(null);
       setLoading(true);
       try {
         await loadValues(manifests[idx]!);
@@ -259,6 +267,7 @@ export function WorkerSettingsView() {
     const row = flatFields[fieldIndex];
     if (!row || !selected) return;
     if (row.field.kind === "secret") {
+      setPendingDangerousKey(null);
       setStatus(
         row.field.cliCommand
           ? `Secret — run: ${row.field.cliCommand}`
@@ -266,6 +275,20 @@ export function WorkerSettingsView() {
       );
       return;
     }
+
+    // Fail-closed confirm for dangerous fields: require a second Enter.
+    if (row.field.kind === "dangerous") {
+      if (pendingDangerousKey !== row.field.key) {
+        setPendingDangerousKey(row.field.key);
+        setStatus(
+          `Confirm dangerous write for "${row.field.label}" — press Enter again to save, Esc to cancel`
+        );
+        return;
+      }
+    }
+    setPendingDangerousKey(null);
+
+    if (saving) return;
     setSaving(true);
     setStatus(null);
     try {
@@ -273,6 +296,10 @@ export function WorkerSettingsView() {
 
       if (isAgentConfigEmbeddedField(row.field.key)) {
         const cfgResult = await cliBridge.configKvGet(AGENT_CONFIG_KV_KEY);
+        if (!cfgResult.success && cfgResult.data == null) {
+          // Empty/missing agent:config is fine (starts from {}); only hard-fail on I/O errors
+          // when stderr indicates a real failure and data is unusable.
+        }
         const current = parseAgentConfigJson(
           cfgResult.success ? cfgResult.data : null
         );
@@ -287,18 +314,23 @@ export function WorkerSettingsView() {
           setStatus(
             `Save failed: ${result.stderr || result.stdout || "unknown error"}`
           );
-        } else {
-          setStatus(
-            `Saved ${AGENT_CONFIG_KV_KEY} (${row.field.key}) = ${displayValue(value)}`
-          );
+          return;
         }
+        setStatus(
+          `Saved ${AGENT_CONFIG_KV_KEY} (${row.field.key}) = ${displayValue(value)}`
+        );
         // risk:* also dual-write trade:* flat keys when they map (except embedded-only take_profit)
         if (
           row.field.key === "risk:max_daily_drawdown_percent" ||
           row.field.key === "risk:trailing_stop_percent"
         ) {
           const flatKey = buildDashboardKvKey(selected.worker, row.field.key);
-          await cliBridge.configKvSet(flatKey, formatForKv(value));
+          const dual = await cliBridge.configKvSet(flatKey, formatForKv(value));
+          if (!dual.success) {
+            setStatus(
+              `Saved agent:config but dual-write ${flatKey} failed: ${dual.stderr || dual.stdout || "unknown error"}`
+            );
+          }
         }
       } else {
         const flatKey = buildDashboardKvKey(selected.worker, row.field.key);
@@ -316,15 +348,24 @@ export function WorkerSettingsView() {
     } finally {
       setSaving(false);
     }
-  }, [flatFields, fieldIndex, selected, values]);
+  }, [flatFields, fieldIndex, selected, values, pendingDangerousKey, saving]);
 
   useKeyboard((key) => {
     if (!isActive) return;
+    if (key.name === "escape") {
+      if (pendingDangerousKey) {
+        setPendingDangerousKey(null);
+        setStatus("Dangerous write cancelled");
+      }
+      return;
+    }
     if (key.name === "up") {
+      setPendingDangerousKey(null);
       setFieldIndex((i) => Math.max(0, i - 1));
       return;
     }
     if (key.name === "down") {
+      setPendingDangerousKey(null);
       setFieldIndex((i) => Math.min(Math.max(0, flatFields.length - 1), i + 1));
       return;
     }
@@ -338,6 +379,7 @@ export function WorkerSettingsView() {
     }
     if (key.name === "space" || key.name === "return" || key.name === "enter") {
       if (key.name === "space") {
+        setPendingDangerousKey(null);
         cycleFieldValue(1);
       } else {
         void saveCurrent();
@@ -345,14 +387,17 @@ export function WorkerSettingsView() {
       return;
     }
     if (key.name === "[" || key.raw === "[") {
+      setPendingDangerousKey(null);
       cycleFieldValue(-1);
       return;
     }
     if (key.name === "]" || key.raw === "]") {
+      setPendingDangerousKey(null);
       cycleFieldValue(1);
       return;
     }
     if (key.name === "r" && !key.ctrl && !key.meta) {
+      setPendingDangerousKey(null);
       void refresh();
     }
   });
@@ -365,7 +410,7 @@ export function WorkerSettingsView() {
           meta={
             <text fg={Colors.muted} dim>
               Same options as web dashboard · ←→ worker · ↑↓ field · Space edit
-              · Enter save · R refresh
+              · Enter save · Esc cancel · R refresh
             </text>
           }
         />

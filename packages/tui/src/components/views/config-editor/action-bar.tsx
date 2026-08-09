@@ -27,7 +27,7 @@ interface ActionBarProps {
 export function ActionBar({
   unsavedCount,
   hasSelectedFile,
-  hasErrors: _hasErrors,
+  hasErrors,
   onSave,
   onValidate,
   onDiff,
@@ -36,6 +36,8 @@ export function ActionBar({
   const disabledColor = Colors.dim;
   const enabledColor = Colors.foreground;
   const accentColor = Colors.accent;
+  // Fail-closed UX: cannot click Save when local syntax errors exist.
+  const canSave = hasSelectedFile && unsavedCount > 0 && !hasErrors;
 
   return (
     <box
@@ -49,10 +51,10 @@ export function ActionBar({
       {/* Action buttons */}
       <box flexDirection="row" gap={2}>
         <text
-          fg={hasSelectedFile && unsavedCount > 0 ? accentColor : disabledColor}
-          bold={hasSelectedFile && unsavedCount > 0}
-          dim={!hasSelectedFile || unsavedCount === 0}
-          onMouseUp={onSave}
+          fg={canSave ? accentColor : disabledColor}
+          bold={canSave}
+          dim={!canSave}
+          onMouseUp={canSave ? onSave : undefined}
         >
           [Save]
         </text>

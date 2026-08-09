@@ -52,11 +52,49 @@ import {
   TuiStateFiles,
   writeJsonState,
 } from "../../services/tui-storage";
+import { redactSecretsInText } from "../../services/dev-log";
 
-/** Maximum messages to retain on disk. */
-const MAX_STORED_MESSAGES = 100;
+/** Maximum messages to retain on disk / in memory. */
+export const MAX_STORED_MESSAGES = 100;
+/** Cap single message body to avoid huge history files. */
+export const MAX_MESSAGE_CHARS = 8_000;
 /** Sentinel displayed while awaiting first token. */
 const STREAMING_INDICATOR = "…";
+
+/**
+ * Scrub secret-like patterns and cap length before persist/display.
+ * Chat history must never store raw API tokens the user pasted.
+ */
+export function sanitizeChatMessage(message: ChatMessage): ChatMessage {
+  let content =
+    typeof message.content === "string"
+      ? message.content
+      : String(message.content ?? "");
+  content = redactSecretsInText(content);
+  if (content.length > MAX_MESSAGE_CHARS) {
+    content = content.slice(0, MAX_MESSAGE_CHARS - 1) + "…";
+  }
+  return {
+    role: message.role,
+    content,
+    timestamp:
+      typeof message.timestamp === "string" && message.timestamp.length > 0
+        ? message.timestamp
+        : new Date().toISOString(),
+  };
+}
+
+function sanitizeChatHistory(messages: ChatMessage[]): ChatMessage[] {
+  return messages
+    .filter(
+      (m) =>
+        m &&
+        (m.role === "user" || m.role === "assistant") &&
+        typeof m.content === "string"
+    )
+    .map(sanitizeChatMessage)
+    .slice(-MAX_STORED_MESSAGES);
+}
 
 /** Format an ISO timestamp as HH:MM for chat timestamps. */
 function formatTime(iso: string): string {
@@ -203,6 +241,8 @@ export function AiChatView() {
   // Ref to track current stream's AbortController for cleanup
   const currentStreamRef = useRef<AbortController | null>(null);
   const scrollRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  /** Two-step confirm for destructive clear-history action. */
+  const [confirmClear, setConfirmClear] = useState(false);
 
   // ── Load chat history from disk on mount ───────────────────────────────────
   useEffect(() => {
@@ -214,7 +254,7 @@ export function AiChatView() {
       );
       if (cancelled) return;
       if (Array.isArray(stored)) {
-        setMessages(stored.slice(-MAX_STORED_MESSAGES));
+        setMessages(sanitizeChatHistory(stored));
       }
       setHistoryReady(true);
     })();
@@ -226,7 +266,7 @@ export function AiChatView() {
   // ── Persist messages to disk whenever they change (after initial load) ────
   useEffect(() => {
     if (!historyReady) return;
-    const trimmed = messages.slice(-MAX_STORED_MESSAGES);
+    const trimmed = sanitizeChatHistory(messages);
     void writeJsonState(TuiStateFiles.chatHistory, trimmed);
   }, [messages, historyReady]);
 
@@ -239,6 +279,20 @@ export function AiChatView() {
       setStreamingContent("");
     }
   }, [isActive]);
+
+  // ── Abort stream + timers on unmount (fail-safe) ──────────────────────────
+  useEffect(() => {
+    return () => {
+      if (currentStreamRef.current) {
+        currentStreamRef.current.abort();
+        currentStreamRef.current = null;
+      }
+      if (scrollRef.current) {
+        clearTimeout(scrollRef.current);
+        scrollRef.current = null;
+      }
+    };
+  }, []);
 
   // ── Scroll to bottom on new content ───────────────────────────────────────
   // We use a ref-based timeout to batch scroll updates during streaming
@@ -258,21 +312,22 @@ export function AiChatView() {
     const trimmed = inputText.trim();
     if (!trimmed || isStreaming) return;
 
-    const userMsg: ChatMessage = {
+    const userMsg = sanitizeChatMessage({
       role: "user",
       content: trimmed,
       timestamp: new Date().toISOString(),
-    };
+    });
 
     // Append user message immediately
-    setMessages((prev) => [...prev, userMsg]);
+    setMessages((prev) => sanitizeChatHistory([...prev, userMsg]));
     setInputText("");
     setStreamingContent("");
     setIsStreaming(true);
     setError(null);
+    setConfirmClear(false);
 
     // Build the messages array for the API (last MAX_STORED_MESSAGES)
-    const allMessages = [...messages, userMsg].slice(-MAX_STORED_MESSAGES);
+    const allMessages = sanitizeChatHistory([...messages, userMsg]);
 
     // Abort any existing stream
     if (currentStreamRef.current) {
@@ -313,14 +368,14 @@ export function AiChatView() {
       setError(msg);
     } finally {
       if (!streamAbort.signal.aborted) {
-        // Stream completed normally — save assistant message
+        // Stream completed normally — save assistant message (scrubbed)
         if (assistantContent.length > 0) {
-          const assistantMsg: ChatMessage = {
+          const assistantMsg = sanitizeChatMessage({
             role: "assistant",
             content: assistantContent,
             timestamp: new Date().toISOString(),
-          };
-          setMessages((prev) => [...prev, assistantMsg]);
+          });
+          setMessages((prev) => sanitizeChatHistory([...prev, assistantMsg]));
         }
       }
       setIsStreaming(false);
@@ -496,17 +551,23 @@ export function AiChatView() {
           </text>
         </box>
 
-        {/* Clear history */}
+        {/* Clear history — two-step confirm (destructive) */}
         {messages.length > 0 && (
           <text
-            fg={Colors.muted}
-            dim
+            fg={confirmClear ? Colors.error : Colors.muted}
+            bold={confirmClear}
+            dim={!confirmClear}
             onMouseUp={() => {
+              if (!confirmClear) {
+                setConfirmClear(true);
+                return;
+              }
               setMessages([]);
+              setConfirmClear(false);
               void removeJsonState(TuiStateFiles.chatHistory);
             }}
           >
-            [CLEAR HISTORY]
+            {confirmClear ? "[CONFIRM CLEAR HISTORY]" : "[CLEAR HISTORY]"}
           </text>
         )}
       </box>

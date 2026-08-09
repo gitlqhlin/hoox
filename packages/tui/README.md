@@ -101,24 +101,24 @@ Persistent UI state lives under `$HOME/.hoox/.tui-state/` (session, crash log, c
 
 ## Views
 
-| View                 | Description                                                                                       |
-| -------------------- | ------------------------------------------------------------------------------------------------- |
-| **Dashboard**        | System health overview with service grid, recent alerts, and quick stats (P&L, trades, AI calls). |
-| **Workers Overview** | List of all Cloudflare Workers with status, uptime, CPU, memory, and request metrics.             |
-| **Worker Detail**    | Detailed view of a single worker — logs, metrics, Durable Objects, and deployment info.           |
-| **Trade Monitor**    | Live trade stream with symbol, side, price, quantity, and P&L per trade.                          |
-| **Logs Viewer**      | Scrollable log stream with level filtering, worker selection, and full-text search.               |
-| **Service Manager**  | Start, stop, restart, and deploy workers. View deployment history and rollback.                   |
-| **Config Editor**    | Edit Hoox configuration — exchange credentials, strategy parameters, risk limits.                 |
-| **Setup Wizard**     | Step-by-step guided setup for new Hoox installations (API keys, exchanges, wallet).               |
-| **Settings**         | Display preferences, theme, notification toggles, and keyboard shortcut customization.            |
-| **Queue Depth**      | Queue backlog visualization across workers.                                                       |
-| **KV Viewer**        | Read-only Cloudflare KV key browser.                                                              |
-| **Secrets Viewer**   | Read-only secret names/metadata (values never shown).                                             |
-| **AI Chat**          | Streaming chat with the agent worker.                                                             |
-| **DB Query**         | Read-only D1 SQL panel (`SELECT` / `WITH` / `EXPLAIN` only).                                      |
-| **Edge Topology**    | Worker mesh / service-binding graph.                                                              |
-| **Worker Settings**  | Same settings as the web dashboard — fields from `workers/*/dashboard.jsonc` backed by CONFIG_KV. |
+| View                 | Description                                                                                        |
+| -------------------- | -------------------------------------------------------------------------------------------------- |
+| **Dashboard**        | System health overview: service grid, alerts, quick stats, agent health, and **PYNE** edge health. |
+| **Workers Overview** | List of all Cloudflare Workers with status, uptime, CPU, memory, and request metrics.              |
+| **Worker Detail**    | Detailed view of a single worker — logs, metrics, Durable Objects, and deployment info.            |
+| **Trade Monitor**    | Live trade stream with symbol, side, price, quantity, and P&L per trade.                           |
+| **Logs Viewer**      | Scrollable log stream with level filtering, worker selection, and full-text search.                |
+| **Service Manager**  | Start, stop, restart, and deploy workers. View deployment history and rollback.                    |
+| **Config Editor**    | Edit Hoox configuration — exchange credentials, strategy parameters, risk limits.                  |
+| **Setup Wizard**     | Step-by-step guided setup for new Hoox installations (API keys, exchanges, wallet).                |
+| **Settings**         | Display preferences, theme, notification toggles, and keyboard shortcut customization.             |
+| **Queue Depth**      | Queue backlog visualization across workers.                                                        |
+| **KV Viewer**        | Read-only Cloudflare KV key browser.                                                               |
+| **Secrets Viewer**   | Read-only secret names/metadata (values never shown).                                              |
+| **AI Chat**          | Streaming chat with the agent worker.                                                              |
+| **DB Query**         | Read-only D1 SQL panel (`SELECT` / `WITH` / `EXPLAIN` only).                                       |
+| **Edge Topology**    | Worker mesh / service-binding graph.                                                               |
+| **Worker Settings**  | Same settings as the web dashboard — fields from `workers/*/dashboard.jsonc` backed by CONFIG_KV.  |
 
 ---
 
@@ -143,8 +143,13 @@ Persistent UI state lives under `$HOME/.hoox/.tui-state/` (session, crash log, c
 cd packages/tui
 bun test
 
-# From monorepo root (recommended)
+# From monorepo root (recommended — includes preload)
 bun run test:tui
+
+# Scoped foundation suite (stores / utils / integration / registry)
+bun test --preload ./packages/tui/src/test-setup.ts \
+  packages/tui/src/stores packages/tui/src/utils \
+  packages/tui/test packages/tui/src/view-registry.test.ts
 
 # Typecheck
 bun run typecheck
@@ -164,11 +169,13 @@ If the packages are in a local path, verify the workspace configuration in the r
 
 ### API unreachable (OFFLINE in status bar)
 
-The TUI tries HTTP first, then falls back to the `hoox` CLI. Check:
+**Local:** HTTP first, then CLI `monitorStatus` fallback.  
+**Remote:** fail-closed HTTP only (no CLI fallback). Auth requires `HOOX_API_TOKEN`, Access env, or `--allow-insecure`.
 
 1. Is a local dev mesh / API reachable? (`HOOX_API_URL`, default `http://localhost:8787`)
-2. Is the `hoox` CLI on `PATH`? (`bun add -g @hoox-sh/hoox-cli`)
-3. Are you on the correct network / VPN?
+2. Remote: is `HOOX_API_TOKEN` set and matching server `OPERATOR_API_KEY`?
+3. Is the `hoox` CLI on `PATH` for local fallback? (`bun add -g @hoox-sh/hoox-cli`)
+4. Are you on the correct network / VPN?
 
 ### Terminal too small
 

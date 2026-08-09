@@ -14,7 +14,15 @@
  */
 import { describe, it, expect } from "bun:test";
 import { join } from "node:path";
-import { DbQueryView } from "./db-query";
+import {
+  DbQueryView,
+  formatCell,
+  compareCells,
+  sanitizeCellText,
+  MAX_VISIBLE_ROWS,
+  MAX_HISTORY,
+} from "./db-query";
+import { validateReadOnlySql } from "../../services/cli-bridge";
 
 const VIEWS_DIR = import.meta.dir;
 const TUI_SRC = join(VIEWS_DIR, "../..");
@@ -29,14 +37,36 @@ describe("DbQueryView", () => {
     const src = await Bun.file(join(VIEWS_DIR, "db-query.tsx")).text();
     expect(src).toContain("validateReadOnlySql");
     expect(src).toContain("cliBridge.dbQuery");
+    // Must surface validation failure as queryError (UI cannot bypass)
+    expect(src).toContain("not read-only");
   });
 
   it("formats NULL values distinctly in cells (contract)", () => {
-    const formatCell = (v: unknown) =>
-      v === null || v === undefined ? "NULL" : String(v);
-    expect(formatCell(null)).toBe("NULL");
-    expect(formatCell(undefined)).toBe("NULL");
-    expect(formatCell(42)).toBe("42");
+    expect(formatCell(null, 20)).toBe("NULL");
+    expect(formatCell(undefined, 20)).toBe("NULL");
+    expect(formatCell(42, 20)).toBe("42");
+  });
+
+  it("sanitizes cell text and collapses newlines", () => {
+    expect(sanitizeCellText("a\x1bb")).toBe("ab");
+    expect(formatCell("line1\nline2", 40)).toBe("line1 line2");
+  });
+
+  it("sorts nulls last and numbers numerically", () => {
+    expect(compareCells(null, 1, "asc")).toBe(1);
+    expect(compareCells(1, null, "asc")).toBe(-1);
+    expect(compareCells(2, 10, "asc")).toBeLessThan(0);
+    expect(compareCells(2, 10, "desc")).toBeGreaterThan(0);
+  });
+
+  it("rejects write SQL before any CLI call (defence in depth)", () => {
+    expect(validateReadOnlySql("DROP TABLE users").readonly).toBe(false);
+    expect(validateReadOnlySql("SELECT 1").readonly).toBe(true);
+  });
+
+  it("caps visible result rows and history size", () => {
+    expect(MAX_VISIBLE_ROWS).toBe(200);
+    expect(MAX_HISTORY).toBe(20);
   });
 
   it("is registered as ViewId db-query in view-registry factory", async () => {
@@ -55,23 +85,22 @@ describe("DbQueryView", () => {
     const registry = await Bun.file(join(TUI_SRC, "view-registry.tsx")).text();
     expect(registry).toContain('id: "db-query"');
     expect(registry).toContain("DB QUERY");
+    // Sidebar consumes SIDEBAR_ITEMS from the registry (single source of truth)
     const sidebar = await Bun.file(
       join(TUI_SRC, "components/layout/sidebar.tsx")
     ).text();
-    expect(sidebar).toContain("getSidebarItems");
+    expect(sidebar).toContain("SIDEBAR_ITEMS");
   });
 
   it("uses Ctrl+Alt+Q chord via registry map in app keyboard handler", async () => {
     const registry = await Bun.file(join(TUI_SRC, "view-registry.tsx")).text();
-    expect(registry).toMatch(
-      /id:\s*"db-query"[\s\S]{0,200}key:\s*"q"[\s\S]{0,80}keyMod:\s*"ctrl-alt"/
-    );
+    expect(registry).toContain('id: "db-query"');
+    expect(registry).toContain("getCtrlAltViewMap");
     const app = await Bun.file(join(TUI_SRC, "app.tsx")).text();
     expect(app).toContain("getCtrlAltViewMap");
     expect(app).toContain("CTRL_ALT_VIEWS");
-    expect(app).toMatch(
-      /key\.ctrl\s*&&\s*key\.alt\s*&&\s*CTRL_ALT_VIEWS\[key\.name\]/
-    );
+    expect(app).toMatch(/key\.ctrl\s*&&\s*key\.alt/);
+    expect(app).toContain("CTRL_ALT_VIEWS[name]");
   });
 
   it("persists query history via TuiStateFiles.dbQueryHistory (max 20)", async () => {

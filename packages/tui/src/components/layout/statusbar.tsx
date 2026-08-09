@@ -34,6 +34,7 @@ import {
   hasApiToken,
   resolveTuiConnectionEnv,
 } from "../../services/tui-connection";
+import { redactSecretsInText } from "../../services/dev-log";
 import { CoolGlyph } from "../shared/cool-brackets";
 
 /** Map each CliErrorType to a short, human-readable label. */
@@ -101,10 +102,15 @@ interface ExpandedErrorPanelProps {
 export const ExpandedErrorPanel = memo(function ExpandedErrorPanel({
   details,
 }: ExpandedErrorPanelProps) {
-  const stderrLines = countLines(details.stderr);
-  const stdoutLines = countLines(details.stdout);
-  const showStdout =
-    details.stdout.length > 0 && details.stdout !== details.stderr;
+  // Scrub secret-like patterns before display/copy (never leak tokens to terminal)
+  const safeCommand = redactSecretsInText(
+    details.command || "(unknown — binary not found)"
+  );
+  const safeStderr = details.stderr ? redactSecretsInText(details.stderr) : "";
+  const safeStdout = details.stdout ? redactSecretsInText(details.stdout) : "";
+  const stderrLines = countLines(safeStderr);
+  const stdoutLines = countLines(safeStdout);
+  const showStdout = safeStdout.length > 0 && safeStdout !== safeStderr;
 
   return (
     <box
@@ -115,12 +121,16 @@ export const ExpandedErrorPanel = memo(function ExpandedErrorPanel({
       paddingBottom={1}
       backgroundColor={Colors.card}
     >
-      {/* Header — classification + recovery hint */}
+      {/* Header — classification + recovery hint (sibling <text>, never nested) */}
       <box flexDirection="column">
-        <text fg={Colors.error} bold>
-          ✗ {ERROR_TYPE_LABELS[details.errorType]}{" "}
-          <span fg={Colors["muted-foreground"]}>({details.errorType})</span>
-        </text>
+        <box flexDirection="row" gap={1}>
+          <text fg={Colors.error} bold>
+            {`✗ ${ERROR_TYPE_LABELS[details.errorType]}`}
+          </text>
+          <text fg={Colors["muted-foreground"]}>
+            {`(${details.errorType})`}
+          </text>
+        </box>
         <text fg={Colors["muted-foreground"]}>
           {RECOVERY_HINTS[details.errorType]}
         </text>
@@ -132,9 +142,9 @@ export const ExpandedErrorPanel = memo(function ExpandedErrorPanel({
       {/* Command — own line so a long path doesn't crowd the metadata row */}
       <box flexDirection="column">
         <text fg={Colors.muted}>Command</text>
-        {/* Selectable: user can copy the exact command for reproduction. */}
+        {/* Selectable: user can copy the command (secrets already scrubbed). */}
         <text fg={Colors.foreground} selectable>
-          {details.command || "(unknown — binary not found)"}
+          {safeCommand}
         </text>
       </box>
 
@@ -153,28 +163,28 @@ export const ExpandedErrorPanel = memo(function ExpandedErrorPanel({
       </box>
 
       {/* stderr — line count badge, then selectable text */}
-      {details.stderr && (
+      {safeStderr ? (
         <box flexDirection="column">
           <text fg={Colors.muted}>
             stderr ({stderrLines} {stderrLines === 1 ? "line" : "lines"})
           </text>
           <text fg={Colors.foreground} selectable>
-            {details.stderr}
+            {safeStderr}
           </text>
         </box>
-      )}
+      ) : null}
 
       {/* stdout — only show if distinct from stderr */}
-      {showStdout && (
+      {showStdout ? (
         <box flexDirection="column">
           <text fg={Colors.muted}>
             stdout ({stdoutLines} {stdoutLines === 1 ? "line" : "lines"})
           </text>
           <text fg={Colors.foreground} selectable>
-            {details.stdout}
+            {safeStdout}
           </text>
         </box>
-      )}
+      ) : null}
 
       {/* Footer — copy affordance + dismiss hint */}
       <text fg={Colors["muted-foreground"]}>
@@ -279,8 +289,8 @@ export function StatusBar() {
   }
 
   if (lastError && isErrorState && errorKind !== "auth") {
-    // Full short message (expand panel for diagnostics). Auth errors use AUTH! above.
-    parts.push(`| ${lastError}`);
+    // Short message (secrets scrubbed). Expand panel for full diagnostics.
+    parts.push(`| ${redactSecretsInText(lastError)}`);
   }
 
   // The expand hint appears whenever a clickable error is available so

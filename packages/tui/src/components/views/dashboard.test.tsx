@@ -102,10 +102,23 @@ describe("DashboardView", () => {
     { timeout: 15_000 }
   );
 
-  it("shows empty state when no workers connected", async () => {
-    useServiceStore.setState({ workers: [] });
+  it("shows waiting spinner when connected but no workers yet", async () => {
+    useServiceStore.setState({
+      workers: [],
+      connectionStatus: "connected",
+    });
     const output = await renderDashboard();
     expect(output).toContain("Waiting for worker data");
+  });
+
+  it("shows offline empty state when CLI/API is offline", async () => {
+    useServiceStore.setState({
+      workers: [],
+      connectionStatus: "offline",
+    });
+    const output = await renderDashboard();
+    expect(output).toContain("CLI/API offline");
+    expect(output).toContain("SERVICE HEALTH");
   });
 
   it("renders correct status characters for each worker status", async () => {

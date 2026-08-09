@@ -23,12 +23,11 @@ import { useKeyboard } from "@opentui/react";
 import { DialogProvider, useDialog } from "@opentui-ui/dialog/react";
 import { useServiceStore, useUIStore, Colors } from "@hoox-sh/hoox-shared";
 import { restoreSession, saveSession } from "@hoox-sh/hoox-shared";
-import type { SessionState } from "@hoox-sh/hoox-shared";
 import type { ViewId } from "@hoox-sh/hoox-shared";
 
 import { cliBridge } from "./services/cli-bridge";
 import { resolveTuiStatePath } from "./services/hoox-path-service";
-import { tuiDevLog } from "./services/dev-log";
+import { redactSecretsInText, tuiDevLog } from "./services/dev-log";
 import {
   classifyConnectionError,
   resolveTuiConnectionEnv,
@@ -48,6 +47,7 @@ import {
   getViewFactory,
   getViewShortcutMap,
   getCtrlAltViewMap,
+  isRegisteredViewId,
   ALL_PALETTE_COMMANDS,
 } from "./view-registry";
 import {
@@ -105,12 +105,11 @@ export function AppRoot({ safeMode = false }: { safeMode?: boolean }) {
   );
 }
 
-function AppRootInner({ safeMode: _safeMode = false }: { safeMode?: boolean }) {
+function AppRootInner({ safeMode = false }: { safeMode?: boolean }) {
   // DialogProvider is required for useDialog; cast to our thin DialogHandle.
   const dialog = useDialog() as unknown as DialogHandle;
   const [restoring, setRestoring] = useState(true);
   const activeView = useUIStore((s) => s.activeView);
-  const sidebarExpanded = useUIStore((s) => s.sidebarExpanded);
   const commandPaletteOpen = useUIStore((s) => s.commandPaletteOpen);
   const modal = useUIStore((s) => s.modal);
   const setView = useUIStore((s) => s.setView);
@@ -132,32 +131,67 @@ function AppRootInner({ safeMode: _safeMode = false }: { safeMode?: boolean }) {
   }, [closePalette, showModal, dismissModal]);
 
   // ── Session restore on mount ────────────────────────────────────────────
+  // Shared restoreSession currently only accepts the original 9 ViewIds.
+  // Re-read session.json and accept any registry ViewId so newer views
+  // (queues, kv, secrets, …) actually restore after restart.
   useEffect(() => {
     let cancelled = false;
-    restoreSession().then((session: SessionState) => {
+    (async () => {
+      const session = await restoreSession();
       if (cancelled) return;
-      // Restore previous view if valid
-      if (session.activeView) {
-        setView(session.activeView);
+
+      let view: ViewId = session.activeView;
+      let expanded = session.sidebarExpanded;
+
+      try {
+        const rawPath = resolveTuiStatePath("session.json");
+        const file = Bun.file(rawPath);
+        if (await file.exists()) {
+          const raw = (await file.json()) as {
+            activeView?: unknown;
+            sidebarExpanded?: unknown;
+          };
+          if (isRegisteredViewId(raw.activeView)) {
+            view = raw.activeView;
+          }
+          if (typeof raw.sidebarExpanded === "boolean") {
+            expanded = raw.sidebarExpanded;
+          }
+        }
+      } catch {
+        // Corrupt raw session — keep shared restore result
       }
-      // Restore sidebar state
-      if (!session.sidebarExpanded && sidebarExpanded) {
+
+      if (cancelled) return;
+      if (isRegisteredViewId(view)) {
+        setView(view);
+      }
+      // Align sidebar with saved state (toggle only when mismatched)
+      if (expanded !== useUIStore.getState().sidebarExpanded) {
         toggleSidebar();
       }
       setRestoring(false);
-    });
+    })();
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [setView, toggleSidebar]);
 
   // ── Startup data load: HTTP → (local only) CLI fallback ────────────────
   // After session restore, try to fetch worker data. HTTP is tried first;
   // if the local dev server is unreachable, fall back to the `hoox` CLI.
   // REMOTE mode never uses CLI fallback — gateway HTTP is the source of truth.
   // Also kick off SSE trade/log streams when the API is available.
+  // Safe mode skips all network/CLI/SSE to keep the shell usable after a crash.
   useEffect(() => {
     if (restoring) return;
+    if (safeMode) {
+      void tuiDevLog.info(
+        "connection",
+        "safe mode — skipping startup data load and SSE"
+      );
+      return;
+    }
     let cancelled = false;
 
     (async () => {
@@ -167,12 +201,14 @@ function AppRootInner({ safeMode: _safeMode = false }: { safeMode?: boolean }) {
         mode: conn.mode,
         apiUrl: conn.apiUrl,
         hasToken: conn.hasToken,
+        hasAuth: conn.hasAuth,
         allowCliFallback: conn.allowCliFallback,
       });
 
-      if (conn.mode === "remote" && !conn.hasToken) {
+      // Fail-closed when remote has neither Bearer nor Access service-token pair
+      if (conn.mode === "remote" && !conn.hasAuth) {
         toastAuthMissingRemote(conn.apiHost);
-        await tuiDevLog.warn("connection", "remote without API token", {
+        await tuiDevLog.warn("connection", "remote without API credentials", {
           host: conn.apiHost,
         });
       }
@@ -309,8 +345,10 @@ function AppRootInner({ safeMode: _safeMode = false }: { safeMode?: boolean }) {
 
     return () => {
       cancelled = true;
+      // Tear down long-lived SSE so remounts / safe-mode don't pile up callbacks
+      useServiceStore.getState().stopStreams();
     };
-  }, [restoring]);
+  }, [restoring, safeMode]);
 
   // ── Connection status → mode-aware toasts ───────────────────────────────
   useEffect(() => {
@@ -378,68 +416,106 @@ function AppRootInner({ safeMode: _safeMode = false }: { safeMode?: boolean }) {
   }, []);
 
   // ── Global keyboard shortcuts ───────────────────────────────────────────
-  useKeyboard((key) => {
-    // Quit confirmation modal takes priority over other shortcuts
-    if (modal?.type === "confirm" && modal.title === "Quit HOOX?") {
+  // useCallback keeps handler identity stable across re-renders so OpenTUI
+  // does not thrash key listener registration.
+  const onGlobalKey = useCallback(
+    (key: { name?: string; ctrl?: boolean; alt?: boolean; meta?: boolean }) => {
       const name = String(key.name ?? "").toLowerCase();
-      if (name === "return" || name === "enter" || name === "y") {
-        dismissModal();
-        quitApp();
+
+      // Quit confirmation modal takes priority over other shortcuts
+      if (modal?.type === "confirm" && modal.title === "Quit HOOX?") {
+        if (name === "return" || name === "enter" || name === "y") {
+          dismissModal();
+          quitApp();
+          return;
+        }
+        if (name === "escape" || name === "n") {
+          dismissModal();
+          return;
+        }
+        return; // swallow other keys while confirming quit
+      }
+
+      // While palette is open, leave typing/nav to CommandPalette;
+      // still allow Esc + a few global chords (view switch closes palette).
+      if (commandPaletteOpen) {
+        if (name === "escape") {
+          closePalette();
+          return;
+        }
+        // Allow Ctrl+digit / Ctrl+Alt view jumps (setView closes palette)
+        if (key.ctrl && !key.alt && name && VIEW_SHORTCUTS[name]) {
+          setView(VIEW_SHORTCUTS[name]);
+          return;
+        }
+        if (key.ctrl && key.alt && name && CTRL_ALT_VIEWS[name]) {
+          setView(CTRL_ALT_VIEWS[name]);
+          return;
+        }
         return;
       }
-      if (name === "escape" || name === "n") {
-        dismissModal();
+
+      // Ctrl+1-9 / Ctrl+0: switch views (not while alt is held)
+      if (key.ctrl && !key.alt && name && VIEW_SHORTCUTS[name]) {
+        setView(VIEW_SHORTCUTS[name]);
         return;
       }
-      return; // swallow other keys while confirming quit
-    }
 
-    // Ctrl+1-9 / Ctrl+0: switch views (not while alt is held)
-    if (key.ctrl && !key.alt && VIEW_SHORTCUTS[key.name]) {
-      setView(VIEW_SHORTCUTS[key.name]);
-      return;
-    }
-
-    // Ctrl+Alt+letter: switch to letter-chord views (kv, secrets, etc.)
-    if (key.ctrl && key.alt && CTRL_ALT_VIEWS[key.name]) {
-      setView(CTRL_ALT_VIEWS[key.name]);
-      return;
-    }
-
-    // Ctrl+B: toggle sidebar
-    if (key.ctrl && !key.alt && key.name === "b") {
-      toggleSidebar();
-      return;
-    }
-
-    // Ctrl+P: command palette
-    if (key.ctrl && !key.alt && key.name === "p") {
-      openPalette();
-      return;
-    }
-
-    // Ctrl+R: refresh worker data
-    if (key.ctrl && !key.alt && key.name === "r") {
-      void useServiceStore.getState().fetchWorkers();
-      return;
-    }
-
-    // Ctrl+Q: quit with confirmation (Ctrl+Alt+Q is db-query above)
-    if (key.ctrl && !key.alt && key.name === "q") {
-      requestQuit();
-      return;
-    }
-
-    // Escape: dismiss modal, then palette
-    if (key.name === "escape") {
-      if (modal) {
-        dismissModal();
+      // Ctrl+Alt+letter: switch to letter-chord views (kv, secrets, etc.)
+      if (key.ctrl && key.alt && name && CTRL_ALT_VIEWS[name]) {
+        setView(CTRL_ALT_VIEWS[name]);
         return;
       }
-      closePalette();
-      return;
-    }
-  });
+
+      // Ctrl+B: toggle sidebar
+      if (key.ctrl && !key.alt && name === "b") {
+        toggleSidebar();
+        return;
+      }
+
+      // Ctrl+P: command palette
+      if (key.ctrl && !key.alt && name === "p") {
+        openPalette();
+        return;
+      }
+
+      // Ctrl+R: refresh worker data (no-op in safe mode network sense — still allowed)
+      if (key.ctrl && !key.alt && name === "r") {
+        if (!safeMode) {
+          void useServiceStore.getState().fetchWorkers();
+        }
+        return;
+      }
+
+      // Ctrl+Q: quit with confirmation (Ctrl+Alt+Q is db-query above)
+      if (key.ctrl && !key.alt && name === "q") {
+        requestQuit();
+        return;
+      }
+
+      // Escape: dismiss modal, then palette
+      if (name === "escape") {
+        if (modal) {
+          dismissModal();
+          return;
+        }
+        closePalette();
+      }
+    },
+    [
+      modal,
+      commandPaletteOpen,
+      setView,
+      toggleSidebar,
+      openPalette,
+      closePalette,
+      dismissModal,
+      requestQuit,
+      safeMode,
+    ]
+  );
+
+  useKeyboard(onGlobalKey);
 
   // ── Loading state during session restore ────────────────────────────────
   if (restoring) {
@@ -552,19 +628,19 @@ export function CrashRecoveryApp() {
           break;
 
         case "safe-mode":
-          // Clear crash, enable safe mode
+          // Clear crash, enable safe mode (no network / SSE)
           setCrash(null);
           setSafeMode(true);
           break;
 
         case "report-bug":
-          // Write crash details to $HOME/.hoox/.tui-state/crash.log
+          // Write redacted crash details to $HOME/.hoox/.tui-state/crash.log
           if (crash) {
             const crashLog = [
               `=== Hoox Crash Report ===`,
               `Time: ${new Date().toISOString()}`,
-              `Error: ${crash.message}`,
-              `Stack: ${crash.stack ?? "N/A"}`,
+              `Error: ${redactSecretsInText(crash.message)}`,
+              `Stack: ${crash.stack ? redactSecretsInText(crash.stack) : "N/A"}`,
               `Safe Mode: ${safeMode}`,
               ``,
             ].join("\n");
@@ -583,22 +659,24 @@ export function CrashRecoveryApp() {
     [crash, safeMode]
   );
 
-  // Register unhandled error handler (Bun/Node global handlers)
+  // Register unhandled error handlers — remove only *our* listeners on cleanup
+  // (never process.removeAllListeners, which would strip other libraries).
   useEffect(() => {
-    if (typeof process !== "undefined") {
-      process.on("uncaughtException", (error: Error) => {
-        setCrash(error);
-      });
-      process.on("unhandledRejection", (reason: unknown) => {
-        setCrash(reason instanceof Error ? reason : new Error(String(reason)));
-      });
-    }
+    if (typeof process === "undefined") return;
+
+    const onUncaught = (error: Error) => {
+      setCrash(error);
+    };
+    const onRejection = (reason: unknown) => {
+      setCrash(reason instanceof Error ? reason : new Error(String(reason)));
+    };
+
+    process.on("uncaughtException", onUncaught);
+    process.on("unhandledRejection", onRejection);
 
     return () => {
-      if (typeof process !== "undefined") {
-        process.removeAllListeners("uncaughtException");
-        process.removeAllListeners("unhandledRejection");
-      }
+      process.off("uncaughtException", onUncaught);
+      process.off("unhandledRejection", onRejection);
     };
   }, []);
 

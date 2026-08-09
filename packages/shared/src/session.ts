@@ -61,7 +61,12 @@ const SessionStateFileSchema = z
 // ─── File path ───────────────────────────────────────────────────────────────
 
 const TUI_STATE_DIR = ".tui-state";
-const SESSION_FILE = (() => {
+
+/**
+ * Resolve session.json path at call time (not module load).
+ * Respects HOOX_HOME / HOME changes — important for tests and multi-tenant tools.
+ */
+function getSessionFilePath(): string {
   try {
     const hooxHome = getHooxHome();
     return `${hooxHome}/${TUI_STATE_DIR}/session.json`;
@@ -69,7 +74,7 @@ const SESSION_FILE = (() => {
     // Fallback: use current working directory
     return `${process.cwd()}/${TUI_STATE_DIR}/session.json`;
   }
-})();
+}
 
 // ─── Defaults (used when no saved session exists) ────────────────────────────
 
@@ -104,7 +109,7 @@ export async function saveSession(
       lastData,
       savedAt: new Date().toISOString(),
     };
-    await Bun.write(SESSION_FILE, JSON.stringify(session, null, 2));
+    await Bun.write(getSessionFilePath(), JSON.stringify(session, null, 2));
   } catch (error) {
     // Session save failures are non-fatal — log and continue
     // (write failures may occur if ~/.hoox doesn't exist or is unwritable)
@@ -125,7 +130,7 @@ export async function saveSession(
  */
 export async function restoreSession(): Promise<SessionState> {
   try {
-    const file = Bun.file(SESSION_FILE);
+    const file = Bun.file(getSessionFilePath());
     const exists = await file.exists();
     if (!exists) return { ...DEFAULT_SESSION };
 
@@ -157,6 +162,7 @@ export async function restoreSession(): Promise<SessionState> {
 
 // ─── Validation ──────────────────────────────────────────────────────────────
 
+/** Must stay aligned with `ViewId` in types.ts (16 views). */
 const VALID_VIEW_IDS = new Set<string>([
   "dashboard",
   "workers",
@@ -167,6 +173,13 @@ const VALID_VIEW_IDS = new Set<string>([
   "config-editor",
   "setup-wizard",
   "settings",
+  "queue-depth",
+  "kv-viewer",
+  "secrets-viewer",
+  "db-query",
+  "ai-chat",
+  "edge-topology",
+  "worker-settings",
 ]);
 
 function validateViewId(id: unknown): id is ViewId {

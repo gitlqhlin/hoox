@@ -67,4 +67,26 @@ describe("tui-storage", () => {
       () => undefined
     );
   });
+
+  it("writeJsonState refuses path traversal silently", async () => {
+    // Should not throw to callers; best-effort persistence
+    await expect(
+      writeJsonState("../escape-tui-storage.json", { bad: true })
+    ).resolves.toBeUndefined();
+  });
+
+  it("atomic write leaves no .tmp sibling on success", async () => {
+    await writeJsonState(TEST_FILE, { atomic: true });
+    const path = resolveTuiStatePath(TEST_FILE);
+    const dir = path.slice(0, path.lastIndexOf("/"));
+    const entries = await Array.fromAsync(
+      new Bun.Glob(`${TEST_FILE}*.tmp`).scan({ cwd: dir })
+    );
+    expect(entries.length).toBe(0);
+    const loaded = await readJsonState<{ atomic: boolean } | null>(
+      TEST_FILE,
+      null
+    );
+    expect(loaded).toEqual({ atomic: true });
+  });
 });

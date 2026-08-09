@@ -9,6 +9,10 @@
  *
  * Pure functions (env-read wrappers included) so unit tests don't need a
  * renderer. Never log raw tokens.
+ *
+ * Remote auth is **fail-closed**: REMOTE mode requires Bearer (`HOOX_API_TOKEN`)
+ * and/or Cloudflare Access service-token credentials. CLI fallback is never
+ * used in REMOTE mode.
  */
 
 import {
@@ -25,7 +29,15 @@ export interface TuiConnectionEnv {
   mode: TuiMode;
   apiUrl: string;
   apiHost: string;
+  /** True when `HOOX_API_TOKEN` is non-empty. */
   hasToken: boolean;
+  /** True when CF Access client id + secret are both set. */
+  hasAccessCredentials: boolean;
+  /**
+   * Fail-closed readiness for REMOTE: Bearer and/or Access credentials.
+   * LOCAL always reports true (token optional for wrangler dev).
+   */
+  hasAuth: boolean;
   /** True when CLI fallback is appropriate (local only). */
   allowCliFallback: boolean;
 }
@@ -57,6 +69,26 @@ export function hasApiToken(env: NodeJS.ProcessEnv = process.env): boolean {
   return Boolean(env.HOOX_API_TOKEN?.trim());
 }
 
+/** Whether Cloudflare Access service-token env vars are both present. */
+export function hasAccessCredentials(
+  env: NodeJS.ProcessEnv = process.env
+): boolean {
+  return Boolean(
+    env.CF_ACCESS_CLIENT_ID?.trim() && env.CF_ACCESS_CLIENT_SECRET?.trim()
+  );
+}
+
+/**
+ * Auth presence for fail-closed remote gateways: Bearer and/or Access pair.
+ * LOCAL mode always returns true (auth optional).
+ */
+export function isRemoteAuthReady(
+  env: NodeJS.ProcessEnv = process.env
+): boolean {
+  if (getTuiMode(env) !== "remote") return true;
+  return hasApiToken(env) || hasAccessCredentials(env);
+}
+
 /**
  * Remote HTTP is the source of truth — local CLI `check health` must not
  * mark a remote session as connected when the gateway is down.
@@ -71,11 +103,15 @@ export function resolveTuiConnectionEnv(
 ): TuiConnectionEnv {
   const mode = getTuiMode(env);
   const apiUrl = getApiBase(env);
+  const hasToken = hasApiToken(env);
+  const hasAccess = hasAccessCredentials(env);
   return {
     mode,
     apiUrl,
     apiHost: getApiHost(apiUrl),
-    hasToken: hasApiToken(env),
+    hasToken,
+    hasAccessCredentials: hasAccess,
+    hasAuth: mode === "local" ? true : hasToken || hasAccess,
     allowCliFallback: shouldUseCliFallback(mode),
   };
 }
@@ -94,7 +130,11 @@ export function classifyConnectionError(
     m.includes("http 401") ||
     m.includes("http 403") ||
     m.includes("unauthorized") ||
-    m.includes("forbidden")
+    m.includes("forbidden") ||
+    m.includes("invalid token") ||
+    m.includes("missing authorization") ||
+    m.includes("access denied") ||
+    m.includes("cf-access")
   ) {
     return "auth";
   }
@@ -112,7 +152,9 @@ export function classifyConnectionError(
     m.includes("timeout") ||
     m.includes("abort") ||
     m.includes("fetch failed") ||
-    m.includes("connection")
+    m.includes("connection") ||
+    m.includes("econnreset") ||
+    m.includes("socket hang up")
   ) {
     return "network";
   }
@@ -122,17 +164,25 @@ export function classifyConnectionError(
 /**
  * Human-readable auth status for CLI launch banner (never includes the token).
  */
-export function formatAuthBanner(hasToken: boolean, mode: TuiMode): string {
+export function formatAuthBanner(
+  hasToken: boolean,
+  mode: TuiMode,
+  hasAccess = false
+): string {
+  if (hasToken && hasAccess) {
+    return "set (Bearer + Access)";
+  }
   if (hasToken) return "set (Bearer HOOX_API_TOKEN)";
+  if (hasAccess) return "set (Cloudflare Access service token)";
   if (mode === "remote") {
-    return "missing — remote gateway may reject requests (set HOOX_API_TOKEN)";
+    return "missing — remote gateway may reject requests (set HOOX_API_TOKEN or Access credentials)";
   }
   return "not set (optional for local wrangler dev)";
 }
 
 /** Safe one-line hint when remote auth is missing. */
 export function remoteAuthMissingHint(): string {
-  return "Set HOOX_API_TOKEN (or pass --token) for authenticated remote API access.";
+  return "Set HOOX_API_TOKEN (or pass --token), or CF_ACCESS_CLIENT_ID + CF_ACCESS_CLIENT_SECRET for authenticated remote API access.";
 }
 
 /** Read-only connection snapshot for Settings (never includes secrets). */

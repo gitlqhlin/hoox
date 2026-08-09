@@ -11,7 +11,9 @@ import {
   getApiHost,
   getSettingsConnectionSnapshot,
   getTuiMode,
+  hasAccessCredentials,
   hasApiToken,
+  isRemoteAuthReady,
   resolveTuiConnectionEnv,
   shouldUseCliFallback,
 } from "./tui-connection";
@@ -48,6 +50,46 @@ describe("tui-connection", () => {
     });
   });
 
+  describe("hasAccessCredentials / isRemoteAuthReady", () => {
+    it("requires both Access id and secret", () => {
+      expect(hasAccessCredentials({})).toBe(false);
+      expect(hasAccessCredentials({ CF_ACCESS_CLIENT_ID: "cid" })).toBe(false);
+      expect(
+        hasAccessCredentials({
+          CF_ACCESS_CLIENT_ID: "cid",
+          CF_ACCESS_CLIENT_SECRET: "sec",
+        })
+      ).toBe(true);
+    });
+
+    it("local mode is always auth-ready", () => {
+      expect(isRemoteAuthReady({})).toBe(true);
+    });
+
+    it("remote fail-closed without credentials", () => {
+      expect(isRemoteAuthReady({ HOOX_TUI_MODE: "remote" })).toBe(false);
+    });
+
+    it("remote ready with Bearer only", () => {
+      expect(
+        isRemoteAuthReady({
+          HOOX_TUI_MODE: "remote",
+          HOOX_API_TOKEN: "tok",
+        })
+      ).toBe(true);
+    });
+
+    it("remote ready with Access only (no Bearer)", () => {
+      expect(
+        isRemoteAuthReady({
+          HOOX_TUI_MODE: "remote",
+          CF_ACCESS_CLIENT_ID: "cid",
+          CF_ACCESS_CLIENT_SECRET: "sec",
+        })
+      ).toBe(true);
+    });
+  });
+
   describe("shouldUseCliFallback", () => {
     it("allows CLI only in local mode", () => {
       expect(shouldUseCliFallback("local")).toBe(true);
@@ -65,7 +107,30 @@ describe("tui-connection", () => {
       expect(env.mode).toBe("remote");
       expect(env.apiHost).toBe("hoox.example.workers.dev");
       expect(env.hasToken).toBe(true);
+      expect(env.hasAuth).toBe(true);
       expect(env.allowCliFallback).toBe(false);
+    });
+
+    it("remote without credentials is fail-closed (hasAuth false)", () => {
+      const env = resolveTuiConnectionEnv({
+        HOOX_TUI_MODE: "remote",
+        HOOX_API_URL: "https://mgmt.example.com",
+      });
+      expect(env.hasToken).toBe(false);
+      expect(env.hasAccessCredentials).toBe(false);
+      expect(env.hasAuth).toBe(false);
+      expect(env.allowCliFallback).toBe(false);
+    });
+
+    it("remote Access-only reports hasAuth without hasToken", () => {
+      const env = resolveTuiConnectionEnv({
+        HOOX_TUI_MODE: "remote",
+        CF_ACCESS_CLIENT_ID: "cid",
+        CF_ACCESS_CLIENT_SECRET: "sec",
+      });
+      expect(env.hasToken).toBe(false);
+      expect(env.hasAccessCredentials).toBe(true);
+      expect(env.hasAuth).toBe(true);
     });
   });
 
@@ -75,6 +140,7 @@ describe("tui-connection", () => {
         "auth"
       );
       expect(classifyConnectionError("HTTP 403: Forbidden")).toBe("auth");
+      expect(classifyConnectionError("CF-Access denied")).toBe("auth");
     });
     it("detects rate limits", () => {
       expect(classifyConnectionError("API rate limited — backing off")).toBe(
@@ -85,6 +151,7 @@ describe("tui-connection", () => {
       expect(
         classifyConnectionError("Network request failed: ECONNREFUSED")
       ).toBe("network");
+      expect(classifyConnectionError("socket hang up")).toBe("network");
     });
     it("unknown for empty", () => {
       expect(classifyConnectionError(null)).toBe("unknown");
@@ -95,6 +162,9 @@ describe("tui-connection", () => {
     it("describes missing remote token", () => {
       expect(formatAuthBanner(false, "remote")).toContain("missing");
       expect(formatAuthBanner(true, "remote")).toContain("set");
+    });
+    it("mentions Access when only Access is set", () => {
+      expect(formatAuthBanner(false, "remote", true)).toContain("Access");
     });
   });
 

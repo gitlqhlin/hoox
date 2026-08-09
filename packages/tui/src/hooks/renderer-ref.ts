@@ -12,7 +12,8 @@ import type { CliRenderer } from "@opentui/core";
 
 let _renderer: CliRenderer | null = null;
 
-export function setRendererRef(renderer: CliRenderer): void {
+/** Install (or clear with `null`) the process-wide CLI renderer singleton. */
+export function setRendererRef(renderer: CliRenderer | null): void {
   _renderer = renderer;
 }
 

@@ -17,7 +17,11 @@
 import { describe, it, expect, beforeEach, afterEach } from "bun:test";
 import { createRoot } from "@opentui/react";
 import { createCliRenderer } from "@opentui/core";
-import { QueueDepthView } from "./queue-depth";
+import {
+  QueueDepthView,
+  sortQueuesByPressure,
+  REFRESH_INTERVAL_MS,
+} from "./queue-depth";
 import { Colors } from "@hoox-sh/hoox-shared";
 import { useUIStore } from "@hoox-sh/hoox-shared/stores/ui-store";
 import {
@@ -25,6 +29,7 @@ import {
   resetCliBridgeDouble,
   failCliResult,
 } from "../../test-utils";
+import type { QueueDepth } from "../../services/cli-bridge";
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
 
@@ -122,10 +127,49 @@ describe("QueueDepthView", () => {
   // ── Refresh interval contract ─────────────────────────────────────────
 
   it("auto-refreshes every 5 seconds while active", () => {
-    // 5s is the documented REFRESH_INTERVAL_MS — captured here so a
-    // careless refactor that bumps the interval trips a test.
-    const REFRESH_INTERVAL_MS = 5_000;
     expect(REFRESH_INTERVAL_MS).toBe(5_000);
+  });
+
+  it("sorts queues by pressure: critical → backlogged → paused → healthy", () => {
+    const ts = new Date().toISOString();
+    const queues: QueueDepth[] = [
+      {
+        queueName: "z-ok",
+        depth: 10,
+        max: 1000,
+        status: "healthy",
+        producers: 1,
+        consumers: 1,
+        paused: false,
+        timestamp: ts,
+      },
+      {
+        queueName: "a-crit",
+        depth: 900,
+        max: 1000,
+        status: "critical",
+        producers: 1,
+        consumers: 1,
+        paused: false,
+        timestamp: ts,
+      },
+      {
+        queueName: "m-back",
+        depth: 200,
+        max: 1000,
+        status: "backlogged",
+        producers: 1,
+        consumers: 1,
+        paused: false,
+        timestamp: ts,
+      },
+    ];
+    const sorted = sortQueuesByPressure(queues);
+    expect(sorted.map((q) => q.queueName)).toEqual([
+      "a-crit",
+      "m-back",
+      "z-ok",
+    ]);
   });
 
   // ── Pattern contract for subsequent views ──────────────────────────────

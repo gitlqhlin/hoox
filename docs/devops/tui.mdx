@@ -55,7 +55,7 @@ Stores are **not** under `packages/tui/src/stores` for production code — they 
 | Service | `packages/shared/src/stores/service-store.ts` | workers, trades, logs, alerts, connection, SSE |
 | Config | `packages/shared/src/stores/config-store.ts` | theme (dark-only in TUI), refresh interval, notifications, shortcuts |
 
-Session persistence: `$HOME/.hoox/.tui-state/session.json` via shared `restoreSession` / `saveSession`.
+Session persistence: `$HOME/.hoox/.tui-state/session.json` via shared `restoreSession` / `saveSession`. All **16** `ViewId` values are valid for restore; unknown IDs fall back to `dashboard`.
 
 ### Navigation registry & colors
 
@@ -82,7 +82,7 @@ Must stay aligned with `ViewId` in `packages/shared/src/types.ts`, sidebar items
 
 | ViewId | Component | Primary data source |
 | ------ | --------- | ------------------- |
-| `dashboard` | `DashboardView` | `fetchWorkers`, `monitorStatus`, `checkFix`, `agentHealthCheck`, kill-switch |
+| `dashboard` | `DashboardView` | `fetchWorkers`, `monitorStatus`, `checkFix`, `agentHealthCheck`, `pyneHealthCheck`, kill-switch |
 | `workers` | `WorkersOverview` | store workers + CLI deploy/logs/repair |
 | `worker-detail` | `WorkerDetail` | `selectedWorkerId`, `configShow`, `workerLogs` |
 | `trade-monitor` | `TradeMonitor` | `tradeStream` (SSE `streamTrades`) |
@@ -165,14 +165,15 @@ Wired at startup (`main.tsx`), connection path (`app.tsx`), and CLI bridge execs
 
 1. Restore session → set view / sidebar  
 2. `fetchWorkers()` (HTTP) → on failure only, `cliBridge.monitorStatus()` (CLI fallback)  
-3. Fire-and-forget `streamTrades()` + `streamLogs()` (SSE; silent if API down)
+3. Fire-and-forget `streamTrades()` + `streamLogs()` (SSE; silent if API down). Store retains abort handles; `stopStreams()` tears them down (re-subscribe replaces prior subscriptions).
 
 ### CLI bridge (`src/services/cli-bridge`)
 
 All mutating / diagnostic operator actions go through the `hoox` binary with timeout, abort tags, and structured `CliErrorDetails` sunk to the service store for the status bar expand panel.
 
-Notable methods: `deployAll`, `deployWorker`, `repairWorker`, `rebuild`, `checkHealth`, `checkFix`, `checkSetup`, `monitorStatus`, `monitorKillSwitch`, `monitorQueueDepth`, `workerLogs`, `configShow`, `configValidate`, `configKvList`, `configKvGet`, `configSecretsList`, `dbQuery`, `agentHealthCheck`.
+Notable methods: `deployAll`, `deployWorker`, `repairWorker`, `rebuild`, `checkHealth`, `checkFix`, `checkSetup`, `monitorStatus`, `monitorKillSwitch`, `monitorQueueDepth`, `workerLogs`, `configShow`, `configValidate`, `configKvList`, `configKvGet`, `configSecretsList`, `dbQuery`, `agentHealthCheck`, `pyneHealthCheck`.
 
+Dashboard surfaces **agent** health (`agentHealthCheck`) and **PYNE** edge health (`pyneHealthCheck` → `PyneHealthSection`).  
 `checkHealthFix` exists on the bridge but is unused by views (dashboard/settings use `checkFix`).
 
 ---
@@ -211,7 +212,7 @@ E2E smoke (`test/e2e/smoke.test.ts`) requires an interactive TTY; otherwise it s
 
 - **Runtime topology view** reads `graph-metadata.json` (repo root), resolved from CWD walk-up or package-relative path.  
 - **Code graph** (`graph.json` / `graph.dot`) is produced by `bun run graph` (`scripts/extract-graph.ts`).  
-- All 15 view exports are present as function nodes under `packages/tui:…/views/…`.  
+- All **16** view exports are present as function nodes under `packages/tui:…/views/…` (plus dashboard subpanels).  
 - Regenerate after large refactors: `bun run graph` (~25s). Metadata should include every worker under `workers/*`.
 
 ---

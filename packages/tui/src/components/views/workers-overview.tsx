@@ -24,7 +24,7 @@
  * Wrapped in ScrollBox for overflow when workers exceed viewport height.
  * Follows TUI Patterns 1 (View Composition), 2 (Store Subscription), 8 (ScrollBox).
  */
-import { useState, useMemo, useCallback, useEffect } from "react";
+import { useState, useMemo, useCallback, useEffect, useRef } from "react";
 import { useKeyboard } from "@opentui/react";
 import { Colors } from "@hoox-sh/hoox-shared";
 import { useServiceStore } from "@hoox-sh/hoox-shared";
@@ -35,6 +35,7 @@ import { Spinner, EmptyState } from "../shared/spinner";
 import { Panel } from "../shared/panel";
 import { ViewHeader } from "../shared/view-header";
 import { cliBridge } from "../../services/cli-bridge";
+import { redactSecretsInText } from "../../services/dev-log";
 import type { WorkerInfo } from "@hoox-sh/hoox-shared";
 import { showConfirm } from "../ui/dialog";
 import type { DialogHandle } from "../ui/dialog";
@@ -204,6 +205,15 @@ export function WorkersOverview({ dialog }: WorkersOverviewProps = {}) {
   // ── Deploy state ────────────────────────────────────────────────────────
   const [deployingWorker, setDeployingWorker] = useState<string | null>(null);
   const [deployProgress, setDeployProgress] = useState("");
+  const mountedRef = useRef(true);
+  const deployingRef = useRef(false);
+
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => {
+      mountedRef.current = false;
+    };
+  }, []);
 
   // ── Store subscriptions (selectors for performance) ─────────────────────
   const workers = useServiceStore((s) => s.workers);
@@ -255,7 +265,7 @@ export function WorkersOverview({ dialog }: WorkersOverviewProps = {}) {
                     : "down";
               return {
                 id: String(w.id ?? w.worker ?? `worker-${i}`),
-                name: String(w.worker ?? `worker-${i}`),
+                name: String(w.worker ?? w.name ?? `worker-${i}`),
                 status: status as WorkerInfo["status"],
                 uptime: Number(w.uptime ?? 0) || 0,
                 cpu: Number(w.cpu ?? 0) || 0,
@@ -321,6 +331,11 @@ export function WorkersOverview({ dialog }: WorkersOverviewProps = {}) {
   // Clamp focusedIndex when worker list changes
   const safeIndex = Math.min(focusedIndex, maxIndex);
 
+  // Keep focus in range without thrashing setState every render
+  useEffect(() => {
+    setFocusedIndex((i) => Math.min(i, maxIndex));
+  }, [maxIndex]);
+
   // ── View-local keyboard: 2D grid navigation ─────────────────────────────
   useKeyboard((key) => {
     switch (key.name) {
@@ -349,41 +364,45 @@ export function WorkersOverview({ dialog }: WorkersOverviewProps = {}) {
 
   // ── Action Handlers ─────────────────────────────────────────────────────
   const onProgress = useCallback((chunk: string) => {
-    setDeployProgress((prev) => (prev + chunk).slice(-2000));
+    // Scrub tokens that may appear in wrangler/CLI progress streams
+    const safe = redactSecretsInText(chunk);
+    setDeployProgress((prev) => (prev + safe).slice(-2000));
   }, []);
 
-  const handleLogs = useCallback(
-    async (worker: WorkerInfo) => {
-      if (deployingWorker) return;
-      try {
-        const result = await cliBridge.workerLogs(worker.name);
-        useServiceStore.getState().addAlert({
-          id: `logs-${Date.now()}-${worker.name}`,
-          type: "logs",
-          severity: result.success ? "info" : "warning",
-          message: result.success
-            ? `${worker.name} logs retrieved (${(result.duration / 1000).toFixed(1)}s)`
-            : `${worker.name} logs failed: ${result.stderr || result.stdout || "unknown error"}`,
-          timestamp: Date.now(),
-          acknowledged: false,
-        });
-      } catch (err) {
-        useServiceStore.getState().addAlert({
-          id: `logs-err-${Date.now()}`,
-          type: "logs",
-          severity: "warning",
-          message: `${worker.name} logs error: ${err instanceof Error ? err.message : String(err)}`,
-          timestamp: Date.now(),
-          acknowledged: false,
-        });
-      }
-    },
-    [deployingWorker]
-  );
+  const handleLogs = useCallback(async (worker: WorkerInfo) => {
+    if (deployingRef.current) return;
+    try {
+      const result = await cliBridge.workerLogs(worker.name);
+      if (!mountedRef.current) return;
+      const failDetail = redactSecretsInText(
+        result.stderr || result.stdout || "unknown error"
+      );
+      useServiceStore.getState().addAlert({
+        id: `logs-${Date.now()}-${worker.name}`,
+        type: "logs",
+        severity: result.success ? "info" : "warning",
+        message: result.success
+          ? `${worker.name} logs retrieved (${(result.duration / 1000).toFixed(1)}s)`
+          : `${worker.name} logs failed: ${failDetail}`,
+        timestamp: Date.now(),
+        acknowledged: false,
+      });
+    } catch (err) {
+      if (!mountedRef.current) return;
+      useServiceStore.getState().addAlert({
+        id: `logs-err-${Date.now()}`,
+        type: "logs",
+        severity: "warning",
+        message: `${worker.name} logs error: ${err instanceof Error ? err.message : String(err)}`,
+        timestamp: Date.now(),
+        acknowledged: false,
+      });
+    }
+  }, []);
 
   const handleDeploy = useCallback(
     async (worker: WorkerInfo) => {
-      if (deployingWorker) return;
+      if (deployingRef.current) return;
       // Fail closed: never deploy without an interactive confirm surface.
       if (!dialog) {
         useServiceStore.getState().addAlert({
@@ -402,25 +421,31 @@ export function WorkersOverview({ dialog }: WorkersOverviewProps = {}) {
         confirmLabel: "Deploy",
         cancelLabel: "Cancel",
       });
-      if (!confirmed) return;
+      if (!confirmed || !mountedRef.current) return;
 
+      deployingRef.current = true;
       setDeployingWorker(worker.name);
       setDeployProgress("");
       try {
         const result = await cliBridge.deployWorker(worker.name, onProgress);
+        if (!mountedRef.current) return;
         const store = useServiceStore.getState();
+        const failDetail = redactSecretsInText(
+          result.stderr || result.stdout || "unknown error"
+        );
         store.addAlert({
           id: `deploy-${Date.now()}-${worker.name}`,
           type: "deploy",
           severity: result.success ? "info" : "warning",
           message: result.success
             ? `${worker.name} deployed (${(result.duration / 1000).toFixed(1)}s)`
-            : `${worker.name} deploy failed: ${result.stderr || result.stdout || "unknown error"}`,
+            : `${worker.name} deploy failed: ${failDetail}`,
           timestamp: Date.now(),
           acknowledged: false,
         });
         if (result.success) await store.fetchWorkers();
       } catch (err) {
+        if (!mountedRef.current) return;
         useServiceStore.getState().addAlert({
           id: `deploy-err-${Date.now()}`,
           type: "deploy",
@@ -430,15 +455,16 @@ export function WorkersOverview({ dialog }: WorkersOverviewProps = {}) {
           acknowledged: false,
         });
       } finally {
-        setDeployingWorker(null);
+        deployingRef.current = false;
+        if (mountedRef.current) setDeployingWorker(null);
       }
     },
-    [deployingWorker, onProgress, dialog]
+    [onProgress, dialog]
   );
 
   const handleRestart = useCallback(
     async (worker: WorkerInfo) => {
-      if (deployingWorker) return;
+      if (deployingRef.current) return;
       if (!dialog) {
         useServiceStore.getState().addAlert({
           id: `restart-noconfirm-${Date.now()}`,
@@ -456,25 +482,31 @@ export function WorkersOverview({ dialog }: WorkersOverviewProps = {}) {
         confirmLabel: "Restart",
         cancelLabel: "Cancel",
       });
-      if (!confirmed) return;
+      if (!confirmed || !mountedRef.current) return;
 
+      deployingRef.current = true;
       setDeployingWorker(worker.name);
       setDeployProgress("");
       try {
         const result = await cliBridge.repairWorker(worker.name, onProgress);
+        if (!mountedRef.current) return;
         const store = useServiceStore.getState();
+        const failDetail = redactSecretsInText(
+          result.stderr || result.stdout || "unknown error"
+        );
         store.addAlert({
           id: `restart-${Date.now()}-${worker.name}`,
           type: "restart",
           severity: result.success ? "info" : "warning",
           message: result.success
             ? `${worker.name} restarted (${(result.duration / 1000).toFixed(1)}s)`
-            : `${worker.name} restart failed: ${result.stderr || result.stdout || "unknown error"}`,
+            : `${worker.name} restart failed: ${failDetail}`,
           timestamp: Date.now(),
           acknowledged: false,
         });
         if (result.success) await store.fetchWorkers();
       } catch (err) {
+        if (!mountedRef.current) return;
         useServiceStore.getState().addAlert({
           id: `restart-err-${Date.now()}`,
           type: "restart",
@@ -484,20 +516,23 @@ export function WorkersOverview({ dialog }: WorkersOverviewProps = {}) {
           acknowledged: false,
         });
       } finally {
-        setDeployingWorker(null);
+        deployingRef.current = false;
+        if (mountedRef.current) setDeployingWorker(null);
       }
     },
-    [deployingWorker, onProgress, dialog]
+    [onProgress, dialog]
   );
 
   // ── Escape hatch: empty state ───────────────────────────────────────────
   if (workers.length === 0) {
     return (
       <ErrorBoundary viewName="Workers Overview">
-        <box flexDirection="column" flexGrow={1} padding={2} gap={1}>
-          <text fg={Colors.accent} bold>
-            Workers
-          </text>
+        <box flexDirection="column" flexGrow={1} padding={1} gap={1}>
+          <ViewHeader
+            title="Workers"
+            showDivider={false}
+            meta={<text fg={Colors.muted}>0 total</text>}
+          />
           <EmptyState
             message="No workers connected. Check your hoox-setup deployment."
             icon="🔌"
@@ -556,7 +591,7 @@ export function WorkersOverview({ dialog }: WorkersOverviewProps = {}) {
             <text fg={Colors.accent}>DEPLOYING {deployingWorker}...</text>
             {deployProgress && (
               <text fg={Colors.muted} dim>
-                {deployProgress.slice(-200)}
+                {redactSecretsInText(deployProgress.slice(-200))}
               </text>
             )}
           </box>

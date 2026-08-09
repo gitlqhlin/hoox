@@ -20,6 +20,7 @@
  */
 
 import type { ReactNode } from "react";
+import type { ViewId } from "@hoox-sh/hoox-shared";
 
 export {
   cliBridgeDouble,
@@ -34,10 +35,33 @@ export {
   resetNetworkDoubles,
   setMockApiData,
   setMockApiFailure,
+  setMockApiDelay,
   emitSseEvent,
+  abortAllSseSubscriptions,
   mockApiData,
   sseCallbacks,
+  sseSubscriptions,
 } from "./network-test-double";
+
+/** Canonical 16 ViewIds — keep aligned with types.ts + view-registry. */
+export const ALL_VIEW_IDS: ViewId[] = [
+  "dashboard",
+  "workers",
+  "worker-detail",
+  "trade-monitor",
+  "logs-viewer",
+  "service-manager",
+  "config-editor",
+  "setup-wizard",
+  "settings",
+  "queue-depth",
+  "kv-viewer",
+  "secrets-viewer",
+  "db-query",
+  "ai-chat",
+  "edge-topology",
+  "worker-settings",
+];
 
 // ── Type Aliases ─────────────────────────────────────────────────────────────
 

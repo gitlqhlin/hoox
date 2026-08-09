@@ -41,11 +41,11 @@
  *   - Only secret names, inferred types, and sources are shown
  *   - No ability to reveal or copy secret values
  */
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useKeyboard } from "@opentui/react";
 import { Colors, useUIStore } from "@hoox-sh/hoox-shared";
 import { ErrorBoundary } from "../shared/error-boundary";
-import { Spinner } from "../shared/spinner";
+import { Spinner, EmptyState } from "../shared/spinner";
 import { ViewHeader } from "../shared/view-header";
 import { cliBridge } from "../../services/cli-bridge";
 import type {
@@ -54,7 +54,22 @@ import type {
 } from "../../services/cli-bridge";
 
 /** Auto-refresh interval in milliseconds. */
-const REFRESH_INTERVAL_MS = 5_000;
+export const REFRESH_INTERVAL_MS = 5_000;
+
+/** Cap rendered secret rows for large worker graphs. */
+export const MAX_VISIBLE_SECRETS = 200;
+
+const SEARCH_DEBOUNCE_MS = 150;
+
+/** Case-insensitive name filter — values are never involved. */
+export function filterSecrets(
+  secrets: readonly SecretMetadata[],
+  search: string
+): SecretMetadata[] {
+  const q = search.trim().toLowerCase();
+  if (q.length === 0) return secrets as SecretMetadata[];
+  return secrets.filter((s) => s.name.toLowerCase().includes(q));
+}
 
 /**
  * Format a secret type for display in the TYPE column.
@@ -201,17 +216,38 @@ export function SecretsViewer() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [search, setSearch] = useState("");
+  const [debouncedSearch, setDebouncedSearch] = useState("");
   const [searchActive, setSearchActive] = useState(false);
+  const searchTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const listGenRef = useRef(0);
 
   const [selectedSecretName, setSelectedSecretName] = useState<string | null>(
     null
   );
 
-  // ── Fetch handler ─────────────────────────────────────────────────────────
-  const refresh = useCallback(async () => {
-    setLoading(true);
-    setError(null);
+  // Debounce search filter
+  useEffect(() => {
+    if (searchTimerRef.current) clearTimeout(searchTimerRef.current);
+    searchTimerRef.current = setTimeout(() => {
+      setDebouncedSearch(search);
+      searchTimerRef.current = null;
+    }, SEARCH_DEBOUNCE_MS);
+    return () => {
+      if (searchTimerRef.current) {
+        clearTimeout(searchTimerRef.current);
+        searchTimerRef.current = null;
+      }
+    };
+  }, [search]);
+
+  // ── Fetch handler — metadata only; NEVER requests secret values ───────────
+  const refresh = useCallback(async (opts?: { soft?: boolean }) => {
+    const soft = opts?.soft === true;
+    const gen = ++listGenRef.current;
+    if (!soft) setLoading(true);
+    // Security: only configSecretsList (names/types). No get/reveal API.
     const result = await cliBridge.configSecretsList();
+    if (gen !== listGenRef.current) return;
     if (result.success && result.data) {
       setSnapshot(result.data);
       setError(null);
@@ -221,44 +257,33 @@ export function SecretsViewer() {
     setLoading(false);
   }, []);
 
-  // Initial load on mount.
+  // Initial load on mount + invalidate in-flight on unmount.
   useEffect(() => {
-    let cancelled = false;
-    const run = async () => {
-      if (cancelled) return;
-      setLoading(true);
-      setError(null);
-      const result = await cliBridge.configSecretsList();
-      if (cancelled) return;
-      if (result.success && result.data) {
-        setSnapshot(result.data);
-      } else {
-        setError(result.stderr || result.stdout || "Failed to read secrets");
-      }
-      if (!cancelled) setLoading(false);
-    };
-    void run();
+    void refresh({ soft: false });
     return () => {
-      cancelled = true;
+      listGenRef.current += 1;
     };
-  }, []);
+  }, [refresh]);
 
-  // Auto-refresh every 5s while the view is the active view.
+  // Auto-refresh every 5s while the view is the active view (soft = no flicker).
   useEffect(() => {
     if (!isActive) return;
     const handle = setInterval(() => {
-      void refresh();
+      void refresh({ soft: true });
     }, REFRESH_INTERVAL_MS);
     return () => clearInterval(handle);
   }, [isActive, refresh]);
 
   // ── Derived data ───────────────────────────────────────────────────────────
   const allSecrets = snapshot?.secrets ?? [];
-  const filteredSecrets = useMemo(() => {
-    const q = search.trim().toLowerCase();
-    if (q.length === 0) return allSecrets;
-    return allSecrets.filter((s) => s.name.toLowerCase().includes(q));
-  }, [allSecrets, search]);
+  const filteredSecrets = useMemo(
+    () => filterSecrets(allSecrets, debouncedSearch),
+    [allSecrets, debouncedSearch]
+  );
+  const visibleSecrets = useMemo(
+    () => filteredSecrets.slice(0, MAX_VISIBLE_SECRETS),
+    [filteredSecrets]
+  );
 
   const selectedSecret = useMemo(() => {
     if (!selectedSecretName) return null;
@@ -278,21 +303,21 @@ export function SecretsViewer() {
       return;
     }
     if (key.name === "up") {
-      if (filteredSecrets.length === 0) return;
+      if (visibleSecrets.length === 0) return;
       const idx = selectedSecretName
-        ? filteredSecrets.findIndex((s) => s.name === selectedSecretName)
+        ? visibleSecrets.findIndex((s) => s.name === selectedSecretName)
         : -1;
       const next = Math.max(0, idx - 1);
-      setSelectedSecretName(filteredSecrets[next]?.name ?? null);
+      setSelectedSecretName(visibleSecrets[next]?.name ?? null);
       return;
     }
     if (key.name === "down") {
-      if (filteredSecrets.length === 0) return;
+      if (visibleSecrets.length === 0) return;
       const idx = selectedSecretName
-        ? filteredSecrets.findIndex((s) => s.name === selectedSecretName)
+        ? visibleSecrets.findIndex((s) => s.name === selectedSecretName)
         : -1;
-      const next = Math.min(filteredSecrets.length - 1, idx + 1);
-      setSelectedSecretName(filteredSecrets[next]?.name ?? null);
+      const next = Math.min(visibleSecrets.length - 1, idx + 1);
+      setSelectedSecretName(visibleSecrets[next]?.name ?? null);
       return;
     }
   });
@@ -309,9 +334,14 @@ export function SecretsViewer() {
               <text fg={Colors.muted} dim>
                 {`${allSecrets.length} secret${allSecrets.length === 1 ? "" : "s"}`}
               </text>
-              {search.length > 0 ? (
+              {debouncedSearch.length > 0 ? (
                 <text fg={Colors.info} dim>
                   {`(${filteredSecrets.length} match${filteredSecrets.length === 1 ? "" : "es"})`}
+                </text>
+              ) : null}
+              {filteredSecrets.length > MAX_VISIBLE_SECRETS ? (
+                <text fg={Colors.muted} dim>
+                  {`showing ${MAX_VISIBLE_SECRETS}`}
                 </text>
               ) : null}
               <text fg={Colors.warning} bold>
@@ -405,28 +435,24 @@ export function SecretsViewer() {
                 </text>
               </box>
             ) : allSecrets.length === 0 ? (
-              <box padding={1} flexDirection="column" gap={0}>
-                <text fg={Colors.muted} dim>
-                  No secrets declared. Add secrets to wrangler.jsonc and use
-                </text>
-                <text fg={Colors.accent}>hoox config secrets set</text>
-                <text fg={Colors.muted} dim>
-                  to manage them.
-                </text>
+              <box padding={1} flexGrow={1}>
+                <EmptyState
+                  message="No secrets declared."
+                  suggestion="Add secrets to wrangler.jsonc · hoox config secrets set"
+                  icon="🔐"
+                />
               </box>
             ) : filteredSecrets.length === 0 ? (
-              <box padding={1} flexDirection="row" gap={1}>
-                <text fg={Colors.muted} dim>
-                  {`No secrets match "${search}". Press`}
-                </text>
-                <text fg={Colors.accent}>/</text>
-                <text fg={Colors.muted} dim>
-                  to clear.
-                </text>
+              <box padding={1} flexGrow={1}>
+                <EmptyState
+                  message={`No secrets match "${search}".`}
+                  suggestion="Press / to clear."
+                  icon="🔍"
+                />
               </box>
             ) : (
               <scrollbox width="100%" flexGrow={1}>
-                {filteredSecrets.map((s) => (
+                {visibleSecrets.map((s) => (
                   <SecretRow
                     key={s.name}
                     secret={s}

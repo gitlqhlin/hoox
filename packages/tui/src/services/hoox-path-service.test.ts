@@ -140,6 +140,21 @@ describe("hoox-path-service", () => {
       // Leading slash is stripped and treated as relative
       expect(path).toBe(join(base, "session.json"));
     });
+
+    it("rejects path traversal with .. segments", () => {
+      expect(() => resolveTuiStatePath("../escape.json")).toThrow(
+        /escapes TUI state directory/
+      );
+      expect(() => resolveTuiStatePath("foo/../../etc/passwd")).toThrow(
+        /escapes TUI state directory/
+      );
+    });
+
+    it("keeps nested relative paths under .tui-state", () => {
+      const path = resolveTuiStatePath("a/b/c.json");
+      expect(path.startsWith(getTuiStateDir())).toBe(true);
+      expect(path.endsWith(join("a", "b", "c.json"))).toBe(true);
+    });
   });
 
   // ── resolveHooxHomePath ──────────────────────────────────────────────────

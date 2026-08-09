@@ -17,7 +17,12 @@
  *   - String literals and comments are stripped before keyword check
  */
 import { describe, it, expect } from "bun:test";
-import { validateReadOnlySql, type SqlValidationResult } from "./cli-bridge";
+import {
+  validateReadOnlySql,
+  tryParseJsonLoose,
+  sanitizeCliArgsForLog,
+  type SqlValidationResult,
+} from "./cli-bridge";
 
 // ─── Helper ───────────────────────────────────────────────────────────────────
 
@@ -349,5 +354,53 @@ describe("validateReadOnlySql — edge cases", () => {
 
   it("handles doubled single quotes (SQL standard escape)", () => {
     expect(isValid("SELECT 'it''s fine' FROM users")).toBe(true);
+  });
+});
+
+// ─── Robust JSON + secret redaction helpers ───────────────────────────────────
+
+describe("tryParseJsonLoose", () => {
+  it("parses clean JSON", () => {
+    expect(tryParseJsonLoose('{"ok":true}')).toEqual({ ok: true });
+    expect(tryParseJsonLoose("[1,2]")).toEqual([1, 2]);
+  });
+
+  it("parses JSON after leading noise lines", () => {
+    const noisy = 'Fetching queues…\n{\n  "queues": []\n}\n';
+    expect(tryParseJsonLoose(noisy)).toEqual({ queues: [] });
+  });
+
+  it("returns null on empty or garbage", () => {
+    expect(tryParseJsonLoose("")).toBeNull();
+    expect(tryParseJsonLoose("not json at all")).toBeNull();
+  });
+});
+
+describe("sanitizeCliArgsForLog", () => {
+  it("redacts values after set", () => {
+    const sanitized = sanitizeCliArgsForLog([
+      "config",
+      "kv",
+      "set",
+      "OPENAI_API_KEY",
+      "sk-live-super-secret",
+    ]);
+    expect(sanitized).toEqual([
+      "config",
+      "kv",
+      "set",
+      "OPENAI_API_KEY",
+      "[redacted]",
+    ]);
+    expect(sanitized.join(" ")).not.toContain("sk-live");
+  });
+
+  it("redacts Bearer tokens in free-form args", () => {
+    const sanitized = sanitizeCliArgsForLog([
+      "deploy",
+      "Authorization: Bearer abcdefghijklmnop",
+    ]);
+    expect(sanitized[1]).toContain("[redacted]");
+    expect(sanitized.join(" ")).not.toContain("abcdefghijklmnop");
   });
 });
