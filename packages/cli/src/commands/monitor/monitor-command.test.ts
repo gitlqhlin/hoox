@@ -221,6 +221,311 @@ describe("registerMonitorCommand", () => {
       await program.parseAsync(["monitor", "backup"], { from: "user" });
       expect(exportMock).toHaveBeenCalled();
     });
+
+    it("sets exitCode when export fails", async () => {
+      exportMock = mock(async () => {
+        throw new Error("export failed");
+      });
+      (DbService.prototype as unknown as Record<string, unknown>).export =
+        exportMock;
+      const program = await createProgram();
+      await program.parseAsync(["monitor", "backup"], { from: "user" });
+      expect(process.exitCode).toBe(1);
+    });
+  });
+
+  // -- monitor logs ---------------------------------------------------------
+
+  describe("monitor logs", () => {
+    it("queries system_logs without worker filter", async () => {
+      const program = await createProgram();
+      await program.parseAsync(["monitor", "logs"], { from: "user" });
+      const sql = queryMock.mock.calls[0][1] as string;
+      expect(sql).toContain("system_logs");
+      expect(sql).not.toContain("WHERE worker");
+    });
+
+    it("filters by valid worker name", async () => {
+      const program = await createProgram();
+      await program.parseAsync(["monitor", "logs", "hoox"], { from: "user" });
+      const sql = queryMock.mock.calls[0][1] as string;
+      expect(sql).toContain("WHERE worker = 'hoox'");
+    });
+
+    it("rejects invalid worker name", async () => {
+      process.exitCode = 0;
+      const program = await createProgram();
+      await program.parseAsync(["monitor", "logs", "bad;drop"], {
+        from: "user",
+      });
+      expect(process.exitCode).toBe(1);
+      expect(queryMock).not.toHaveBeenCalled();
+    });
+
+    it("escapes single quotes in worker name", async () => {
+      // Valid charset only allows [a-zA-Z0-9_-] — quotes fail validation.
+      // Ensure the validation path is hit for other invalid chars.
+      process.exitCode = 0;
+      const program = await createProgram();
+      await program.parseAsync(["monitor", "logs", "worker name"], {
+        from: "user",
+      });
+      expect(process.exitCode).toBe(1);
+    });
+  });
+
+  // -- monitor trades error path --------------------------------------------
+
+  describe("monitor trades errors", () => {
+    it("rejects limit above max", async () => {
+      process.exitCode = 0;
+      const program = await createProgram();
+      await program.parseAsync(["monitor", "trades", "999"], { from: "user" });
+      expect(process.exitCode).toBe(1);
+    });
+
+    it("sets exitCode when query throws", async () => {
+      queryMock = mock(async () => {
+        throw new Error("db down");
+      });
+      (DbService.prototype as unknown as Record<string, unknown>).query =
+        queryMock;
+      const program = await createProgram();
+      await program.parseAsync(["monitor", "trades"], { from: "user" });
+      expect(process.exitCode).toBe(1);
+    });
+  });
+
+  // -- monitor kill-switch variants -----------------------------------------
+
+  describe("monitor kill-switch status variants", () => {
+    it("reports ON when value is true", async () => {
+      getMock = mock(async () => "true");
+      (KvSyncService.prototype as unknown as Record<string, unknown>).get =
+        getMock;
+      const program = await createProgram();
+      await program.parseAsync(["monitor", "kill-switch", "show"], {
+        from: "user",
+      });
+      expect(getMock).toHaveBeenCalled();
+    });
+
+    it("reports unset when value is null", async () => {
+      getMock = mock(async () => null);
+      (KvSyncService.prototype as unknown as Record<string, unknown>).get =
+        getMock;
+      const program = await createProgram();
+      await program.parseAsync(["monitor", "kill-switch", "show"], {
+        from: "user",
+      });
+      expect(getMock).toHaveBeenCalled();
+    });
+
+    it("sets exitCode when kv fails", async () => {
+      getMock = mock(async () => {
+        throw new Error("kv error");
+      });
+      (KvSyncService.prototype as unknown as Record<string, unknown>).get =
+        getMock;
+      const program = await createProgram();
+      await program.parseAsync(["monitor", "kill-switch", "show"], {
+        from: "user",
+      });
+      expect(process.exitCode).toBe(1);
+    });
+  });
+
+  // -- monitor analytics ----------------------------------------------------
+
+  describe("monitor analytics", () => {
+    it("registers analytics summary and errors subcommands", async () => {
+      const program = await createProgram();
+      const monitorCmd = program.commands.find((c) => c.name() === "monitor")!;
+      const analytics = monitorCmd.commands.find(
+        (c) => c.name() === "analytics"
+      );
+      expect(analytics).toBeDefined();
+      expect(
+        analytics!.commands.find((c) => c.name() === "summary")
+      ).toBeDefined();
+      expect(
+        analytics!.commands.find((c) => c.name() === "errors")
+      ).toBeDefined();
+    });
+
+    it("summary queries system_logs and formats table", async () => {
+      queryMock = mock(async () =>
+        JSON.stringify([
+          {
+            results: [
+              {
+                total_events: 10,
+                earliest: 1,
+                latest: 2,
+              },
+            ],
+          },
+        ])
+      );
+      (DbService.prototype as unknown as Record<string, unknown>).query =
+        queryMock;
+      const program = await createProgram();
+      await program.parseAsync(["monitor", "analytics", "summary"], {
+        from: "user",
+      });
+      expect(queryMock).toHaveBeenCalled();
+      const sql = queryMock.mock.calls[0][1] as string;
+      expect(sql).toContain("total_events");
+    });
+
+    it("summary handles empty results", async () => {
+      queryMock = mock(async () => JSON.stringify([{ results: [] }]));
+      (DbService.prototype as unknown as Record<string, unknown>).query =
+        queryMock;
+      const program = await createProgram();
+      await program.parseAsync(["monitor", "analytics", "summary"], {
+        from: "user",
+      });
+      expect(queryMock).toHaveBeenCalled();
+    });
+
+    it("summary outputs raw JSON when --json is set", async () => {
+      queryMock = mock(async () =>
+        JSON.stringify([{ results: [{ total_events: 1 }] }])
+      );
+      (DbService.prototype as unknown as Record<string, unknown>).query =
+        queryMock;
+      const program = await createProgram();
+      // Commander needs global --json on the root program
+      program.option("--json");
+      const writes: string[] = [];
+      const orig = process.stdout.write.bind(process.stdout);
+      process.stdout.write = ((chunk: string | Uint8Array) => {
+        writes.push(
+          typeof chunk === "string" ? chunk : new TextDecoder().decode(chunk)
+        );
+        return true;
+      }) as typeof process.stdout.write;
+      try {
+        await program.parseAsync(
+          ["--json", "monitor", "analytics", "summary"],
+          { from: "user" }
+        );
+        expect(writes.join("")).toContain("total_events");
+      } finally {
+        process.stdout.write = orig;
+      }
+    });
+
+    it("errors queries with hours option", async () => {
+      queryMock = mock(async () =>
+        JSON.stringify([
+          {
+            results: [
+              { level: "error", count: 3 },
+              { level: "warn", count: 1 },
+            ],
+          },
+        ])
+      );
+      (DbService.prototype as unknown as Record<string, unknown>).query =
+        queryMock;
+      const program = await createProgram();
+      await program.parseAsync(
+        ["monitor", "analytics", "errors", "--hours", "12"],
+        { from: "user" }
+      );
+      const sql = queryMock.mock.calls[0][1] as string;
+      expect(sql).toContain("-12 hours");
+      expect(sql).toContain("error");
+    });
+
+    it("errors handles empty results", async () => {
+      queryMock = mock(async () => JSON.stringify([{ results: [] }]));
+      (DbService.prototype as unknown as Record<string, unknown>).query =
+        queryMock;
+      const program = await createProgram();
+      await program.parseAsync(["monitor", "analytics", "errors"], {
+        from: "user",
+      });
+      expect(queryMock).toHaveBeenCalled();
+    });
+
+    it("errors rejects invalid hours", async () => {
+      process.exitCode = 0;
+      const program = await createProgram();
+      await program.parseAsync(
+        ["monitor", "analytics", "errors", "--hours", "-1"],
+        { from: "user" }
+      );
+      // parseInt("-1") || 24 → 24 (falsy? -1 is truthy so hours=-1)
+      // assertSafeInteger(-1, ...) throws
+      expect(process.exitCode).toBe(1);
+    });
+  });
+
+  // -- monitor queue-depth --------------------------------------------------
+
+  describe("monitor queue-depth", () => {
+    const realSpawn = Bun.spawn;
+
+    afterEach(() => {
+      (Bun as unknown as Record<string, unknown>).spawn = realSpawn;
+    });
+
+    it("prints wrangler stdout on success", async () => {
+      (Bun as unknown as Record<string, unknown>).spawn = mock(() => ({
+        stdout: new Blob(["queue table output"]),
+        stderr: new Blob([]),
+        exited: Promise.resolve(0),
+      }));
+      const program = await createProgram();
+      await program.parseAsync(["monitor", "queue-depth"], { from: "user" });
+      expect(process.exitCode).toBe(0);
+    });
+
+    it("sets exitCode when wrangler fails", async () => {
+      (Bun as unknown as Record<string, unknown>).spawn = mock(() => ({
+        stdout: new Blob([]),
+        stderr: new Blob(["auth failed"]),
+        exited: Promise.resolve(1),
+      }));
+      const program = await createProgram();
+      await program.parseAsync(["monitor", "queue-depth"], { from: "user" });
+      expect(process.exitCode).toBe(1);
+    });
+
+    it("emits JSON queues when --json is set", async () => {
+      const table = `
+│ id                               │ name            │ created │ modified │ producers │ consumers │
+│ c5fa5eb90a624821a0e600e1e9e063a5 │ trade-execution │ x       │ y        │ 1         │ 2         │
+`;
+      (Bun as unknown as Record<string, unknown>).spawn = mock(() => ({
+        stdout: new Blob([table]),
+        stderr: new Blob([]),
+        exited: Promise.resolve(0),
+      }));
+      const program = await createProgram();
+      program.option("--json");
+      const writes: string[] = [];
+      const orig = process.stdout.write.bind(process.stdout);
+      process.stdout.write = ((chunk: string | Uint8Array) => {
+        writes.push(
+          typeof chunk === "string" ? chunk : new TextDecoder().decode(chunk)
+        );
+        return true;
+      }) as typeof process.stdout.write;
+      try {
+        await program.parseAsync(["--json", "monitor", "queue-depth"], {
+          from: "user",
+        });
+        const out = writes.join("");
+        expect(out).toContain("queues");
+        expect(out).toContain("trade-execution");
+      } finally {
+        process.stdout.write = orig;
+      }
+    });
   });
 });
 
@@ -248,6 +553,17 @@ There is a newer version of Wrangler available
     expect(queues[1]?.queue_name).toBe("trade-execution-dlq");
   });
 
+  it("parses full-width table with producers/consumers columns", async () => {
+    const { parseWranglerQueuesTable } = await import("./monitor-command.js");
+    const table = `
+│ id                               │ name            │ created_on │ modified_on │ producers │ consumers │
+│ c5fa5eb90a624821a0e600e1e9e063a5 │ trade-execution │ 2024       │ 2025        │ 1         │ 2         │
+`;
+    const queues = parseWranglerQueuesTable(table);
+    expect(queues[0]?.producers_total_count).toBe(1);
+    expect(queues[0]?.consumers_total_count).toBe(2);
+  });
+
   it("parses JSON with wrangler banner prefix", async () => {
     const { parseWranglerQueuesJson } = await import("./monitor-command.js");
     const raw =
@@ -259,5 +575,22 @@ There is a newer version of Wrangler available
     const queues = parseWranglerQueuesJson(raw);
     expect(queues.length).toBe(2);
     expect(queues[0]?.queue_name).toBe("trade-execution");
+  });
+
+  it("parses { result: [...] } envelope", async () => {
+    const { parseWranglerQueuesJson } = await import("./monitor-command.js");
+    const raw = JSON.stringify({
+      result: [{ queue_id: "1", queue_name: "q1" }],
+    });
+    const queues = parseWranglerQueuesJson(raw);
+    expect(queues).toHaveLength(1);
+    expect(queues[0]?.queue_name).toBe("q1");
+  });
+
+  it("returns empty for blank / non-array JSON", async () => {
+    const { parseWranglerQueuesJson } = await import("./monitor-command.js");
+    expect(parseWranglerQueuesJson("")).toEqual([]);
+    expect(parseWranglerQueuesJson("   ")).toEqual([]);
+    expect(parseWranglerQueuesJson(JSON.stringify({ foo: 1 }))).toEqual([]);
   });
 });

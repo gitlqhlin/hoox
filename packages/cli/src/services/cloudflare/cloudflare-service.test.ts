@@ -942,4 +942,134 @@ describe("CloudflareService", () => {
       }
     });
   });
+
+  // -- Versions list / rollback ---------------------------------------------
+
+  describe("versionsList", () => {
+    it("parses version entries with metadata", async () => {
+      const payload = [
+        {
+          id: "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee",
+          number: 2,
+          metadata: {
+            created_on: "2026-01-01T00:00:00Z",
+            author: "ci",
+            message: "deploy",
+            source: "api",
+          },
+        },
+      ];
+      mockSpawnWithCapture(successSpawn(JSON.stringify(payload)));
+
+      const service = new CloudflareService();
+      const result = await service.versionsList("trade-worker");
+
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.value[0].id).toContain("aaaaaaaa");
+        expect(result.value[0].number).toBe(2);
+        expect(result.value[0].author).toBe("ci");
+        expect(result.value[0].source).toBe("api");
+      }
+      expect(lastSpawnCmd).toEqual([
+        "wrangler",
+        "versions",
+        "list",
+        "--name",
+        "trade-worker",
+        "--json",
+      ]);
+    });
+
+    it("returns error when wrangler fails", async () => {
+      mockSpawnWithCapture(errorSpawn("auth failed"));
+      const service = new CloudflareService();
+      const result = await service.versionsList("w");
+      expect(result.ok).toBe(false);
+    });
+
+    it("returns error when JSON is not an array", async () => {
+      mockSpawnWithCapture(successSpawn(JSON.stringify({ not: "array" })));
+      const service = new CloudflareService();
+      const result = await service.versionsList("w");
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.error).toContain("Expected array");
+      }
+    });
+
+    it("returns error when JSON parse fails", async () => {
+      mockSpawnWithCapture(successSpawn("not-json{"));
+      const service = new CloudflareService();
+      const result = await service.versionsList("w");
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.error).toContain("Failed to parse");
+      }
+    });
+  });
+
+  describe("versionsRollback", () => {
+    it("calls wrangler versions rollback with version id", async () => {
+      mockSpawnWithCapture(successSpawn("Rolled back"));
+      const service = new CloudflareService();
+      const result = await service.versionsRollback("trade-worker", "ver-1");
+      expect(result.ok).toBe(true);
+      expect(lastSpawnCmd).toEqual([
+        "wrangler",
+        "versions",
+        "rollback",
+        "--name",
+        "trade-worker",
+        "--version-id",
+        "ver-1",
+      ]);
+    });
+  });
+
+  describe("tail", () => {
+    it("calls wrangler tail", async () => {
+      mockSpawnWithCapture(successSpawn(""));
+      const service = new CloudflareService();
+      const result = await service.tail("hoox");
+      expect(result.ok).toBe(true);
+      expect(lastSpawnCmd).toEqual(["wrangler", "tail", "hoox"]);
+    });
+  });
+
+  describe("dev error path", () => {
+    it("returns error when spawn throws", async () => {
+      (Bun as unknown as Record<string, unknown>).spawn = mock(() => {
+        throw new Error("spawn failed");
+      });
+      const service = new CloudflareService();
+      const result = await service.dev("workers/x");
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.error).toContain("Failed to start dev server");
+      }
+    });
+  });
+
+  describe("deploy metric parsing", () => {
+    it("extracts size, startup time, and version id", async () => {
+      const stdout = [
+        "Total Upload: 1.23 KiB / gzip: 0.5 KiB",
+        "Worker Startup Time: 37 ms",
+        "Current Version ID: 6a6efd9b-64cf-422b-8b10-84d9c2c6b2d3",
+        "  https://test.cryptolinx.workers.dev",
+      ].join("\n");
+      mockSpawnWithCapture(successSpawn(stdout));
+      const service = new CloudflareService();
+      const result = await service.deploy("workers/test");
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.value.startupTime).toBe("37 ms");
+        expect(result.value.versionId).toBe(
+          "6a6efd9b-64cf-422b-8b10-84d9c2c6b2d3"
+        );
+        expect(result.value.size).toMatch(/1\.23/);
+      }
+    });
+  });
 });

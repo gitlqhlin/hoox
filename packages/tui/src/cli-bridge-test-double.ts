@@ -188,6 +188,40 @@ export function resetCliBridgeDouble(): void {
   applyDefaults();
 }
 
+/**
+ * Real CliBridgeImpl singleton loaded before mock.module installs the double.
+ * Used by method-level unit tests that stub `exec` without spawning CLI.
+ */
+export let realCliBridge: {
+  exec: (...args: unknown[]) => Promise<unknown>;
+  dbQuery: (sql: string) => Promise<unknown>;
+  monitorQueueDepth: () => Promise<unknown>;
+  monitorKillSwitch: (action: string) => Promise<unknown>;
+  configKvList: () => Promise<unknown>;
+  configKvGet: (key: string) => Promise<unknown>;
+  configKvSet: (key: string, value: string) => Promise<unknown>;
+  configSecretsList: () => Promise<unknown>;
+  agentHealthCheck: () => Promise<unknown>;
+  pyneHealthCheck: () => Promise<unknown>;
+  deployAll: (...args: unknown[]) => Promise<unknown>;
+  deployWorker: (...args: unknown[]) => Promise<unknown>;
+  checkHealth: () => Promise<unknown>;
+  checkHealthFix: () => Promise<unknown>;
+  checkFix: () => Promise<unknown>;
+  workerLogs: (name: string) => Promise<unknown>;
+  configShow: () => Promise<unknown>;
+  configValidate: () => Promise<unknown>;
+  monitorStatus: () => Promise<unknown>;
+  rebuild: (...args: unknown[]) => Promise<unknown>;
+  repairWorker: (...args: unknown[]) => Promise<unknown>;
+  checkSetup: () => Promise<unknown>;
+  resolveBinary: () => Promise<string>;
+  invalidateCache: () => void;
+  onError: (sink: (details: unknown) => void) => () => void;
+  abort: (tag: string) => void;
+  dispose: () => void;
+} | null = null;
+
 /** Factory for mock.module — re-exports real standalone + index helpers. */
 export async function createCliBridgeModuleMock(): Promise<
   Record<string, unknown>
@@ -195,6 +229,7 @@ export async function createCliBridgeModuleMock(): Promise<
   // Load real module exports *before* mock.module is installed so tests that
   // import pure parsers / sanitize helpers still get the real fns.
   const realBridge = await import("./services/cli-bridge/index");
+  realCliBridge = realBridge.cliBridge as typeof realCliBridge;
   const standalone = await import("./services/cli-bridge/standalone");
   const types = await import("./services/cli-bridge/types");
   return {

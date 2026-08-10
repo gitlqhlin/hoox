@@ -240,4 +240,54 @@ describe("validateAll and richer generate coverage", () => {
       true
     );
   });
+
+  it("reports missing service binding when binding absent entirely", () => {
+    const manifest = WORKER_MANIFESTS["hoox"]!;
+    const jsonc = JSON.stringify({
+      name: "hoox",
+      vars: {
+        WEBHOOK_API_KEY_BINDING: "__SECRET__",
+        INTERNAL_KEY_BINDING: "__SECRET__",
+        HA_TOKEN_BINDING: "__SECRET__",
+      },
+      services: [],
+    });
+    const errors = validateWranglerJsonc("hoox", manifest, jsonc);
+    expect(
+      errors.some((e) => e.message.includes("Missing service binding"))
+    ).toBe(true);
+  });
+
+  it("validateRootSecrets handles non-object and empty workers", () => {
+    const manifest = WORKER_MANIFESTS["d1-worker"]!;
+    expect(
+      validateRootSecrets("d1-worker", manifest, "[]")[0]!.message
+    ).toContain("not a valid object");
+    const noWorkers = validateRootSecrets(
+      "d1-worker",
+      manifest,
+      JSON.stringify({})
+    );
+    expect(
+      noWorkers.some((e) => e.message.includes("INTERNAL_KEY_BINDING"))
+    ).toBe(true);
+  });
+
+  it("generateWranglerJsonc covers r2, vectorize, analytics, queues, DOs", () => {
+    // trade-worker has r2 + queue consumer
+    const trade = generateWranglerJsonc(WORKER_MANIFESTS["trade-worker"]!);
+    expect(trade).toContain("r2_buckets");
+    expect(trade).toContain("consumers");
+
+    // gateway (hoox) declares vectorize + queue producer + durable objects
+    const gateway = generateWranglerJsonc(WORKER_MANIFESTS["hoox"]!);
+    expect(gateway).toContain("vectorize");
+    expect(gateway).toContain("producers");
+    expect(gateway).toContain("durable_objects");
+
+    const analytics = generateWranglerJsonc(
+      WORKER_MANIFESTS["analytics-worker"]!
+    );
+    expect(analytics).toContain("analytics_engine_datasets");
+  });
 });

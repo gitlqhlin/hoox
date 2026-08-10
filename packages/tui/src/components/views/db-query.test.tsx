@@ -45,18 +45,25 @@ describe("DbQueryView", () => {
     expect(formatCell(null, 20)).toBe("NULL");
     expect(formatCell(undefined, 20)).toBe("NULL");
     expect(formatCell(42, 20)).toBe("42");
+    expect(formatCell(true, 20)).toBe("true");
+    expect(formatCell(false, 20)).toBe("false");
+    expect(formatCell(Number.POSITIVE_INFINITY, 20)).toBe("Infinity");
   });
 
   it("sanitizes cell text and collapses newlines", () => {
     expect(sanitizeCellText("a\x1bb")).toBe("ab");
     expect(formatCell("line1\nline2", 40)).toBe("line1 line2");
+    expect(formatCell("x".repeat(30), 10)).toBe("xxxxxxxxx…");
   });
 
   it("sorts nulls last and numbers numerically", () => {
     expect(compareCells(null, 1, "asc")).toBe(1);
     expect(compareCells(1, null, "asc")).toBe(-1);
+    expect(compareCells(null, null, "asc")).toBe(0);
     expect(compareCells(2, 10, "asc")).toBeLessThan(0);
     expect(compareCells(2, 10, "desc")).toBeGreaterThan(0);
+    expect(compareCells("b", "a", "asc")).toBeGreaterThan(0);
+    expect(compareCells("b", "a", "desc")).toBeLessThan(0);
   });
 
   it("rejects write SQL before any CLI call (defence in depth)", () => {

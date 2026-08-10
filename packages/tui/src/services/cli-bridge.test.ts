@@ -16,7 +16,7 @@
  *   - Mixed-case variants are handled case-insensitively
  *   - String literals and comments are stripped before keyword check
  */
-import { describe, it, expect } from "bun:test";
+import { describe, it, expect, beforeEach, afterEach } from "bun:test";
 import {
   validateReadOnlySql,
   tryParseJsonLoose,
@@ -33,8 +33,12 @@ import {
   parsePyneHealth,
   parseAgentHealth,
   extractNamespaceId,
+  agentChatStream,
+  AI_MODEL_OPTIONS,
   type SqlValidationResult,
 } from "./cli-bridge";
+import { realCliBridge } from "../cli-bridge-test-double";
+import type { CliResult } from "../types";
 
 // ─── Helper ───────────────────────────────────────────────────────────────────
 
@@ -835,5 +839,415 @@ describe("parseAgentHealth + parsePyneHealth", () => {
 describe("extractNamespaceId", () => {
   it("returns null until CLI exposes namespace id", () => {
     expect(extractNamespaceId('{"namespace":"CONFIG_KV"}')).toBeNull();
+  });
+});
+
+// ─── agentChatStream (standalone SSE) ─────────────────────────────────────────
+
+describe("AI_MODEL_OPTIONS", () => {
+  it("includes workers-ai and external providers", () => {
+    expect(AI_MODEL_OPTIONS.length).toBeGreaterThanOrEqual(3);
+    expect(AI_MODEL_OPTIONS.some((m) => m.id === "workers-ai")).toBe(true);
+    expect(AI_MODEL_OPTIONS.every((m) => m.id && m.label && m.provider)).toBe(
+      true
+    );
+  });
+});
+
+describe("agentChatStream", () => {
+  const originalFetch = globalThis.fetch;
+
+  afterEach(() => {
+    globalThis.fetch = originalFetch;
+  });
+
+  function sseBody(chunks: string[]): ReadableStream<Uint8Array> {
+    const encoder = new TextEncoder();
+    let i = 0;
+    return new ReadableStream({
+      pull(controller) {
+        if (i >= chunks.length) {
+          controller.close();
+          return;
+        }
+        controller.enqueue(encoder.encode(chunks[i]!));
+        i++;
+      },
+    });
+  }
+
+  it("streams tokens and completes on [DONE]", async () => {
+    const tokens: string[] = [];
+    const statuses: string[] = [];
+    globalThis.fetch = (async () =>
+      new Response(
+        sseBody([
+          'data: {"content":"Hello"}\n',
+          'data: {"content":" world"}\n',
+          "data: [DONE]\n",
+        ]),
+        {
+          status: 200,
+          headers: { "Content-Type": "text/event-stream" },
+        }
+      )) as unknown as typeof fetch;
+
+    const { finished } = agentChatStream(
+      {
+        messages: [{ role: "user", content: "hi", timestamp: "t1" }],
+        model: "workers-ai",
+      },
+      "http://localhost:8787/",
+      "tok",
+      (t) => tokens.push(t),
+      (s) => statuses.push(s)
+    );
+    await finished;
+    expect(tokens.join("")).toBe("Hello world");
+    expect(statuses).toContain("connected");
+  });
+
+  it("skips malformed SSE data lines", async () => {
+    const tokens: string[] = [];
+    globalThis.fetch = (async () =>
+      new Response(
+        sseBody([
+          "data: not-json\n",
+          'data: {"content":"ok"}\n',
+          "data: [DONE]\n",
+        ]),
+        { status: 200 }
+      )) as unknown as typeof fetch;
+
+    const { finished } = agentChatStream(
+      {
+        messages: [{ role: "user", content: "x", timestamp: "t1" }],
+        model: "openai:gpt-4o-mini",
+        temperature: 0.2,
+        maxTokens: 10,
+      },
+      "http://api.test",
+      "",
+      (t) => tokens.push(t)
+    );
+    await finished;
+    expect(tokens).toEqual(["ok"]);
+  });
+
+  it("reconnects on HTTP failure then disconnects", async () => {
+    let calls = 0;
+    const statuses: string[] = [];
+    globalThis.fetch = (async () => {
+      calls++;
+      return new Response("fail", { status: 503 });
+    }) as unknown as typeof fetch;
+
+    const { finished } = agentChatStream(
+      { messages: [{ role: "user", content: "x", timestamp: "t1" }] },
+      "http://localhost:9",
+      "t",
+      undefined,
+      (s) => statuses.push(s)
+    );
+    await finished;
+    expect(calls).toBeGreaterThanOrEqual(2);
+    expect(statuses).toContain("reconnecting");
+    expect(statuses).toContain("disconnected");
+  }, 30_000);
+
+  it("aborts while fetch is pending", async () => {
+    globalThis.fetch = ((_url: RequestInfo | URL, init?: RequestInit) =>
+      new Promise<Response>((_resolve, reject) => {
+        const signal = init?.signal;
+        if (signal?.aborted) {
+          reject(new DOMException("Aborted", "AbortError"));
+          return;
+        }
+        signal?.addEventListener(
+          "abort",
+          () => reject(new DOMException("Aborted", "AbortError")),
+          { once: true }
+        );
+      })) as unknown as typeof fetch;
+
+    const { abort, finished } = agentChatStream(
+      { messages: [{ role: "user", content: "x", timestamp: "t1" }] },
+      "http://localhost:9",
+      "t"
+    );
+    // Abort on next microtask so fetch has registered the listener
+    await Promise.resolve();
+    abort.abort();
+    await finished;
+    expect(abort.signal.aborted).toBe(true);
+  });
+});
+
+// ─── CliBridge methods with stubbed exec (real class) ─────────────────────────
+
+function okExec(stdout: string, data: unknown = null): CliResult<unknown> {
+  return {
+    success: true,
+    exitCode: 0,
+    stdout,
+    stderr: "",
+    data,
+    duration: 1,
+    command: "hoox test",
+    errorType: null,
+  };
+}
+
+function failExec(stderr = "fail"): CliResult<unknown> {
+  return {
+    success: false,
+    exitCode: 1,
+    stdout: "",
+    stderr,
+    data: null,
+    duration: 1,
+    command: "hoox test",
+    errorType: "non-zero-exit",
+  };
+}
+
+describe("CliBridge methods (exec stubbed)", () => {
+  const bridge = realCliBridge!;
+  let originalExec: typeof bridge.exec;
+
+  beforeEach(() => {
+    expect(bridge).toBeTruthy();
+    originalExec = bridge.exec.bind(bridge);
+  });
+
+  afterEach(() => {
+    bridge.exec = originalExec;
+  });
+
+  it("dbQuery rejects non-readonly SQL without spawning", async () => {
+    const calls: unknown[] = [];
+    bridge.exec = (async (...a: unknown[]) => {
+      calls.push(a);
+      return okExec("[]");
+    }) as typeof bridge.exec;
+
+    const result = (await bridge.dbQuery("DROP TABLE x")) as CliResult<null>;
+    expect(result.success).toBe(false);
+    expect(result.stderr).toContain("Read-only validation failed");
+    expect(calls).toHaveLength(0);
+  });
+
+  it("dbQuery parses success stdout", async () => {
+    bridge.exec = (async () =>
+      okExec(
+        JSON.stringify([{ results: [{ id: 1 }], meta: { duration: 0.01 } }])
+      )) as typeof bridge.exec;
+    const result = (await bridge.dbQuery("SELECT 1")) as CliResult<{
+      rowCount: number;
+    }>;
+    expect(result.success).toBe(true);
+    expect(result.data?.rowCount).toBe(1);
+  });
+
+  it("monitorQueueDepth / monitorKillSwitch parse stdout", async () => {
+    bridge.exec = (async () =>
+      okExec(
+        JSON.stringify({
+          queues: [
+            {
+              queue_name: "q1",
+              producers_total_count: 1,
+              consumers_total_count: 0,
+              settings: { delivery_paused: false },
+            },
+          ],
+        })
+      )) as typeof bridge.exec;
+    const qd = (await bridge.monitorQueueDepth()) as CliResult<unknown[]>;
+    expect(qd.success).toBe(true);
+    expect(Array.isArray(qd.data)).toBe(true);
+    expect((qd.data as unknown[]).length).toBe(1);
+
+    bridge.exec = (async () =>
+      okExec("Kill switch is ON — trading halted")) as typeof bridge.exec;
+    const ks = (await bridge.monitorKillSwitch("show")) as CliResult<{
+      engaged: boolean;
+    }>;
+    expect(ks.data?.engaged).toBe(true);
+
+    bridge.exec = (async () => failExec()) as typeof bridge.exec;
+    expect(
+      ((await bridge.monitorKillSwitch("engage")) as CliResult<null>).data
+    ).toBeNull();
+    expect(
+      ((await bridge.monitorQueueDepth()) as CliResult<null>).data
+    ).toBeNull();
+  });
+
+  it("configKvList merges list + manifest", async () => {
+    bridge.exec = (async (args: unknown) => {
+      const a = args as string[];
+      if (a.includes("manifest")) {
+        return okExec(
+          JSON.stringify({
+            keys: [{ key: "FLAG", type: "boolean", secret: false }],
+          })
+        );
+      }
+      return okExec(JSON.stringify([{ name: "FLAG" }, { name: "OTHER" }]));
+    }) as typeof bridge.exec;
+
+    const result = (await bridge.configKvList()) as CliResult<{
+      keys: { name: string }[];
+    }>;
+    expect(result.success).toBe(true);
+    expect(result.data?.keys.map((k) => k.name)).toEqual(["FLAG", "OTHER"]);
+  });
+
+  it("configKvList surfaces list failure", async () => {
+    bridge.exec = (async (args: unknown) => {
+      const a = args as string[];
+      if (a.includes("list") && !a.includes("manifest")) {
+        return failExec("list boom");
+      }
+      return okExec("{}");
+    }) as typeof bridge.exec;
+    const result = (await bridge.configKvList()) as CliResult<null>;
+    expect(result.success).toBe(false);
+    expect(result.data).toBeNull();
+  });
+
+  it("configKvGet treats not found as success null", async () => {
+    bridge.exec = (async () => failExec("key not found")) as typeof bridge.exec;
+    const result = (await bridge.configKvGet("missing")) as CliResult<
+      string | null
+    >;
+    expect(result.success).toBe(true);
+    expect(result.data).toBeNull();
+  });
+
+  it("configKvGet returns trimmed value", async () => {
+    bridge.exec = (async () => okExec("hello\n")) as typeof bridge.exec;
+    const result = (await bridge.configKvGet("k")) as CliResult<string | null>;
+    expect(result.data).toBe("hello");
+  });
+
+  it("configSecretsList / agentHealth / pyneHealth parse or null", async () => {
+    bridge.exec = (async () =>
+      okExec(
+        JSON.stringify({ worker: "w", secrets: ["API_KEY"] })
+      )) as typeof bridge.exec;
+    const secrets = (await bridge.configSecretsList()) as CliResult<{
+      secrets: { name: string }[];
+    }>;
+    expect(secrets.data?.secrets[0]?.name).toBe("API_KEY");
+
+    bridge.exec = (async () =>
+      okExec(
+        JSON.stringify({
+          providers: [
+            {
+              name: "openai",
+              model: "gpt",
+              status: "online",
+              latencyMs: 1,
+              dailyRequests: 0,
+            },
+          ],
+        })
+      )) as typeof bridge.exec;
+    const health = (await bridge.agentHealthCheck()) as CliResult<{
+      providers: unknown[];
+    }>;
+    expect(health.data?.providers).toHaveLength(1);
+
+    bridge.exec = (async () =>
+      okExec(
+        JSON.stringify({
+          worker: "pyne-worker",
+          url: "http://x",
+          status: "healthy",
+          httpStatus: 200,
+          latencyMs: 3,
+        })
+      )) as typeof bridge.exec;
+    const pyne = (await bridge.pyneHealthCheck()) as CliResult<{
+      status: string;
+    }>;
+    expect(pyne.data?.status).toBe("healthy");
+
+    bridge.exec = (async () => failExec()) as typeof bridge.exec;
+    expect(
+      ((await bridge.configSecretsList()) as CliResult<null>).data
+    ).toBeNull();
+    expect(
+      ((await bridge.agentHealthCheck()) as CliResult<null>).data
+    ).toBeNull();
+  });
+
+  it("thin wrappers forward tags via exec args", async () => {
+    const seen: string[][] = [];
+    bridge.exec = (async (args: unknown) => {
+      seen.push(args as string[]);
+      return okExec("{}");
+    }) as typeof bridge.exec;
+
+    await bridge.deployAll();
+    await bridge.deployWorker("trade-worker");
+    await bridge.checkHealth();
+    await bridge.checkHealthFix();
+    await bridge.checkFix();
+    await bridge.workerLogs("hoox");
+    await bridge.configShow();
+    await bridge.configValidate();
+    await bridge.monitorStatus();
+    await bridge.rebuild();
+    await bridge.repairWorker("d1-worker");
+    await bridge.checkSetup();
+    await bridge.configKvSet("k", "v");
+
+    expect(seen.some((a) => a[0] === "deploy" && a[1] === "all")).toBe(true);
+    expect(seen.some((a) => a[0] === "deploy" && a[2] === "trade-worker")).toBe(
+      true
+    );
+    expect(seen.some((a) => a[0] === "check" && a[1] === "health")).toBe(true);
+    expect(seen.some((a) => a.includes("--fix"))).toBe(true);
+    expect(seen.some((a) => a[0] === "check" && a[1] === "fix")).toBe(true);
+    expect(seen.some((a) => a[0] === "logs")).toBe(true);
+    expect(seen.some((a) => a[0] === "config" && a[1] === "show")).toBe(true);
+    expect(seen.some((a) => a.includes("validate"))).toBe(true);
+    expect(seen.some((a) => a[0] === "repair")).toBe(true);
+    expect(seen.some((a) => a[0] === "check" && a[1] === "setup")).toBe(true);
+    expect(
+      seen.some((a) => a[0] === "config" && a[1] === "kv" && a[2] === "set")
+    ).toBe(true);
+  });
+
+  it("onError sink receives validation failures; sink throw is swallowed", async () => {
+    const events: unknown[] = [];
+    const unsub = bridge.onError((d) => {
+      events.push(d);
+      throw new Error("sink boom");
+    });
+    // dbQuery validation path calls notifyError without going through exec
+    await bridge.dbQuery("DELETE FROM users");
+    expect(events.length).toBe(1);
+    unsub();
+
+    // After unsubscribe, further failures should not append
+    const before = events.length;
+    await bridge.dbQuery("DROP TABLE x");
+    expect(events.length).toBe(before);
+  });
+
+  it("invalidateCache clears binary path cache", () => {
+    bridge.invalidateCache();
+    // no throw
+    expect(typeof bridge.resolveBinary).toBe("function");
+  });
+
+  it("abort and dispose are safe with no active commands", () => {
+    bridge.abort("missing-tag");
+    bridge.dispose();
   });
 });

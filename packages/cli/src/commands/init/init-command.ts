@@ -388,23 +388,25 @@ export async function runInitCommand(
   }
 
   const skipRiskWarning = options.acceptRisk;
-  if (!skipRiskWarning && engine.getCurrentStep().id === "PREREQUISITES") {
-    const accepted = await p.confirm({
-      message:
-        "Hoox connects to live trading exchanges and can execute real trades with real money. " +
-        "By continuing, you acknowledge that you are solely responsible for all trading activity " +
-        "and accept the risk of financial loss. Do you accept these terms?",
-      initialValue: false,
-    });
+  if (engine.getCurrentStep().id === "PREREQUISITES") {
+    if (!skipRiskWarning) {
+      const accepted = await p.confirm({
+        message:
+          "Hoox connects to live trading exchanges and can execute real trades with real money. " +
+          "By continuing, you acknowledge that you are solely responsible for all trading activity " +
+          "and accept the risk of financial loss. Do you accept these terms?",
+        initialValue: false,
+      });
 
-    if (p.isCancel(accepted)) {
-      p.cancel("Setup cancelled.");
-      process.exitCode = 0;
-    }
+      if (p.isCancel(accepted)) {
+        p.cancel("Setup cancelled.");
+        process.exitCode = 0;
+      }
 
-    if (!accepted) {
-      p.outro("Setup cancelled. See DISCLAIMER.md for full terms.");
-      process.exitCode = 0;
+      if (!accepted) {
+        p.outro("Setup cancelled. See DISCLAIMER.md for full terms.");
+        process.exitCode = 0;
+      }
     }
 
     // Step 0: Prerequisites check (always passes — CLI is running)

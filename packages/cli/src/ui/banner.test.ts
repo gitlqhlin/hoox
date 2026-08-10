@@ -119,6 +119,100 @@ describe("animateBanner", () => {
       process.stdout.write = origWrite;
     }
   });
+
+  it("plays assemble + pulse frames when animation is allowed", async () => {
+    const origTTY = process.stdout.isTTY;
+    const origNoColor = process.env.NO_COLOR;
+    const origTerm = process.env.TERM;
+    const origCi = process.env.CI;
+    Object.defineProperty(process.stdout, "isTTY", {
+      value: true,
+      configurable: true,
+    });
+    delete process.env.NO_COLOR;
+    delete process.env.CI;
+    process.env.TERM = "xterm-256color";
+
+    const chunks: string[] = [];
+    const origWrite = process.stdout.write.bind(process.stdout);
+    process.stdout.write = ((chunk: string | Uint8Array) => {
+      chunks.push(typeof chunk === "string" ? chunk : chunk.toString());
+      return true;
+    }) as typeof process.stdout.write;
+
+    try {
+      // Very short budget so the test stays fast but still runs both phases
+      const lines = await animateBanner({ durationMs: 50 });
+      expect(lines).toBeGreaterThan(0);
+      const out = chunks.join("");
+      // Animation hides cursor and clears lines
+      expect(out).toContain("\x1b[?25l");
+      expect(out).toContain("\x1b[?25h");
+      expect(out).toContain("\x1b[2K");
+      expect(stripAnsi(out)).toContain("Cloudflare Workers Platform");
+    } finally {
+      process.stdout.write = origWrite;
+      Object.defineProperty(process.stdout, "isTTY", {
+        value: origTTY,
+        configurable: true,
+      });
+      if (origNoColor === undefined) delete process.env.NO_COLOR;
+      else process.env.NO_COLOR = origNoColor;
+      if (origTerm === undefined) delete process.env.TERM;
+      else process.env.TERM = origTerm;
+      if (origCi === undefined) delete process.env.CI;
+      else process.env.CI = origCi;
+    }
+  });
+
+  it("falls back to static when CI=true even on TTY", async () => {
+    const origTTY = process.stdout.isTTY;
+    const origNoColor = process.env.NO_COLOR;
+    const origTerm = process.env.TERM;
+    const origCi = process.env.CI;
+    Object.defineProperty(process.stdout, "isTTY", {
+      value: true,
+      configurable: true,
+    });
+    delete process.env.NO_COLOR;
+    process.env.TERM = "xterm-256color";
+    process.env.CI = "true";
+
+    const chunks: string[] = [];
+    const origWrite = process.stdout.write.bind(process.stdout);
+    process.stdout.write = ((chunk: string | Uint8Array) => {
+      chunks.push(typeof chunk === "string" ? chunk : chunk.toString());
+      return true;
+    }) as typeof process.stdout.write;
+
+    try {
+      await animateBanner({ durationMs: 50 });
+      const out = chunks.join("");
+      expect(out).not.toContain("\x1b[?25l");
+    } finally {
+      process.stdout.write = origWrite;
+      Object.defineProperty(process.stdout, "isTTY", {
+        value: origTTY,
+        configurable: true,
+      });
+      if (origNoColor === undefined) delete process.env.NO_COLOR;
+      else process.env.NO_COLOR = origNoColor;
+      if (origTerm === undefined) delete process.env.TERM;
+      else process.env.TERM = origTerm;
+      if (origCi === undefined) delete process.env.CI;
+      else process.env.CI = origCi;
+    }
+  });
+});
+
+describe("renderBannerSignal / horizon", () => {
+  it("renders signal and horizon variants with tagline", () => {
+    const signal = stripAnsi(BANNER_VARIANTS.signal());
+    const horizon = stripAnsi(BANNER_VARIANTS.horizon());
+    expect(signal).toContain("Cloudflare Workers Platform");
+    expect(horizon).toContain("Cloudflare Workers Platform");
+    expect(signal).not.toBe(horizon);
+  });
 });
 
 describe("DISCLAIMER", () => {

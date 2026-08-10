@@ -586,3 +586,109 @@ describe("config keys", () => {
     expect(match![1].length).toBe(64);
   });
 });
+
+// ---------------------------------------------------------------------------
+// Tests: config transport
+// ---------------------------------------------------------------------------
+
+describe("config transport", () => {
+  let tmpDir: string;
+  let originalCwd: string;
+  let origEnvTransport: string | undefined;
+
+  beforeEach(() => {
+    tmpDir = setupTempConfig("hoox-transport");
+    originalCwd = process.cwd();
+    process.chdir(tmpDir);
+    origEnvTransport = process.env.HOOX_TRANSPORT;
+    delete process.env.HOOX_TRANSPORT;
+  });
+
+  afterEach(() => {
+    process.chdir(originalCwd);
+    rmSync(tmpDir, { recursive: true, force: true });
+    if (origEnvTransport !== undefined) {
+      process.env.HOOX_TRANSPORT = origEnvTransport;
+    } else {
+      delete process.env.HOOX_TRANSPORT;
+    }
+  });
+
+  it("registers transport show and set subcommands", () => {
+    const program = makeProgram();
+    registerConfigCommand(program);
+    const configCmd = program.commands.find((c) => c.name() === "config");
+    const transportCmd = configCmd?.commands.find(
+      (c) => c.name() === "transport"
+    );
+    expect(transportCmd).toBeDefined();
+    const subNames = transportCmd?.commands.map((c) => c.name()) ?? [];
+    expect(subNames).toContain("show");
+    expect(subNames).toContain("set");
+  });
+
+  it("shows resolved operator transport profile", async () => {
+    const program = makeProgram();
+    registerConfigCommand(program);
+
+    const capture = await runCommand(program, ["config", "transport", "show"]);
+    const text = capture.text();
+    capture.restore();
+
+    expect(text).toMatch(/Operator transport|transport/i);
+  });
+
+  it("outputs transport profile as JSON", async () => {
+    const program = makeProgram();
+    registerConfigCommand(program);
+
+    const capture = await runCommand(program, [
+      "--json",
+      "config",
+      "transport",
+      "show",
+    ]);
+    const json = capture.json<{
+      transport?: string;
+      apiBase?: string;
+      hasBearer?: boolean;
+    }>();
+    capture.restore();
+
+    expect(json.transport).toBeDefined();
+    expect(typeof json.hasBearer).toBe("boolean");
+  });
+
+  it("persists transport preference via set", async () => {
+    const program = makeProgram();
+    registerConfigCommand(program);
+
+    const capture = await runCommand(program, [
+      "config",
+      "transport",
+      "set",
+      "access",
+    ]);
+    const text = capture.text();
+    capture.restore();
+
+    expect(text).toMatch(/Saved transport=access|transport/i);
+  });
+
+  it("rejects invalid transport values", async () => {
+    const program = makeProgram();
+    registerConfigCommand(program);
+
+    const capture = await runCommand(program, [
+      "config",
+      "transport",
+      "set",
+      "not-a-mode",
+    ]);
+    const text = capture.text();
+    capture.restore();
+
+    expect(text.length).toBeGreaterThan(0);
+    expect(text).toMatch(/Invalid transport|public \| access/i);
+  });
+});

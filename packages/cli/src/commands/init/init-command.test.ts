@@ -897,4 +897,268 @@ describe("init command", () => {
       );
     });
   });
+
+  // ------------------------------------------------------------------
+  // Additional paths (accept-risk, resume, provisioning, presets)
+  // ------------------------------------------------------------------
+
+  describe("accept-risk and presets", () => {
+    it("skips risk confirmation when --accept-risk is set", async () => {
+      responses = {
+        password: "valid-token",
+        text: "test-account-id",
+        multiselect: [],
+        select: "standard",
+        confirmSequence: [false, false], // would fail risk if not skipped
+      };
+
+      await runInitCommand(
+        { acceptRisk: true },
+        { json: false, quiet: true },
+        false
+      );
+
+      // Risk confirm should not have run; select for preset should have
+      expect(
+        captured.confirmMessages.some((m) => m.includes("acknowledge"))
+      ).toBe(false);
+      expect(captured.writes["wrangler.jsonc"]).toBeDefined();
+    });
+
+    it("applies standard preset in non-interactive mode", async () => {
+      const options: InitOptions = {
+        token: "cf-token",
+        account: "cf-account",
+        preset: "standard",
+      };
+      await runInitCommand(options, { json: false, quiet: true }, true);
+      const workersJsonc = captured.writes["wrangler.jsonc"];
+      expect(workersJsonc).toBeDefined();
+      expect(workersJsonc).toContain("trade-worker");
+    });
+
+    it("defaults invalid preset to minimal in non-interactive mode", async () => {
+      const options: InitOptions = {
+        token: "cf-token",
+        account: "cf-account",
+        preset: "not-a-real-preset",
+      };
+      await runInitCommand(options, { json: false, quiet: false }, true);
+      expect(captured.writes["wrangler.jsonc"]).toContain("d1-worker");
+      expect(captured.intro.length + captured.note.length).toBeGreaterThan(0);
+    });
+  });
+
+  describe("provisioning step", () => {
+    it("runs CLIProvisioner when user confirms provisioning", async () => {
+      const { CLIProvisioner } = await import("./cli-provisioner.js");
+      const orig = CLIProvisioner.prototype.provision;
+      CLIProvisioner.prototype.provision = mock(async () => ({
+        success: true,
+        created: ["D1:trade-data-db"],
+        errors: [],
+      })) as typeof orig;
+
+      // risk accept, provision yes, deploy no
+      responses = {
+        password: "valid-token",
+        text: "test-account-id",
+        multiselect: [],
+        select: "minimal",
+        confirmSequence: [true, true, false],
+      };
+
+      try {
+        await runInitCommand({}, { json: false, quiet: true }, false);
+        expect(CLIProvisioner.prototype.provision).toHaveBeenCalled();
+      } finally {
+        CLIProvisioner.prototype.provision = orig;
+      }
+    });
+
+    it("skips provisioner when user declines", async () => {
+      const { CLIProvisioner } = await import("./cli-provisioner.js");
+      const orig = CLIProvisioner.prototype.provision;
+      const provisionMock = mock(async () => ({
+        success: true,
+        created: [],
+        errors: [],
+      }));
+      CLIProvisioner.prototype.provision = provisionMock as typeof orig;
+
+      responses = {
+        password: "valid-token",
+        text: "test-account-id",
+        multiselect: [],
+        select: "minimal",
+        confirmSequence: [true, false, false], // risk yes, provision no, deploy no
+      };
+
+      try {
+        await runInitCommand({}, { json: false, quiet: true }, false);
+        expect(provisionMock).not.toHaveBeenCalled();
+        expect(captured.writes["wrangler.jsonc"]).toBeDefined();
+      } finally {
+        CLIProvisioner.prototype.provision = orig;
+      }
+    });
+
+    it("warns when provisioner returns errors", async () => {
+      const { CLIProvisioner } = await import("./cli-provisioner.js");
+      const orig = CLIProvisioner.prototype.provision;
+      CLIProvisioner.prototype.provision = mock(async () => ({
+        success: false,
+        created: [],
+        errors: ["D1:trade-data-db — already exists"],
+      })) as typeof orig;
+
+      responses = {
+        password: "valid-token",
+        text: "test-account-id",
+        multiselect: [],
+        select: "minimal",
+        confirmSequence: [true, true, false],
+      };
+
+      try {
+        await runInitCommand({}, { json: false, quiet: true }, false);
+        expect(captured.logWarn.some((m) => m.includes("issues"))).toBe(true);
+      } finally {
+        CLIProvisioner.prototype.provision = orig;
+      }
+    });
+  });
+
+  describe("resume flow", () => {
+    it("loads saved wizard state when --resume is set", async () => {
+      // Serialize a partial wizard state at CLOUDFLARE_CONFIG step
+      const { WizardEngine, serializeState, WIZARD_STATE_PATH } =
+        await import("@hoox-sh/hoox-shared");
+      const engine = new WizardEngine();
+      engine.execute({ checksPassed: true });
+      const stateJson = serializeState(engine.getState());
+
+      // Point Bun.file at the state path with content
+      const prevFileImpl = (Bun as any).file;
+      spyOn(Bun, "file" as any).mockImplementation((path: string | URL) => {
+        const p = String(path);
+        if (p === WIZARD_STATE_PATH || p.endsWith(".hoox-wizard-state.json")) {
+          return {
+            exists: async () => true,
+            text: async () => stateJson,
+            arrayBuffer: async () => new ArrayBuffer(0),
+            json: async () => ({}),
+            size: stateJson.length,
+            name: p,
+            lastModified: 0,
+            slice: () => new Blob(),
+            stream: () => new ReadableStream(),
+            type: "",
+          } as unknown as Bun.BunFile;
+        }
+        return {
+          exists: async () =>
+            p === "wrangler.jsonc" || p === "packages/cli/package.json",
+          text: async () => "",
+          arrayBuffer: async () => new ArrayBuffer(0),
+          json: async () => ({}),
+          size: 0,
+          name: p,
+          lastModified: 0,
+          slice: () => new Blob(),
+          stream: () => new ReadableStream(),
+          type: "",
+        } as unknown as Bun.BunFile;
+      });
+
+      responses = {
+        password: "valid-token",
+        text: "test-account-id",
+        multiselect: [],
+        select: "minimal",
+        // First confirm: resume yes; then risk already done so no risk; provision no; deploy no
+        confirmSequence: [true, false, false],
+      };
+
+      try {
+        await runInitCommand(
+          { resume: true },
+          { json: false, quiet: true },
+          false
+        );
+        expect(captured.confirmMessages.some((m) => m.includes("Resume"))).toBe(
+          true
+        );
+        expect(captured.writes["wrangler.jsonc"]).toBeDefined();
+      } finally {
+        // restore handled by afterEach mock.restore
+        void prevFileImpl;
+      }
+    });
+  });
+
+  describe("createDevVars mkdir fallback", () => {
+    it("creates parent dir when first Bun.write fails", async () => {
+      let writeCalls = 0;
+      spyOn(Bun, "write" as any).mockImplementation(
+        async (path: string | URL, content: string | Uint8Array) => {
+          const p = String(path);
+          const body =
+            typeof content === "string"
+              ? content
+              : new TextDecoder().decode(content);
+          // Fail first write to a .dev.vars path to force mkdir path
+          if (p.endsWith(".dev.vars") && writeCalls === 0) {
+            writeCalls++;
+            throw new Error("ENOENT");
+          }
+          captured.writes[p] = body;
+          return body.length;
+        }
+      );
+
+      responses = {
+        password: "valid-token",
+        text: "test-account",
+        multiselect: [],
+        select: "full",
+        confirmSequence: [true, false, false],
+        group: {
+          TG_BOT_TOKEN_BINDING: "tg-secret",
+        },
+      };
+
+      await runInitCommand({}, { json: false, quiet: false }, false);
+
+      const devVarsPath = "workers/telegram-worker/.dev.vars";
+      expect(captured.writes[devVarsPath]).toBeDefined();
+    });
+  });
+
+  describe("registerInitCommand", () => {
+    it("registers init on a program", async () => {
+      const { registerInitCommand } = await import("./init-command.js");
+      const { Command } = await import("commander");
+      const program = new Command();
+      program.exitOverride();
+      registerInitCommand(program);
+      const init = program.commands.find((c) => c.name() === "init");
+      expect(init).toBeDefined();
+      expect(init!.options.map((o) => o.long)).toContain("--token");
+      expect(init!.options.map((o) => o.long)).toContain("--accept-risk");
+    });
+  });
+
+  describe("token env restore", () => {
+    it("restores previous CLOUDFLARE_API_TOKEN after validation", async () => {
+      process.env.CLOUDFLARE_API_TOKEN = "pre-existing";
+      const options: InitOptions = {
+        token: "new-token",
+        account: "acct",
+      };
+      await runInitCommand(options, { json: false, quiet: true }, true);
+      expect(process.env.CLOUDFLARE_API_TOKEN).toBe("pre-existing");
+      delete process.env.CLOUDFLARE_API_TOKEN;
+    });
+  });
 });

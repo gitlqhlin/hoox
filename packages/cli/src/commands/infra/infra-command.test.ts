@@ -24,7 +24,13 @@ import {
   doQueueList,
   doQueueCreate,
   doQueueDelete,
+  doVectorizeList,
+  doVectorizeCreate,
+  doVectorizeDelete,
+  doAnalyticsList,
+  doAnalyticsCreate,
   doProvision,
+  doProvisionDryRun,
   displayListResult,
   handleCreate,
   handleDelete,
@@ -103,6 +109,11 @@ interface MockCloudflareService {
   queueList: () => Promise<WranglerResult<string>>;
   queueCreate: (name: string) => Promise<WranglerResult<string>>;
   queueDelete: (name: string) => Promise<WranglerResult<string>>;
+  vectorizeList: () => Promise<WranglerResult<string>>;
+  vectorizeCreate: (name: string) => Promise<WranglerResult<string>>;
+  vectorizeDelete: (name: string) => Promise<WranglerResult<string>>;
+  analyticsList: () => Promise<WranglerResult<string>>;
+  analyticsCreate: (name: string) => Promise<WranglerResult<string>>;
 }
 
 function createMockCloudflare(
@@ -121,6 +132,20 @@ function createMockCloudflare(
     queueList: async () => okResult(QUEUE_LIST_JSON),
     queueCreate: async (name: string) => okResult(`Created ${name}`),
     queueDelete: async (name: string) => okResult(`Deleted ${name}`),
+    vectorizeList: async () =>
+      okResult(
+        JSON.stringify([
+          { name: "rag-index", id: "vid-1", dimensions: 768, metric: "cosine" },
+        ])
+      ),
+    vectorizeCreate: async (name: string) => okResult(`Created ${name}`),
+    vectorizeDelete: async (name: string) => okResult(`Deleted ${name}`),
+    analyticsList: async () =>
+      okResult(JSON.stringify([{ name: "hoox-analytics" }])),
+    analyticsCreate: async (name: string) =>
+      errResult(
+        `Analytics dataset "${name}" cannot be created via wrangler — use the Dashboard`
+      ),
     ...overrides,
   };
 }
@@ -719,6 +744,337 @@ describe("infra-command", () => {
 
       // No wrangler.jsonc → no items to provision
       expect(result.items).toEqual([]);
+    });
+
+    it("provisions KV, queues, and records hard errors", async () => {
+      const workerPath = "/fake/workers/full-worker";
+
+      const mockConfig = {
+        load: async () => ({
+          global: {},
+          workers: { "full-worker": { enabled: true, path: workerPath } },
+        }),
+        listEnabledWorkers: () => ["full-worker"],
+        getWorker: (name: string) =>
+          name === "full-worker"
+            ? { enabled: true, path: workerPath }
+            : undefined,
+      };
+
+      const wranglerConfig = JSON.stringify({
+        d1_databases: [{ binding: "DB", database_name: "fail-db" }],
+        kv_namespaces: [{ binding: "CONFIG_KV" }],
+        r2_buckets: [{ binding: "FILES", bucket_name: "ok-bucket" }],
+        queues: {
+          producers: [{ queue: "trade-q" }],
+          consumers: [{ queue: "trade-q" }, { queue: "notify-q" }],
+        },
+      });
+
+      (Bun as unknown as Record<string, unknown>).file = mock((p: string) => ({
+        exists: async () => p === `${workerPath}/wrangler.jsonc`,
+        text: async () => wranglerConfig,
+      }));
+
+      const mockCf = createMockCloudflare({
+        d1Create: async () => errResult("permission denied"),
+        kvCreate: async () => okResult("Created CONFIG_KV"),
+        r2Create: async () => okResult("Created ok-bucket"),
+        queueCreate: async (n) =>
+          n === "trade-q"
+            ? errResult("queue already exists")
+            : okResult(`Created ${n}`),
+      });
+
+      const result = await doProvision(
+        jsonOpts,
+        mockCf as unknown as import("../../services/cloudflare/cloudflare-service.js").CloudflareService,
+        mockConfig as unknown as import("../../services/config/config-service.js").ConfigService
+      );
+
+      expect(result.items.find((i) => i.name === "fail-db")?.status).toBe(
+        "error"
+      );
+      expect(result.items.find((i) => i.name === "CONFIG_KV")?.status).toBe(
+        "created"
+      );
+      expect(result.items.find((i) => i.name === "ok-bucket")?.status).toBe(
+        "created"
+      );
+      expect(result.items.find((i) => i.name === "trade-q")?.status).toBe(
+        "exists"
+      );
+      expect(result.items.find((i) => i.name === "notify-q")?.status).toBe(
+        "created"
+      );
+      expect(result.summary.errors).toBeGreaterThan(0);
+      expect(result.summary.created).toBeGreaterThan(0);
+      expect(result.summary.exists).toBeGreaterThan(0);
+    });
+
+    it("skips workers without a path and invalid wrangler.jsonc", async () => {
+      const workerPath = "/fake/workers/bad-json";
+      const mockConfig = {
+        load: async () => ({ global: {}, workers: {} }),
+        listEnabledWorkers: () => ["no-path", "bad-json"],
+        getWorker: (name: string) => {
+          if (name === "no-path") return { enabled: true };
+          if (name === "bad-json") return { enabled: true, path: workerPath };
+          return undefined;
+        },
+      };
+
+      (Bun as unknown as Record<string, unknown>).file = mock((p: string) => ({
+        exists: async () => p === `${workerPath}/wrangler.jsonc`,
+        text: async () => {
+          throw new Error("read failed");
+        },
+      }));
+
+      const result = await doProvision(
+        quietOpts,
+        createMockCloudflare() as unknown as import("../../services/cloudflare/cloudflare-service.js").CloudflareService,
+        mockConfig as unknown as import("../../services/config/config-service.js").ConfigService
+      );
+      expect(result.items).toEqual([]);
+    });
+  });
+
+  // -- displayListResult edge cases -----------------------------------------
+
+  describe("displayListResult extras", () => {
+    it("outputs object JSON in json mode", () => {
+      const result = okResult(JSON.stringify({ name: "only-one", count: 1 }));
+      displayListResult(result, jsonOpts);
+      const out = capture.output();
+      const parsed = JSON.parse(out);
+      expect(parsed.name).toBe("only-one");
+    });
+
+    it("wraps raw text as {output} in json mode", () => {
+      const result = okResult("not-json-text");
+      displayListResult(result, jsonOpts);
+      const out = capture.output();
+      const parsed = JSON.parse(out);
+      expect(parsed.output).toBe("not-json-text");
+    });
+
+    it("maps all top-level scalar keys when columns omitted", () => {
+      const result = okResult(
+        JSON.stringify([{ id: "1", title: "t", nested: { a: 1 }, n: null }])
+      );
+      displayListResult(result, humanOpts);
+      const out = capture.output();
+      expect(out).toContain("1");
+      expect(out).toContain("t");
+    });
+  });
+
+  // -- Vectorize / Analytics handlers ---------------------------------------
+
+  describe("vectorize handlers", () => {
+    it("lists vectorize indexes", async () => {
+      await doVectorizeList(
+        humanOpts,
+        createMockCloudflare() as unknown as import("../../services/cloudflare/cloudflare-service.js").CloudflareService
+      );
+      expect(capture.output()).toContain("rag-index");
+    });
+
+    it("creates a vectorize index", async () => {
+      await doVectorizeCreate(
+        "new-idx",
+        humanOpts,
+        createMockCloudflare() as unknown as import("../../services/cloudflare/cloudflare-service.js").CloudflareService
+      );
+      expect(capture.output()).toContain("new-idx");
+    });
+
+    it("deletes a vectorize index", async () => {
+      await doVectorizeDelete(
+        "old-idx",
+        humanOpts,
+        createMockCloudflare() as unknown as import("../../services/cloudflare/cloudflare-service.js").CloudflareService
+      );
+      expect(capture.output()).toContain("old-idx");
+    });
+  });
+
+  describe("analytics handlers", () => {
+    it("lists analytics datasets", async () => {
+      await doAnalyticsList(
+        humanOpts,
+        createMockCloudflare() as unknown as import("../../services/cloudflare/cloudflare-service.js").CloudflareService
+      );
+      expect(capture.output()).toContain("hoox-analytics");
+    });
+
+    it("prints create instructions on analyticsCreate failure", async () => {
+      await doAnalyticsCreate(
+        "ds",
+        humanOpts,
+        createMockCloudflare() as unknown as import("../../services/cloudflare/cloudflare-service.js").CloudflareService
+      );
+      expect(capture.output()).toContain("cannot be created");
+    });
+
+    it("shows success when analyticsCreate ok", async () => {
+      const mockCf = createMockCloudflare({
+        analyticsCreate: async () => okResult("created"),
+      });
+      await doAnalyticsCreate(
+        "ds",
+        humanOpts,
+        mockCf as unknown as import("../../services/cloudflare/cloudflare-service.js").CloudflareService
+      );
+      expect(capture.output()).toMatch(/created|Analytics/i);
+    });
+  });
+
+  // -- doProvisionDryRun ----------------------------------------------------
+
+  describe("doProvisionDryRun", () => {
+    const realFile = Bun.file;
+
+    afterEach(() => {
+      (Bun as unknown as Record<string, unknown>).file = realFile;
+    });
+
+    it("prints plan for workers with resources", async () => {
+      const workerPath = "/fake/workers/dry-worker";
+      // ConfigService is constructed inside doProvisionDryRun — mock via
+      // prototype so load/list/getWorker work without a real file.
+      const { ConfigService } =
+        await import("../../services/config/config-service.js");
+      const origLoad = ConfigService.prototype.load;
+      const origList = ConfigService.prototype.listEnabledWorkers;
+      const origGet = ConfigService.prototype.getWorker;
+
+      ConfigService.prototype.load = mock(
+        async () => ({})
+      ) as unknown as typeof origLoad;
+      ConfigService.prototype.listEnabledWorkers = mock(() => [
+        "dry-worker",
+      ]) as typeof origList;
+      ConfigService.prototype.getWorker = mock((name: string) =>
+        name === "dry-worker" ? { enabled: true, path: workerPath } : undefined
+      ) as typeof origGet;
+
+      const wranglerConfig = JSON.stringify({
+        d1_databases: [{ binding: "DB", database_name: "plan-db" }],
+        kv_namespaces: [{ binding: "KV" }],
+        r2_buckets: [{ binding: "B", bucket_name: "plan-bucket" }],
+        queues: {
+          producers: [{ queue: "q1" }],
+          consumers: [{ queue: "q2" }],
+        },
+      });
+
+      (Bun as unknown as Record<string, unknown>).file = mock((p: string) => ({
+        exists: async () => p === `${workerPath}/wrangler.jsonc`,
+        text: async () => wranglerConfig,
+      }));
+
+      try {
+        await doProvisionDryRun(humanOpts);
+        const out = capture.output();
+        expect(out).toContain("Resources to provision");
+        expect(out).toContain("dry-worker");
+        expect(out).toContain("D1: plan-db");
+        expect(out).toContain("KV: KV");
+        expect(out).toContain("R2: plan-bucket");
+        expect(out).toContain("Queue: q1");
+        expect(out).toContain("Queue: q2");
+        expect(out).toContain("--dry-run");
+      } finally {
+        ConfigService.prototype.load = origLoad;
+        ConfigService.prototype.listEnabledWorkers = origList;
+        ConfigService.prototype.getWorker = origGet;
+      }
+    });
+
+    it("reports no enabled workers", async () => {
+      const { ConfigService } =
+        await import("../../services/config/config-service.js");
+      const origLoad = ConfigService.prototype.load;
+      const origList = ConfigService.prototype.listEnabledWorkers;
+      ConfigService.prototype.load = mock(
+        async () => ({})
+      ) as unknown as typeof origLoad;
+      ConfigService.prototype.listEnabledWorkers = mock(
+        () => []
+      ) as typeof origList;
+
+      try {
+        await doProvisionDryRun(humanOpts);
+        expect(capture.output()).toMatch(/No enabled workers/i);
+      } finally {
+        ConfigService.prototype.load = origLoad;
+        ConfigService.prototype.listEnabledWorkers = origList;
+      }
+    });
+
+    it("handles config load failure", async () => {
+      const { ConfigService } =
+        await import("../../services/config/config-service.js");
+      const origLoad = ConfigService.prototype.load;
+      ConfigService.prototype.load = mock(async () => {
+        throw new Error("no config");
+      }) as typeof origLoad;
+
+      try {
+        await doProvisionDryRun(humanOpts);
+        expect(capture.output()).toContain("no config");
+      } finally {
+        ConfigService.prototype.load = origLoad;
+      }
+    });
+
+    it("reports empty plan when no resources", async () => {
+      const workerPath = "/fake/workers/empty";
+      const { ConfigService } =
+        await import("../../services/config/config-service.js");
+      const origLoad = ConfigService.prototype.load;
+      const origList = ConfigService.prototype.listEnabledWorkers;
+      const origGet = ConfigService.prototype.getWorker;
+      ConfigService.prototype.load = mock(
+        async () => ({})
+      ) as unknown as typeof origLoad;
+      ConfigService.prototype.listEnabledWorkers = mock(() => [
+        "empty",
+      ]) as typeof origList;
+      ConfigService.prototype.getWorker = mock(() => ({
+        enabled: true,
+        path: workerPath,
+      })) as typeof origGet;
+
+      (Bun as unknown as Record<string, unknown>).file = mock((p: string) => ({
+        exists: async () => p === `${workerPath}/wrangler.jsonc`,
+        text: async () => JSON.stringify({ name: "empty" }),
+      }));
+
+      try {
+        await doProvisionDryRun(humanOpts);
+        expect(capture.output()).toMatch(/No provisionable resources/i);
+      } finally {
+        ConfigService.prototype.load = origLoad;
+        ConfigService.prototype.listEnabledWorkers = origList;
+        ConfigService.prototype.getWorker = origGet;
+      }
+    });
+  });
+
+  // -- registration extras --------------------------------------------------
+
+  describe("registerInfraCommand extras", () => {
+    it("registers vectorize and analytics subcommands", () => {
+      const program = new Command();
+      program.exitOverride();
+      registerInfraCommand(program);
+      const infraCmd = program.commands.find((c) => c.name() === "infra")!;
+      const subNames = infraCmd.commands.map((c) => c.name());
+      expect(subNames).toContain("vectorize");
+      expect(subNames).toContain("analytics");
     });
   });
 });

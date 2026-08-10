@@ -589,5 +589,417 @@ describe("registerCheckCommand", () => {
 
       expect(process.exitCode).toBe(ExitCode.ERROR);
     });
+
+    it("applies nodejs_compat and name field fixes on real temp workers", async () => {
+      const { mkdtempSync, mkdirSync, writeFileSync, rmSync, readFileSync } =
+        await import("node:fs");
+      const { tmpdir } = await import("node:os");
+      const { join } = await import("node:path");
+      const dir = mkdtempSync(join(tmpdir(), "hoox-check-fix-"));
+      const workerPath = join(dir, "worker-a");
+      mkdirSync(workerPath, { recursive: true });
+      // Missing nodejs_compat and missing name
+      writeFileSync(
+        join(workerPath, "wrangler.jsonc"),
+        `{
+  // comment
+  "compatibility_date": "2024-01-01",
+  "compatibility_flags": ["other_flag"]
+}
+`
+      );
+
+      listEnabledWorkersMock = mock(() => ["worker-a"]);
+      ConfigService.prototype.listEnabledWorkers = listEnabledWorkersMock;
+      getWorkerMock = mock(() => ({
+        enabled: true,
+        path: workerPath,
+        secrets: ["API_KEY"],
+      }));
+      ConfigService.prototype.getWorker = getWorkerMock;
+
+      // .dev.vars missing → create; wrangler exists
+      const origCwd = process.cwd();
+      try {
+        // Paths in handleFix are relative to cwd; use absolute path in getWorker
+        const program = await createProgram();
+        await program.parseAsync(["check", "fix"], { from: "user" });
+
+        // .dev.vars should be created
+        const devVars = await Bun.file(join(workerPath, ".dev.vars")).exists();
+        expect(devVars).toBe(true);
+
+        const wrangler = readFileSync(
+          join(workerPath, "wrangler.jsonc"),
+          "utf-8"
+        );
+        expect(wrangler).toContain("nodejs_compat");
+        expect(wrangler).toContain('"name"');
+        expect(wrangler).toContain("worker-a");
+      } finally {
+        process.chdir(origCwd);
+        rmSync(dir, { recursive: true, force: true });
+      }
+    });
+  });
+
+  // -- resolveWorkerBaseUrl / probeWorkerHealth -----------------------------
+
+  describe("resolveWorkerBaseUrl / probeWorkerHealth", () => {
+    it("prefers HOOX_GATEWAY_URL for hoox worker", async () => {
+      const { resolveWorkerBaseUrl } = await import("./check-command.js");
+      const orig = process.env.HOOX_GATEWAY_URL;
+      process.env.HOOX_GATEWAY_URL = "https://gw.example.com///";
+      try {
+        expect(
+          resolveWorkerBaseUrl("hoox", { subdomain_prefix: "ignored" })
+        ).toBe("https://gw.example.com");
+      } finally {
+        if (orig === undefined) delete process.env.HOOX_GATEWAY_URL;
+        else process.env.HOOX_GATEWAY_URL = orig;
+      }
+    });
+
+    it("uses subdomain_prefix for other workers", async () => {
+      const { resolveWorkerBaseUrl } = await import("./check-command.js");
+      expect(
+        resolveWorkerBaseUrl("trade-worker", { subdomain_prefix: "cryptolinx" })
+      ).toBe("https://trade-worker.cryptolinx.workers.dev");
+    });
+
+    it("falls back to account id", async () => {
+      const { resolveWorkerBaseUrl } = await import("./check-command.js");
+      expect(
+        resolveWorkerBaseUrl("d1-worker", {
+          cloudflare_account_id: "acct123",
+        })
+      ).toBe("https://d1-worker.acct123.workers.dev");
+    });
+
+    it("throws when URL cannot be resolved", async () => {
+      const { resolveWorkerBaseUrl } = await import("./check-command.js");
+      const origGw = process.env.HOOX_GATEWAY_URL;
+      const origAcct = process.env.CLOUDFLARE_ACCOUNT_ID;
+      delete process.env.HOOX_GATEWAY_URL;
+      delete process.env.CLOUDFLARE_ACCOUNT_ID;
+      try {
+        expect(() => resolveWorkerBaseUrl("hoox", {})).toThrow(
+          /Cannot resolve/
+        );
+      } finally {
+        if (origGw === undefined) delete process.env.HOOX_GATEWAY_URL;
+        else process.env.HOOX_GATEWAY_URL = origGw;
+        if (origAcct === undefined) delete process.env.CLOUDFLARE_ACCOUNT_ID;
+        else process.env.CLOUDFLARE_ACCOUNT_ID = origAcct;
+      }
+    });
+
+    it("probeWorkerHealth returns healthy on 200", async () => {
+      const { probeWorkerHealth } = await import("./check-command.js");
+      fetchMock = mock(
+        async () =>
+          new Response(JSON.stringify({ ok: true }), {
+            status: 200,
+            headers: { "Content-Type": "application/json" },
+          })
+      );
+      globalThis.fetch = fetchMock as unknown as typeof fetch;
+      const result = await probeWorkerHealth(
+        "hoox",
+        "https://hoox.example.com"
+      );
+      expect(result.status).toBe("healthy");
+      expect(result.connectivity).toBe(true);
+      expect(result.url).toContain("/health");
+    });
+
+    it("probeWorkerHealth returns degraded on 4xx and down on 5xx", async () => {
+      const { probeWorkerHealth } = await import("./check-command.js");
+      fetchMock = mock(async () => new Response("nope", { status: 404 }));
+      globalThis.fetch = fetchMock as unknown as typeof fetch;
+      const degraded = await probeWorkerHealth("x", "https://x.example.com");
+      expect(degraded.status).toBe("degraded");
+
+      fetchMock = mock(async () => new Response("err", { status: 503 }));
+      globalThis.fetch = fetchMock as unknown as typeof fetch;
+      const down = await probeWorkerHealth("x", "https://x.example.com");
+      expect(down.status).toBe("down");
+    });
+
+    it("probeWorkerHealth returns down on network error", async () => {
+      const { probeWorkerHealth } = await import("./check-command.js");
+      fetchMock = mock(async () => {
+        throw new Error("ECONNREFUSED");
+      });
+      globalThis.fetch = fetchMock as unknown as typeof fetch;
+      const result = await probeWorkerHealth("x", "https://x.example.com");
+      expect(result.status).toBe("down");
+      expect(result.connectivity).toBe(false);
+      expect(result.error).toContain("ECONNREFUSED");
+    });
+  });
+
+  // -- check health --fix -------------------------------------------------
+
+  describe("check health --fix", () => {
+    it("prints auto-fix hint when workers are down", async () => {
+      fetchMock = mock(async () => {
+        throw new Error("timeout");
+      });
+      globalThis.fetch = fetchMock as unknown as typeof fetch;
+
+      const writes: string[] = [];
+      const orig = process.stdout.write.bind(process.stdout);
+      process.stdout.write = ((chunk: string | Uint8Array) => {
+        writes.push(
+          typeof chunk === "string" ? chunk : new TextDecoder().decode(chunk)
+        );
+        return true;
+      }) as typeof process.stdout.write;
+
+      try {
+        const program = await createProgram();
+        await program.parseAsync(["check", "health", "--fix"], {
+          from: "user",
+        });
+        expect(writes.join("")).toContain("Auto-fix");
+        expect(process.exitCode).toBe(ExitCode.ERROR);
+      } finally {
+        process.stdout.write = orig;
+      }
+    });
+  });
+
+  // -- check setup database edge paths --------------------------------------
+
+  describe("check setup database edge paths", () => {
+    it("warns when tables query fails", async () => {
+      d1ExecuteMock = mock(async () => ({
+        ok: false as const,
+        error: "permission denied",
+      }));
+      CloudflareService.prototype.d1Execute = d1ExecuteMock;
+      const program = await createProgram();
+      await program.parseAsync(["--json", "check", "setup"], { from: "user" });
+      expect(d1ExecuteMock).toHaveBeenCalled();
+    });
+
+    it("skips table check when database is missing", async () => {
+      d1ListMock = mock(async () => ({
+        ok: true as const,
+        value: "other-db (xyz)",
+      }));
+      CloudflareService.prototype.d1List = d1ListMock;
+      const program = await createProgram();
+      await program.parseAsync(["--json", "check", "setup"], { from: "user" });
+      // d1Execute should not be required when db missing
+      expect(d1ListMock).toHaveBeenCalled();
+    });
+
+    it("handles d1 list failure for database category", async () => {
+      d1ListMock = mock(async () => ({
+        ok: false as const,
+        error: "auth",
+      }));
+      CloudflareService.prototype.d1List = d1ListMock;
+      const program = await createProgram();
+      await program.parseAsync(["check", "setup"], { from: "user" });
+      expect(process.exitCode).toBe(ExitCode.ERROR);
+    });
+
+    it("reports missing cloudflare_account_id", async () => {
+      getGlobalMock = mock(() => ({
+        cloudflare_account_id: "",
+        subdomain_prefix: "x",
+      }));
+      ConfigService.prototype.getGlobal = getGlobalMock;
+      const program = await createProgram();
+      await program.parseAsync(["check", "setup"], { from: "user" });
+      expect(process.exitCode).toBe(ExitCode.ERROR);
+    });
+
+    it("reports missing worker path", async () => {
+      getWorkerMock = mock(() => ({ enabled: true, path: "" }));
+      ConfigService.prototype.getWorker = getWorkerMock;
+      const program = await createProgram();
+      await program.parseAsync(["check", "setup"], { from: "user" });
+      expect(process.exitCode).toBe(ExitCode.ERROR);
+    });
+
+    it("reports missing local secrets and remote secret list failures", async () => {
+      secretsCreateMock = mock(async () =>
+        Object.create(SecretsService.prototype, {
+          checkLocalSecrets: {
+            value: mock(async () => ({
+              allSet: false,
+              missing: ["API_KEY"],
+              secrets: [
+                { name: "API_KEY", set: false },
+                { name: "OTHER", set: true, source: "dev.vars" },
+              ],
+            })),
+          },
+          listSecrets: {
+            value: mock(() => ["API_KEY", "OTHER"]),
+          },
+        })
+      );
+      (SecretsService as unknown as Record<string, unknown>).create =
+        secretsCreateMock;
+      secretListMock = mock(async () => ({
+        ok: false as const,
+        error: "no remote",
+      }));
+      CloudflareService.prototype.secretList = secretListMock;
+
+      const program = await createProgram();
+      await program.parseAsync(["check", "setup"], { from: "user" });
+      expect(process.exitCode).toBe(ExitCode.ERROR);
+      expect(secretListMock).toHaveBeenCalled();
+    });
+  });
+
+  // -- check submodule-gitignore --------------------------------------------
+
+  describe("check submodule-gitignore", () => {
+    it("registers submodule-gitignore with sg alias", async () => {
+      const program = await createProgram();
+      const checkCmd = program.commands.find((c) => c.name() === "check")!;
+      const sg = checkCmd.commands.find(
+        (c) => c.name() === "submodule-gitignore"
+      );
+      expect(sg).toBeDefined();
+      expect(sg!.aliases()).toContain("sg");
+    });
+
+    it("runs against temp workers dir (creates missing gitignore)", async () => {
+      const { mkdtempSync, mkdirSync, rmSync, existsSync } =
+        await import("node:fs");
+      const { tmpdir } = await import("node:os");
+      const { join } = await import("node:path");
+      const root = mkdtempSync(join(tmpdir(), "hoox-sg-"));
+      const workers = join(root, "workers", "alpha");
+      mkdirSync(workers, { recursive: true });
+
+      const origCwd = process.cwd();
+      process.chdir(root);
+      try {
+        const program = await createProgram();
+        await program.parseAsync(["check", "submodule-gitignore"], {
+          from: "user",
+        });
+        expect(existsSync(join(workers, ".gitignore"))).toBe(true);
+      } finally {
+        process.chdir(origCwd);
+        rmSync(root, { recursive: true, force: true });
+      }
+    });
+
+    it("reports missing critical entries", async () => {
+      const { mkdtempSync, mkdirSync, rmSync, writeFileSync } =
+        await import("node:fs");
+      const { tmpdir } = await import("node:os");
+      const { join } = await import("node:path");
+      const root = mkdtempSync(join(tmpdir(), "hoox-sg-miss-"));
+      const workers = join(root, "workers", "beta");
+      mkdirSync(workers, { recursive: true });
+      writeFileSync(join(workers, ".gitignore"), "node_modules/\n");
+
+      const origCwd = process.cwd();
+      process.chdir(root);
+      process.exitCode = 0;
+      try {
+        const program = await createProgram();
+        await program.parseAsync(["check", "sg"], { from: "user" });
+        expect(process.exitCode).toBe(ExitCode.ERROR);
+      } finally {
+        process.chdir(origCwd);
+        rmSync(root, { recursive: true, force: true });
+      }
+    });
+
+    it("outputs JSON for submodule-gitignore", async () => {
+      const { mkdtempSync, mkdirSync, rmSync } = await import("node:fs");
+      const { tmpdir } = await import("node:os");
+      const { join } = await import("node:path");
+      const root = mkdtempSync(join(tmpdir(), "hoox-sg-json-"));
+      mkdirSync(join(root, "workers"), { recursive: true });
+
+      const origCwd = process.cwd();
+      process.chdir(root);
+      const writes: string[] = [];
+      const orig = process.stdout.write.bind(process.stdout);
+      process.stdout.write = ((chunk: string | Uint8Array) => {
+        writes.push(
+          typeof chunk === "string" ? chunk : new TextDecoder().decode(chunk)
+        );
+        return true;
+      }) as typeof process.stdout.write;
+      try {
+        const program = await createProgram();
+        await program.parseAsync(["--json", "check", "submodule-gitignore"], {
+          from: "user",
+        });
+        const jsonLine = writes.find((w) => {
+          try {
+            const p = JSON.parse(w);
+            return typeof p.workersChecked === "number";
+          } catch {
+            return false;
+          }
+        });
+        expect(jsonLine).toBeDefined();
+      } finally {
+        process.stdout.write = orig;
+        process.chdir(origCwd);
+        rmSync(root, { recursive: true, force: true });
+      }
+    });
+
+    it("reports all valid when critical entries are present", async () => {
+      const { mkdtempSync, mkdirSync, rmSync, writeFileSync } =
+        await import("node:fs");
+      const { tmpdir } = await import("node:os");
+      const { join } = await import("node:path");
+      const root = mkdtempSync(join(tmpdir(), "hoox-sg-ok-"));
+      const workers = join(root, "workers", "gamma");
+      mkdirSync(workers, { recursive: true });
+      writeFileSync(
+        join(workers, ".gitignore"),
+        [
+          "wrangler.jsonc",
+          ".dev.vars",
+          ".wrangler/",
+          "node_modules/",
+          "!.dev.vars.example",
+          "!wrangler.jsonc.example",
+          "",
+        ].join("\n")
+      );
+
+      const origCwd = process.cwd();
+      process.chdir(root);
+      process.exitCode = 0;
+      const writes: string[] = [];
+      const orig = process.stdout.write.bind(process.stdout);
+      process.stdout.write = ((chunk: string | Uint8Array) => {
+        writes.push(
+          typeof chunk === "string" ? chunk : new TextDecoder().decode(chunk)
+        );
+        return true;
+      }) as typeof process.stdout.write;
+      try {
+        const program = await createProgram();
+        await program.parseAsync(["check", "submodule-gitignore"], {
+          from: "user",
+        });
+        expect(writes.join("")).toContain("valid .gitignore");
+        expect(process.exitCode).toBe(0);
+      } finally {
+        process.stdout.write = orig;
+        process.chdir(origCwd);
+        rmSync(root, { recursive: true, force: true });
+      }
+    });
   });
 });

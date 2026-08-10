@@ -16,6 +16,7 @@ import {
   isRemoteAuthReady,
   resolveTuiConnectionEnv,
   shouldUseCliFallback,
+  remoteAuthMissingHint,
 } from "./tui-connection";
 
 describe("tui-connection", () => {
@@ -37,6 +38,18 @@ describe("tui-connection", () => {
       expect(getApiBase({ HOOX_API_URL: "https://gw.example.com///" })).toBe(
         "https://gw.example.com"
       );
+    });
+    it("falls back when URL is invalid", () => {
+      expect(getApiHost("not a url")).toBe("not a url");
+      expect(getApiHost("://bad")).toBe("://bad");
+    });
+  });
+
+  describe("remoteAuthMissingHint", () => {
+    it("mentions token and Access credentials", () => {
+      const hint = remoteAuthMissingHint();
+      expect(hint).toContain("HOOX_API_TOKEN");
+      expect(hint).toContain("CF_ACCESS_CLIENT_ID");
     });
   });
 
@@ -165,6 +178,14 @@ describe("tui-connection", () => {
     });
     it("mentions Access when only Access is set", () => {
       expect(formatAuthBanner(false, "remote", true)).toContain("Access");
+    });
+    it("mentions Bearer + Access when both present", () => {
+      expect(formatAuthBanner(true, "remote", true)).toContain(
+        "Bearer + Access"
+      );
+    });
+    it("notes optional token for local mode", () => {
+      expect(formatAuthBanner(false, "local")).toContain("optional");
     });
   });
 

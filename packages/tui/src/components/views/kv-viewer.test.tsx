@@ -151,6 +151,34 @@ describe("KvViewer", () => {
 
   it("sanitizes revealed KV values (no ESC injection)", () => {
     expect(sanitizeKvValue("secret\x1b[0mvalue")).toBe("secret[0mvalue");
+    expect(sanitizeKvValue("a\u0000b\u0007c")).toBe("abc");
+    const long = "x".repeat(5000);
+    expect(sanitizeKvValue(long).length).toBeLessThanOrEqual(4001);
+    expect(
+      sanitizeKvValue(long).endsWith("…") ||
+        sanitizeKvValue(long).endsWith("\u2026")
+    ).toBe(true);
+  });
+
+  it("filterKvKeys is case-insensitive and trims", () => {
+    const keys = [
+      {
+        name: "Alpha",
+        valueSize: 1,
+        lastModified: null,
+        isSecret: false,
+        manifestType: null as null,
+      },
+      {
+        name: "beta",
+        valueSize: 1,
+        lastModified: null,
+        isSecret: false,
+        manifestType: null as null,
+      },
+    ];
+    expect(filterKvKeys(keys, "ALP")).toHaveLength(1);
+    expect(filterKvKeys(keys, "\t")).toHaveLength(2);
   });
 
   it("caps visible key rows", () => {

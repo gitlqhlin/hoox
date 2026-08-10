@@ -181,6 +181,19 @@ describe("Validation helpers", () => {
     it("rejects non-URL strings", () => {
       expect(validateUrl("not-a-url")).toBe(false);
       expect(validateUrl("")).toBe(false);
+      expect(validateUrl("ftp://x.com")).toBe(false);
+    });
+  });
+
+  describe("maskSecret edge cases", () => {
+    it("masks short secrets entirely", () => {
+      expect(maskSecret("")).toBe("••••");
+      expect(maskSecret("ab")).toBe("••");
+      expect(maskSecret("abcdefg")).toBe("•••••••");
+    });
+
+    it("shows first/last 4 for longer secrets", () => {
+      expect(maskSecret("abcdefghij")).toBe("abcd••••ghij");
     });
   });
 });

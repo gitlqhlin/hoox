@@ -13,6 +13,7 @@ import {
   dashboardWorkerDir,
   loadDashboardKvManifestFromRoot,
   isDashboardSectionFlatKv,
+  isDashboardSectionEditable,
 } from "./dashboard-manifest";
 import {
   KV_TRADE_KILL_SWITCH,
@@ -191,5 +192,53 @@ describe("dashboard-manifest", () => {
     for (const key of required) {
       expect(keys.has(key)).toBe(true);
     }
+  });
+
+  it("isDashboardSectionEditable is inverse of UI skip set", () => {
+    expect(isDashboardSectionEditable("global")).toBe(true);
+    expect(isDashboardSectionEditable("routing")).toBe(true);
+    // UI-only / non-editable sections if present in skip set
+    expect(typeof isDashboardSectionEditable("cron")).toBe("boolean");
+    expect(typeof isDashboardSectionFlatKv("global")).toBe("boolean");
+  });
+
+  it("buildDashboardKvKey maps exchanges:*_enabled and unknown sections", () => {
+    expect(buildDashboardKvKey("hoox", "exchanges:binance_enabled")).toBe(
+      "exchange:binance:enabled"
+    );
+    // Empty exchange name falls through to section prefix mapping
+    expect(buildDashboardKvKey("hoox", "exchanges:_enabled")).toBe(
+      "trade:_enabled"
+    );
+    expect(buildDashboardKvKey("hoox", "unknownsec:field")).toBe(
+      "unknownsec:field"
+    );
+    // bare field with worker prefix
+    expect(buildDashboardKvKey("trade-worker", "max_position_size")).toContain(
+      "max_position_size"
+    );
+  });
+
+  it("stripJsonc removes block comments and keeps string contents", () => {
+    const input = `{
+      "a": 1, /* block
+      comment */
+      "b": "keep /* inside */ string",
+      "c": 2,
+    }`;
+    const cleaned = stripJsonc(input);
+    expect(cleaned).not.toContain("block");
+    expect(cleaned).toContain("keep /* inside */ string");
+    expect(() => JSON.parse(cleaned)).not.toThrow();
+  });
+
+  it("parseDashboardManifest reports parse failures via onError", () => {
+    const messages: string[] = [];
+    const m = parseDashboardManifest("{ not json", "hoox", (msg) =>
+      messages.push(msg)
+    );
+    expect(m.sections).toEqual([]);
+    expect(m.description).toBe("Failed to load configuration");
+    expect(messages.length).toBeGreaterThan(0);
   });
 });

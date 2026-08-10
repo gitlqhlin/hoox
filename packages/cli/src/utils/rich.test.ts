@@ -3,26 +3,43 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { describe, it, expect, mock } from "bun:test";
+import { describe, it, expect, mock, afterEach } from "bun:test";
 import { runRichTasks, type RichTaskResult } from "./rich.js";
 import { CLIError } from "./errors.js";
 
-/** Force stdout into TTY mode so isRichMode() returns true. */
-function withTTY<T>(fn: () => Promise<T> | T): Promise<T> {
+/** Snapshot of env/TTY that suppress rich mode in CI/test runners. */
+const ORIG_NO_COLOR = process.env.NO_COLOR;
+const ORIG_TERM = process.env.TERM;
+const ORIG_TTY = process.stdout.isTTY;
+
+/**
+ * Force rich mode: TTY + clear NO_COLOR / TERM=dumb (common in CI).
+ * Without this, withTTY alone still hits the plain path under NO_COLOR=1.
+ */
+function withRichMode<T>(fn: () => Promise<T> | T): Promise<T> {
   const original = process.stdout.isTTY;
   Object.defineProperty(process.stdout, "isTTY", {
     value: true,
     configurable: true,
     writable: true,
   });
+  delete process.env.NO_COLOR;
+  process.env.TERM = "xterm-256color";
   return Promise.resolve(fn()).finally(() => {
     Object.defineProperty(process.stdout, "isTTY", {
       value: original,
       configurable: true,
       writable: true,
     });
+    if (ORIG_NO_COLOR === undefined) delete process.env.NO_COLOR;
+    else process.env.NO_COLOR = ORIG_NO_COLOR;
+    if (ORIG_TERM === undefined) delete process.env.TERM;
+    else process.env.TERM = ORIG_TERM;
   });
 }
+
+/** @deprecated alias — tests historically called withTTY; now enables real rich path. */
+const withTTY = withRichMode;
 
 function withNonTTY<T>(fn: () => Promise<T> | T): Promise<T> {
   const original = process.stdout.isTTY;
@@ -39,6 +56,19 @@ function withNonTTY<T>(fn: () => Promise<T> | T): Promise<T> {
     });
   });
 }
+
+afterEach(() => {
+  process.exitCode = 0;
+  Object.defineProperty(process.stdout, "isTTY", {
+    value: ORIG_TTY,
+    configurable: true,
+    writable: true,
+  });
+  if (ORIG_NO_COLOR === undefined) delete process.env.NO_COLOR;
+  else process.env.NO_COLOR = ORIG_NO_COLOR;
+  if (ORIG_TERM === undefined) delete process.env.TERM;
+  else process.env.TERM = ORIG_TERM;
+});
 
 describe("runRichTasks", () => {
   it("returns an empty array for empty input", async () => {
@@ -264,10 +294,124 @@ describe("runRichTasks", () => {
   });
 
   it("does not set exitCode when all tasks succeed", async () => {
-    const before = process.exitCode;
+    process.exitCode = 0;
     await withTTY(async () => {
       await runRichTasks([{ title: "ok", run: async () => 1 }]);
     });
-    expect(process.exitCode).toBe(before);
+    expect(process.exitCode).toBe(0);
+  });
+
+  it("rich path: prints title and runs via clack tasks()", async () => {
+    await withRichMode(async () => {
+      const results = await runRichTasks(
+        [
+          { title: "rich-ok", run: async () => 42 },
+          {
+            title: "rich-details",
+            run: async () => 7,
+            details: () => ({ k: "v" }),
+          },
+        ],
+        { title: "Rich checklist title" }
+      );
+      expect(results).toHaveLength(2);
+      expect(results[0]?.ok).toBe(true);
+      expect(results[0]?.value).toBe(42);
+      expect(results[1]?.value).toBe(7);
+      expect(results[1]?.details).toEqual({ k: "v" });
+    });
+  });
+
+  it("rich path: captures CLIError and generic failures", async () => {
+    await withRichMode(async () => {
+      const results = await runRichTasks([
+        {
+          title: "cli-err",
+          run: async () => {
+            throw new CLIError("cli fail", 1);
+          },
+        },
+        {
+          title: "string-err",
+          run: async () => {
+            throw "raw-string";
+          },
+        },
+      ]);
+      expect(results[0]?.ok).toBe(false);
+      expect(results[0]?.error).toBe("cli fail");
+      expect(results[1]?.ok).toBe(false);
+      expect(results[1]?.error).toBe("raw-string");
+      expect(process.exitCode).toBe(1);
+    });
+  });
+
+  it("silent json path: captures failures and details without throwing", async () => {
+    process.exitCode = 0;
+    const results = await runRichTasks(
+      [
+        {
+          title: "ok-silent",
+          run: async () => "x",
+          details: async () => ({ a: "1" }),
+        },
+        {
+          title: "fail-silent",
+          run: async () => {
+            throw new CLIError("silent boom", 1);
+          },
+        },
+        {
+          title: "fail-raw",
+          run: async () => {
+            throw "not-an-error";
+          },
+        },
+      ],
+      { format: { json: true } }
+    );
+    expect(results[0]?.ok).toBe(true);
+    expect(results[0]?.details).toEqual({ a: "1" });
+    expect(results[1]?.ok).toBe(false);
+    expect(results[1]?.error).toBe("silent boom");
+    expect(results[2]?.error).toBe("not-an-error");
+    expect(process.exitCode).toBe(1);
+  });
+
+  it("plain path: string throws become error messages", async () => {
+    await withNonTTY(async () => {
+      const results = await runRichTasks([
+        {
+          title: "plain-str",
+          run: async () => {
+            throw 99;
+          },
+        },
+      ]);
+      expect(results[0]?.ok).toBe(false);
+      expect(results[0]?.error).toBe("99");
+    });
+  });
+
+  it("suppresses default summary when quiet is set", async () => {
+    await withNonTTY(async () => {
+      const original = process.stdout.write.bind(process.stdout);
+      const writeMock = mock((chunk: string | Buffer) => {
+        return original(typeof chunk === "string" ? chunk : chunk.toString());
+      });
+      process.stdout.write =
+        writeMock as unknown as typeof process.stdout.write;
+      try {
+        await runRichTasks([{ title: "q", run: async () => 1 }], {
+          format: { quiet: true },
+        });
+        const allCalls = writeMock.mock.calls
+          .map((c) => (typeof c[0] === "string" ? c[0] : String(c[0])))
+          .join("");
+        expect(allCalls).not.toContain("┌");
+      } finally {
+        process.stdout.write = original;
+      }
+    });
   });
 });

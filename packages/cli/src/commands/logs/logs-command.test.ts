@@ -295,4 +295,180 @@ describe("registerLogsCommand", () => {
       expect(process.exitCode).toBe(ExitCode.ERROR);
     });
   });
+
+  // -- JSON formatting / level filter ---------------------------------------
+
+  describe("log formatting and filters", () => {
+    afterEach(() => {
+      process.exitCode = 0;
+    });
+
+    it("formats JSON log entries and filters by level", async () => {
+      const errorEntry = JSON.stringify({
+        outcome: "ok",
+        eventTimestamp: Date.now(),
+        logs: [{ message: ["boom"], level: "error", timestamp: Date.now() }],
+      });
+      const infoEntry = JSON.stringify({
+        outcome: "ok",
+        eventTimestamp: Date.now(),
+        logs: [{ message: ["hello"], level: "info", timestamp: Date.now() }],
+      });
+      const warnEntry = JSON.stringify({
+        outcome: "ok",
+        eventTimestamp: Date.now(),
+        logs: [{ message: ["careful"], level: "warn", timestamp: Date.now() }],
+      });
+      const outcomeOnly = JSON.stringify({
+        outcome: "canceled",
+        eventTimestamp: Date.now(),
+      });
+
+      spawnMock = mock(() =>
+        createMockSpawn([
+          errorEntry + "\n",
+          infoEntry + "\n",
+          warnEntry + "\n",
+          outcomeOnly + "\n",
+          "not-json-status\n",
+        ])
+      );
+      (Bun as unknown as Record<string, unknown>).spawn = spawnMock;
+
+      let stdout = "";
+      const origWrite = process.stdout.write.bind(process.stdout);
+      process.stdout.write = ((chunk: string | Uint8Array) => {
+        stdout += typeof chunk === "string" ? chunk : chunk.toString();
+        return true;
+      }) as typeof process.stdout.write;
+
+      try {
+        const program = createProgram();
+        await program.parseAsync(
+          ["logs", "worker", "hoox", "--level", "error", "--no-follow"],
+          { from: "user" }
+        );
+      } finally {
+        process.stdout.write = origWrite;
+      }
+
+      expect(stdout).toContain("boom");
+      expect(stdout).toContain("[ERROR]");
+      expect(stdout).not.toContain("hello");
+    });
+
+    it("passes through JSON entries when --json is set", async () => {
+      const entry = JSON.stringify({
+        outcome: "ok",
+        eventTimestamp: 1_700_000_000_000,
+        logs: [{ message: ["raw"], level: "log", timestamp: 1 }],
+      });
+      spawnMock = mock(() => createMockSpawn([entry + "\n"]));
+      (Bun as unknown as Record<string, unknown>).spawn = spawnMock;
+
+      let stdout = "";
+      const origWrite = process.stdout.write.bind(process.stdout);
+      process.stdout.write = ((chunk: string | Uint8Array) => {
+        stdout += typeof chunk === "string" ? chunk : chunk.toString();
+        return true;
+      }) as typeof process.stdout.write;
+
+      try {
+        const program = createProgram();
+        await program.parseAsync(
+          ["logs", "worker", "hoox", "--json", "--no-follow"],
+          { from: "user" }
+        );
+      } finally {
+        process.stdout.write = origWrite;
+      }
+
+      expect(stdout).toContain('"outcome":"ok"');
+      expect(stdout).toContain("raw");
+    });
+
+    it("normalizes unknown level to all (no --format json)", async () => {
+      spawnMock = mock(() => createMockSpawn(["plain line\n"]));
+      (Bun as unknown as Record<string, unknown>).spawn = spawnMock;
+
+      const program = createProgram();
+      await program.parseAsync(
+        ["logs", "worker", "hoox", "--level", "bogus", "--no-follow"],
+        { from: "user" }
+      );
+
+      const callArgs = (
+        spawnMock as unknown as { mock: { calls: Array<unknown[]> } }
+      ).mock.calls[0];
+      const spawnArgs = callArgs[0] as string[];
+      // unknown level → "all" → no --format json
+      expect(spawnArgs).not.toContain("--format");
+    });
+
+    it("prefixes multi-worker output for logs all", async () => {
+      listEnabledWorkersMock = mock(() => ["alpha", "beta"]);
+      ConfigService.prototype.listEnabledWorkers = listEnabledWorkersMock;
+
+      const entry = JSON.stringify({
+        outcome: "ok",
+        eventTimestamp: Date.now(),
+        logs: [
+          { message: ["from-worker"], level: "info", timestamp: Date.now() },
+        ],
+      });
+
+      spawnMock = mock(() => createMockSpawn([entry + "\n"]));
+      (Bun as unknown as Record<string, unknown>).spawn = spawnMock;
+
+      let stdout = "";
+      const origWrite = process.stdout.write.bind(process.stdout);
+      process.stdout.write = ((chunk: string | Uint8Array) => {
+        stdout += typeof chunk === "string" ? chunk : chunk.toString();
+        return true;
+      }) as typeof process.stdout.write;
+
+      try {
+        const program = createProgram();
+        await program.parseAsync(
+          ["logs", "all", "--level", "info", "--no-follow"],
+          { from: "user" }
+        );
+      } finally {
+        process.stdout.write = origWrite;
+      }
+
+      expect(stdout).toMatch(/\[alpha\]|\[beta\]/);
+      expect(stdout).toContain("from-worker");
+    });
+
+    it("emits worker-prefixed JSON for logs all --json", async () => {
+      listEnabledWorkersMock = mock(() => ["w1"]);
+      ConfigService.prototype.listEnabledWorkers = listEnabledWorkersMock;
+
+      const entry = JSON.stringify({
+        outcome: "ok",
+        logs: [{ message: ["j"], level: "debug", timestamp: 1 }],
+      });
+      spawnMock = mock(() => createMockSpawn([entry + "\n"]));
+      (Bun as unknown as Record<string, unknown>).spawn = spawnMock;
+
+      let stdout = "";
+      const origWrite = process.stdout.write.bind(process.stdout);
+      process.stdout.write = ((chunk: string | Uint8Array) => {
+        stdout += typeof chunk === "string" ? chunk : chunk.toString();
+        return true;
+      }) as typeof process.stdout.write;
+
+      try {
+        const program = createProgram();
+        await program.parseAsync(["logs", "all", "--json", "--no-follow"], {
+          from: "user",
+        });
+      } finally {
+        process.stdout.write = origWrite;
+      }
+
+      expect(stdout).toContain('"worker":"w1"');
+    });
+  });
 });

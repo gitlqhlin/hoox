@@ -172,6 +172,45 @@ describe("QueueDepthView", () => {
     ]);
   });
 
+  it("sortQueuesByPressure ties break by name and handles unknown status", () => {
+    const ts = new Date().toISOString();
+    const queues = [
+      {
+        queueName: "b",
+        depth: 0,
+        max: 1000,
+        status: "healthy" as const,
+        producers: 0,
+        consumers: 0,
+        paused: false,
+        timestamp: ts,
+      },
+      {
+        queueName: "a",
+        depth: 0,
+        max: 1000,
+        status: "healthy" as const,
+        producers: 0,
+        consumers: 0,
+        paused: false,
+        timestamp: ts,
+      },
+      {
+        queueName: "z-unknown",
+        depth: 0,
+        max: 1000,
+        status: "unknown" as const,
+        producers: 0,
+        consumers: 0,
+        paused: false,
+        timestamp: ts,
+      },
+    ];
+    // unknown ranks above healthy (3 < 4), ties break by name
+    const sorted = sortQueuesByPressure(queues);
+    expect(sorted.map((q) => q.queueName)).toEqual(["z-unknown", "a", "b"]);
+  });
+
   // ── Pattern contract for subsequent views ──────────────────────────────
   // Document the architectural pattern this view establishes so the
   // views added in subtasks 04, 05, 06, 08 can be audited against it.

@@ -119,6 +119,37 @@ describe("Middleware", () => {
       expect(response).toBeInstanceOf(Response);
       expect(response.status).toBe(200);
     });
+
+    test("withRequestLog logs error and rethrows when handler fails", async () => {
+      const originalError = console.error;
+      let captured = "";
+      console.error = (msg: string) => {
+        captured = msg;
+      };
+      try {
+        const handler = async () => {
+          throw new Error("boom-handler");
+        };
+        const wrapped = withRequestLog(handler, {
+          service: "test",
+          module: "mw",
+        });
+        const req = new Request("http://localhost/fail-path");
+        await expect(
+          wrapped(req, {}, {
+            waitUntil: () => {},
+          } as unknown as ExecutionContext)
+        ).rejects.toThrow("boom-handler");
+        const parsed = JSON.parse(captured);
+        expect(parsed.level).toBe("error");
+        expect(parsed.message).toBe("Request failed");
+        expect(parsed.context.error).toBe("boom-handler");
+        expect(parsed.context.path).toBe("/fail-path");
+        expect(typeof parsed.context.durationMs).toBe("number");
+      } finally {
+        console.error = originalError;
+      }
+    });
   });
 
   describe("Auth", () => {

@@ -18,7 +18,7 @@ import type { Command } from "commander";
 import { withErrorHandling } from "../../utils/error-handler.js";
 
 /** Forward root global flags into a nested parseAsync argv list. */
-function withGlobalFlags(program: Command, args: string[]): string[] {
+export function withGlobalFlags(program: Command, args: string[]): string[] {
   const opts = program.opts() as {
     json?: boolean;
     quiet?: boolean;

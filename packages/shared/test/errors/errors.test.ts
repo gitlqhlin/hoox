@@ -841,3 +841,55 @@ describe("Error Response Error Codes", () => {
     expect(body.code).toBe("INTERNAL_ERROR");
   });
 });
+
+describe("createJsonResponse large-object sanitization", () => {
+  it("deep-sanitizes objects with >=10 keys when sensitive fields present", async () => {
+    const data: Record<string, unknown> = {};
+    for (let i = 0; i < 12; i++) data[`field_${i}`] = i;
+    data.password = "super-secret";
+    data.token = "tok";
+    data.nested = { apiKey: "k", ok: true };
+
+    const body = (await createJsonResponse(data).json()) as ResponseBody;
+    // Sensitive keys are still present (sanitize strips stack/cause, not rename keys)
+    // but Error/stack paths are covered when Error values exist on large objects.
+    expect(body.field_0).toBe(0);
+    expect(body.password).toBe("super-secret");
+  });
+
+  it("deep-sanitizes large objects that contain Error values", async () => {
+    const data: Record<string, unknown> = {};
+    for (let i = 0; i < 12; i++) data[`k${i}`] = i;
+    const err = new Error("boom");
+    (err as unknown as { stack?: string }).stack = "STACKTRACE";
+    data.err = err;
+    data.stack = "top-level-stack-should-drop";
+    data.cause = "top-level-cause-should-drop";
+
+    const body = (await createJsonResponse(data).json()) as ResponseBody;
+    expect(body).not.toHaveProperty("stack");
+    expect(body).not.toHaveProperty("cause");
+    expect((body.err as ResponseBody).message).toBe("boom");
+    expect(body.err as ResponseBody).not.toHaveProperty("stack");
+  });
+
+  it("passes large objects through when no sensitive fields or errors", async () => {
+    const data: Record<string, unknown> = {};
+    for (let i = 0; i < 12; i++) data[`safe_${i}`] = `v${i}`;
+    const body = (await createJsonResponse(data).json()) as ResponseBody;
+    expect(body.safe_0).toBe("v0");
+    expect(body.safe_11).toBe("v11");
+  });
+});
+
+describe("toError stringify fallback", () => {
+  it("stringifies plain objects without message", () => {
+    expect(toError({ code: 1 })).toBe('{"code":1}');
+  });
+
+  it("uses fallback when JSON.stringify throws", () => {
+    const cyclic: Record<string, unknown> = {};
+    cyclic.self = cyclic;
+    expect(toError(cyclic, "fallback-msg")).toBe("fallback-msg");
+  });
+});

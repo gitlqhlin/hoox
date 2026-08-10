@@ -13,6 +13,10 @@ import {
   requireAuth,
   requireInternalAuth,
   checkInternalAuth,
+  createOperatorAuthMiddleware,
+  createInternalAuthMiddleware,
+  resolveOperatorApiKey,
+  requireOperatorAuth,
 } from "../../src/middleware/auth";
 import type { InternalAuthEnv } from "../../src/middleware/auth";
 import type { Env } from "../../src/types";
@@ -94,7 +98,10 @@ describe("requireAuth", () => {
     expect(result).toBeInstanceOf(Response);
     expect(result?.status).toBe(401);
     const body = await result?.json();
-    expect(body).toEqual({ error: "Internal API key not configured" });
+    expect(body).toEqual({
+      error: "Operator API key not configured",
+      hint: "Set OPERATOR_API_KEY (preferred) or INTERNAL_API_KEY on the Worker",
+    });
   });
 
   it("returns 401 when Authorization header missing", async () => {
@@ -491,5 +498,100 @@ describe("checkInternalAuth", () => {
       authorized: false,
       error: "D1_WRITE_KEY_BINDING | INTERNAL_KEY_BINDING not configured",
     });
+  });
+});
+
+describe("resolveOperatorApiKey", () => {
+  it("prefers OPERATOR_API_KEY over INTERNAL_API_KEY", () => {
+    expect(
+      resolveOperatorApiKey({
+        OPERATOR_API_KEY: "op",
+        INTERNAL_API_KEY: "legacy",
+      })
+    ).toBe("op");
+  });
+
+  it("falls back to INTERNAL_API_KEY", () => {
+    expect(resolveOperatorApiKey({ INTERNAL_API_KEY: "legacy" })).toBe(
+      "legacy"
+    );
+  });
+
+  it("returns undefined when empty or missing", () => {
+    expect(resolveOperatorApiKey({})).toBeUndefined();
+    expect(resolveOperatorApiKey({ OPERATOR_API_KEY: "" })).toBeUndefined();
+    expect(resolveOperatorApiKey({ INTERNAL_API_KEY: "  " })).toBe("  ");
+  });
+});
+
+describe("createOperatorAuthMiddleware", () => {
+  it("returns void when auth succeeds", async () => {
+    const mw = createOperatorAuthMiddleware();
+    const env = {
+      OPERATOR_API_KEY: "secret",
+    } as unknown as import("../../src/middleware/auth").OperatorAuthEnv;
+    const req = new Request("https://example.com", {
+      headers: { Authorization: "Bearer secret" },
+    });
+    const out = await mw(req, env, {} as ExecutionContext);
+    expect(out).toBeUndefined();
+  });
+
+  it("returns 401 Response when auth fails", async () => {
+    const mw = createOperatorAuthMiddleware();
+    const env = {
+      OPERATOR_API_KEY: "secret",
+    } as unknown as import("../../src/middleware/auth").OperatorAuthEnv;
+    const req = new Request("https://example.com");
+    const out = await mw(req, env, {} as ExecutionContext);
+    expect(out).toBeInstanceOf(Response);
+    expect((out as Response).status).toBe(401);
+  });
+
+  it("requireOperatorAuth accepts OPERATOR_API_KEY", async () => {
+    const env = { OPERATOR_API_KEY: "op-key" } as unknown as Env;
+    const req = new Request("https://example.com", {
+      headers: { Authorization: "Bearer op-key" },
+    });
+    expect(await requireOperatorAuth(req, env)).toBeNull();
+  });
+});
+
+describe("createInternalAuthMiddleware", () => {
+  it("returns void when key matches", async () => {
+    const mw = createInternalAuthMiddleware();
+    const env = { INTERNAL_KEY_BINDING: "ik" } as InternalAuthEnv;
+    const req = new Request("https://example.com", {
+      headers: { "X-Internal-Auth-Key": "ik" },
+    });
+    const out = await mw(req, env, {} as ExecutionContext);
+    expect(out).toBeUndefined();
+  });
+
+  it("returns 401 when key not configured", async () => {
+    const mw = createInternalAuthMiddleware("CUSTOM_KEY");
+    const out = await mw(
+      new Request("https://example.com"),
+      {} as InternalAuthEnv,
+      {} as ExecutionContext
+    );
+    expect(out).toBeInstanceOf(Response);
+    expect((out as Response).status).toBe(401);
+    const body = await (out as Response).json();
+    expect(body).toEqual({
+      success: false,
+      error: "Internal auth key(s) not configured: CUSTOM_KEY",
+    });
+  });
+
+  it("returns 401 when key does not match", async () => {
+    const mw = createInternalAuthMiddleware();
+    const env = { INTERNAL_KEY_BINDING: "ik" } as InternalAuthEnv;
+    const req = new Request("https://example.com", {
+      headers: { "X-Internal-Auth-Key": "wrong" },
+    });
+    const out = await mw(req, env, {} as ExecutionContext);
+    expect(out).toBeInstanceOf(Response);
+    expect((out as Response).status).toBe(401);
   });
 });

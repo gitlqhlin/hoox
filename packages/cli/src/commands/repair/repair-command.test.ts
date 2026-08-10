@@ -441,5 +441,217 @@ describe("registerRepairCommand", () => {
       expect(process.exitCode).toBe(1);
       expect(configListEnabledMock).toHaveBeenCalled();
     });
+
+    it("shows resource preview detail when list returns string value", async () => {
+      d1ListMock = mock(async () => ({
+        ok: true as const,
+        value: "my-database (abc-123) extra detail for preview truncation",
+      }));
+      (
+        CloudflareService.prototype as unknown as Record<string, unknown>
+      ).d1List = d1ListMock;
+      const program = await createProgram();
+      await program.parseAsync(["repair", "infra"], { from: "user" });
+      expect(process.exitCode).toBe(0);
+    });
+  });
+
+  // -- repair worker failure ------------------------------------------------
+
+  describe("repair worker failures", () => {
+    it("sets exitCode when deploy returns error", async () => {
+      deployMock = mock(async () => ({
+        ok: false as const,
+        error: "deploy boom",
+      }));
+      (
+        CloudflareService.prototype as unknown as Record<string, unknown>
+      ).deploy = deployMock;
+
+      const program = await createProgram();
+      await program.parseAsync(["repair", "worker", "hoox"], { from: "user" });
+      expect(process.exitCode).toBe(1);
+    });
+  });
+
+  // -- repair kv / db / secrets / rebuild -----------------------------------
+
+  describe("repair kv", () => {
+    it("resolves namespace id", async () => {
+      const resolveNs = mock(async () => "ns-abc");
+      (
+        KvSyncService.prototype as unknown as Record<string, unknown>
+      ).resolveNamespaceId = resolveNs;
+      const program = await createProgram();
+      await program.parseAsync(["repair", "kv"], { from: "user" });
+      expect(resolveNs).toHaveBeenCalled();
+      expect(process.exitCode).toBe(0);
+    });
+
+    it("sets exitCode when resolve fails", async () => {
+      (
+        KvSyncService.prototype as unknown as Record<string, unknown>
+      ).resolveNamespaceId = mock(async () => {
+        throw new Error("no ns");
+      });
+      const program = await createProgram();
+      await program.parseAsync(["repair", "kv"], { from: "user" });
+      expect(process.exitCode).toBe(1);
+    });
+  });
+
+  describe("repair db", () => {
+    it("applies schema after resolving db name", async () => {
+      const resolveDb = mock(async () => "trade-db");
+      const apply = mock(async () => {});
+      (
+        DbService.prototype as unknown as Record<string, unknown>
+      ).resolveDbName = resolveDb;
+      (DbService.prototype as unknown as Record<string, unknown>).apply = apply;
+      const program = await createProgram();
+      await program.parseAsync(["repair", "db"], { from: "user" });
+      expect(resolveDb).toHaveBeenCalled();
+      expect(apply).toHaveBeenCalledWith("trade-db", false);
+      expect(process.exitCode).toBe(0);
+    });
+
+    it("sets exitCode when apply fails", async () => {
+      (
+        DbService.prototype as unknown as Record<string, unknown>
+      ).resolveDbName = mock(async () => "trade-db");
+      (DbService.prototype as unknown as Record<string, unknown>).apply = mock(
+        async () => {
+          throw new Error("apply fail");
+        }
+      );
+      const program = await createProgram();
+      await program.parseAsync(["repair", "db"], { from: "user" });
+      expect(process.exitCode).toBe(1);
+    });
+  });
+
+  describe("repair secrets", () => {
+    let SecretsService: typeof import("../../services/secrets/secrets-service.js").SecretsService;
+    let origCreate: typeof import("../../services/secrets/secrets-service.js").SecretsService.create;
+
+    beforeEach(async () => {
+      ({ SecretsService } =
+        await import("../../services/secrets/secrets-service.js"));
+      origCreate = SecretsService.create;
+    });
+
+    afterEach(() => {
+      if (SecretsService) {
+        (SecretsService as unknown as Record<string, unknown>).create =
+          origCreate;
+      }
+    });
+
+    it("reports success when no workers have secrets", async () => {
+      (SecretsService as unknown as Record<string, unknown>).create = mock(
+        async () => ({
+          listAllSecrets: () => ({}),
+          syncToCloudflare: mock(async () => ({
+            ok: true,
+            value: { ok: true, synced: [], failed: [], skipped: [] },
+          })),
+        })
+      );
+      const program = await createProgram();
+      await program.parseAsync(["repair", "secrets"], { from: "user" });
+      expect(process.exitCode).toBe(0);
+    });
+
+    it("syncs system secrets for each worker", async () => {
+      const sync = mock(async () => ({
+        ok: true as const,
+        value: {
+          ok: true,
+          synced: ["A", "B"],
+          failed: [],
+          skipped: [],
+        },
+      }));
+      (SecretsService as unknown as Record<string, unknown>).create = mock(
+        async () => ({
+          listAllSecrets: () => ({
+            hoox: ["A"],
+            "trade-worker": ["B"],
+          }),
+          syncToCloudflare: sync,
+        })
+      );
+      const program = await createProgram();
+      await program.parseAsync(["repair", "secrets"], { from: "user" });
+      expect(sync).toHaveBeenCalledTimes(2);
+      expect(process.exitCode).toBe(0);
+    });
+
+    it("sets exitCode when sync has failures", async () => {
+      (SecretsService as unknown as Record<string, unknown>).create = mock(
+        async () => ({
+          listAllSecrets: () => ({ hoox: ["A"] }),
+          syncToCloudflare: mock(async () => ({
+            ok: true as const,
+            value: {
+              ok: false,
+              synced: [],
+              failed: [{ name: "A", reason: "missing" }],
+              skipped: [{ name: "B", reason: "empty" }],
+            },
+          })),
+        })
+      );
+      const program = await createProgram();
+      await program.parseAsync(["repair", "secrets"], { from: "user" });
+      expect(process.exitCode).toBe(1);
+    });
+
+    it("sets exitCode when syncToCloudflare returns ok:false", async () => {
+      (SecretsService as unknown as Record<string, unknown>).create = mock(
+        async () => ({
+          listAllSecrets: () => ({ hoox: ["A"] }),
+          syncToCloudflare: mock(async () => ({
+            ok: false as const,
+            error: "auth",
+          })),
+        })
+      );
+      const program = await createProgram();
+      await program.parseAsync(["repair", "secrets"], { from: "user" });
+      expect(process.exitCode).toBe(1);
+    });
+  });
+
+  describe("repair rebuild", () => {
+    it("deploys all enabled workers when checks pass", async () => {
+      configListEnabledMock = mock(() => ["hoox"]);
+      (
+        ConfigService.prototype as unknown as Record<string, unknown>
+      ).listEnabledWorkers = configListEnabledMock;
+
+      const program = await createProgram();
+      await program.parseAsync(["repair", "rebuild"], { from: "user" });
+      expect(runSystemCheckMock).toHaveBeenCalled();
+      expect(deployMock).toHaveBeenCalled();
+      expect(process.exitCode).toBe(0);
+    });
+
+    it("aborts when system check fails", async () => {
+      runSystemCheckMock = mock(async () => ({
+        steps: [{ step: "Deps", success: false, message: "no" }],
+        allPassed: false,
+        passedCount: 0,
+        failedCount: 1,
+      }));
+      (
+        RepairService.prototype as unknown as Record<string, unknown>
+      ).runSystemCheck = runSystemCheckMock;
+
+      const program = await createProgram();
+      await program.parseAsync(["repair", "rebuild"], { from: "user" });
+      expect(process.exitCode).toBe(1);
+      expect(deployMock).not.toHaveBeenCalled();
+    });
   });
 });

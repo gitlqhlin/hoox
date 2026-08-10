@@ -326,3 +326,41 @@ describe("createPollingController", () => {
     expect(calls).toBe(1);
   });
 });
+
+describe("useServiceData", () => {
+  afterEach(async () => {
+    const { __setServiceStoreHookForTests } =
+      await import("./use-service-data");
+    __setServiceStoreHookForTests(null);
+  });
+
+  it("applies the selector via the store hook", async () => {
+    const { useServiceData, __setServiceStoreHookForTests } =
+      await import("./use-service-data");
+    const { useServiceStore } = await import("@hoox-sh/hoox-shared");
+    const snapshot = useServiceStore.getState();
+
+    __setServiceStoreHookForTests((selector) => selector(snapshot));
+
+    const status = useServiceData((s) => s.connectionStatus);
+    expect(status).toBe(snapshot.connectionStatus);
+
+    const workers = useServiceData((s) => s.workers);
+    expect(workers).toBe(snapshot.workers);
+  });
+
+  it("restores real store hook after null reset", async () => {
+    const { useServiceData, __setServiceStoreHookForTests } =
+      await import("./use-service-data");
+    __setServiceStoreHookForTests((() => "injected") as never);
+    expect(useServiceData((() => "x") as never) as unknown).toBe("injected");
+    __setServiceStoreHookForTests(null);
+    // Real hook throws outside React — proves restore happened
+    expect(() => useServiceData((s) => s.connectionStatus)).toThrow();
+  });
+
+  it("is re-exported from hooks index", async () => {
+    const mod = await import("./index");
+    expect(typeof mod.useServiceData).toBe("function");
+  });
+});

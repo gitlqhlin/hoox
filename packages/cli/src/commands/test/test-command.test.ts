@@ -320,4 +320,245 @@ describe("registerTestCommand", () => {
 
     (Bun as any).spawn = originalSpawn;
   });
+
+  it("all subcommand succeeds when every pipeline step passes", async () => {
+    process.exitCode = 0;
+    const program = makeProgram();
+    registerTestCommand(program);
+
+    (Bun as any).spawn = mockSpawn(0, "ok");
+    try {
+      await program.parseAsync(["test", "all"], { from: "user" });
+      expect(process.exitCode).toBe(0);
+    } finally {
+      (Bun as any).spawn = originalSpawn;
+    }
+  });
+
+  it("unit subcommand runs bun test and reports success", async () => {
+    process.exitCode = 0;
+    const program = makeProgram();
+    registerTestCommand(program);
+
+    let lastArgs: string[] | undefined;
+    (Bun as any).spawn = mock((args: string[]) => {
+      lastArgs = args;
+      return {
+        exited: Promise.resolve(0),
+        stdout: new Blob([]),
+        stderr: new Blob([]),
+      };
+    });
+    try {
+      await program.parseAsync(["test", "unit", "--coverage"], {
+        from: "user",
+      });
+      expect(lastArgs).toEqual(["bun", "test", "--coverage"]);
+      expect(process.exitCode).toBe(0);
+    } finally {
+      (Bun as any).spawn = originalSpawn;
+    }
+  });
+
+  it("unit subcommand sets exitCode on failure", async () => {
+    process.exitCode = 0;
+    const program = makeProgram();
+    registerTestCommand(program);
+    (Bun as any).spawn = mockSpawn(1, "", "fail");
+    try {
+      await program.parseAsync(["test", "unit"], { from: "user" });
+      expect(process.exitCode).toBe(ExitCode.ERROR);
+    } finally {
+      (Bun as any).spawn = originalSpawn;
+    }
+  });
+
+  it("integration subcommand runs vitest with optional coverage", async () => {
+    process.exitCode = 0;
+    const program = makeProgram();
+    registerTestCommand(program);
+
+    let lastArgs: string[] | undefined;
+    (Bun as any).spawn = mock((args: string[]) => {
+      lastArgs = args;
+      return {
+        exited: Promise.resolve(0),
+        stdout: new Blob([]),
+        stderr: new Blob([]),
+      };
+    });
+    try {
+      await program.parseAsync(["test", "integration", "--coverage"], {
+        from: "user",
+      });
+      expect(lastArgs?.[0]).toBe("vitest");
+      expect(lastArgs).toContain("--coverage");
+      expect(process.exitCode).toBe(0);
+    } finally {
+      (Bun as any).spawn = originalSpawn;
+    }
+  });
+
+  it("integration subcommand sets exitCode on failure", async () => {
+    process.exitCode = 0;
+    const program = makeProgram();
+    registerTestCommand(program);
+    (Bun as any).spawn = mockSpawn(2);
+    try {
+      await program.parseAsync(["test", "integration"], { from: "user" });
+      expect(process.exitCode).toBe(ExitCode.ERROR);
+    } finally {
+      (Bun as any).spawn = originalSpawn;
+    }
+  });
+
+  it("worker subcommand rejects unknown worker", async () => {
+    process.exitCode = 0;
+    const { ConfigService } =
+      await import("../../services/config/config-service.js");
+    const origLoad = ConfigService.prototype.load;
+    const origGet = ConfigService.prototype.getWorker;
+    ConfigService.prototype.load = mock(
+      async () => ({})
+    ) as unknown as typeof origLoad;
+    ConfigService.prototype.getWorker = mock(() => undefined) as typeof origGet;
+
+    const program = makeProgram();
+    registerTestCommand(program);
+    try {
+      await program.parseAsync(["test", "worker", "nope"], { from: "user" });
+      expect(process.exitCode).toBe(ExitCode.INVALID_USAGE);
+    } finally {
+      ConfigService.prototype.load = origLoad;
+      ConfigService.prototype.getWorker = origGet;
+    }
+  });
+
+  it("worker subcommand runs bun test in worker dir", async () => {
+    process.exitCode = 0;
+    const { ConfigService } =
+      await import("../../services/config/config-service.js");
+    const origLoad = ConfigService.prototype.load;
+    const origGet = ConfigService.prototype.getWorker;
+    ConfigService.prototype.load = mock(
+      async () => ({})
+    ) as unknown as typeof origLoad;
+    ConfigService.prototype.getWorker = mock(() => ({
+      enabled: true,
+      path: "workers/hoox",
+    })) as typeof origGet;
+
+    let spawnOpts: { cwd?: string } | undefined;
+    let lastArgs: string[] | undefined;
+    (Bun as any).spawn = mock((args: string[], opts?: { cwd?: string }) => {
+      lastArgs = args;
+      spawnOpts = opts;
+      return {
+        exited: Promise.resolve(0),
+        stdout: new Blob([]),
+        stderr: new Blob([]),
+      };
+    });
+
+    const program = makeProgram();
+    registerTestCommand(program);
+    try {
+      await program.parseAsync(["test", "worker", "hoox", "--coverage"], {
+        from: "user",
+      });
+      expect(lastArgs).toEqual(["bun", "test", "--coverage"]);
+      expect(spawnOpts?.cwd).toContain("workers/hoox");
+      expect(process.exitCode).toBe(0);
+    } finally {
+      ConfigService.prototype.load = origLoad;
+      ConfigService.prototype.getWorker = origGet;
+      (Bun as any).spawn = originalSpawn;
+    }
+  });
+
+  it("worker subcommand sets exitCode when tests fail", async () => {
+    process.exitCode = 0;
+    const { ConfigService } =
+      await import("../../services/config/config-service.js");
+    const origLoad = ConfigService.prototype.load;
+    const origGet = ConfigService.prototype.getWorker;
+    ConfigService.prototype.load = mock(
+      async () => ({})
+    ) as unknown as typeof origLoad;
+    ConfigService.prototype.getWorker = mock(() => ({
+      enabled: true,
+      path: "workers/hoox",
+    })) as typeof origGet;
+    (Bun as any).spawn = mockSpawn(1);
+
+    const program = makeProgram();
+    registerTestCommand(program);
+    try {
+      await program.parseAsync(["test", "worker", "hoox"], { from: "user" });
+      expect(process.exitCode).toBe(ExitCode.ERROR);
+    } finally {
+      ConfigService.prototype.load = origLoad;
+      ConfigService.prototype.getWorker = origGet;
+      (Bun as any).spawn = originalSpawn;
+    }
+  });
+
+  it("live subcommand runs tests/live with jobs=1", async () => {
+    process.exitCode = 0;
+    let lastArgs: string[] | undefined;
+    (Bun as any).spawn = mock((args: string[]) => {
+      lastArgs = args;
+      return {
+        exited: Promise.resolve(0),
+        stdout: new Blob([]),
+        stderr: new Blob([]),
+      };
+    });
+
+    const program = makeProgram();
+    registerTestCommand(program);
+    try {
+      await program.parseAsync(["test", "live", "--service", "d1"], {
+        from: "user",
+      });
+      expect(lastArgs).toEqual([
+        "bun",
+        "test",
+        "tests/live/d1.test.ts",
+        "--jobs",
+        "1",
+      ]);
+      expect(process.exitCode).toBe(0);
+    } finally {
+      (Bun as any).spawn = originalSpawn;
+    }
+  });
+
+  it("live subcommand sets exitCode on failure", async () => {
+    process.exitCode = 0;
+    (Bun as any).spawn = mockSpawn(1);
+    const program = makeProgram();
+    registerTestCommand(program);
+    try {
+      await program.parseAsync(["test", "live"], { from: "user" });
+      expect(process.exitCode).toBe(ExitCode.ERROR);
+    } finally {
+      (Bun as any).spawn = originalSpawn;
+    }
+  });
+
+  it("unit subcommand handles spawn throw (runWithInherit catch)", async () => {
+    process.exitCode = 0;
+    (Bun as any).spawn = mock(() => {
+      throw new Error("spawn failed hard");
+    });
+    const program = makeProgram();
+    registerTestCommand(program);
+    try {
+      await program.parseAsync(["test", "unit"], { from: "user" });
+      expect(process.exitCode).toBe(ExitCode.ERROR);
+    } finally {
+      (Bun as any).spawn = originalSpawn;
+    }
+  });
 });

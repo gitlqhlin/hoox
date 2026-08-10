@@ -13,14 +13,16 @@
  *   2. The build emits `dist/<subdir>/<file>.js` for each non-index
  *      source file in `src/<subdir>/`.
  *   3. A consumer can `import` from the deep path and get the symbol.
+ *
+ * Uses Bun.file / Glob instead of `node:fs` so a leaked mock.module("node:fs")
+ * from other suites (config.test.ts) cannot poison package.json reads.
  */
 
 import { describe, it, expect, beforeAll } from "bun:test";
-import { existsSync, readFileSync, readdirSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { execSync } from "node:child_process";
 
-const SHARED_ROOT = resolve(__dirname, "../..");
+const SHARED_ROOT = resolve(import.meta.dir, "../..");
 
 // Subdirectories whose deep imports (`<subdir>/<file>`) must resolve.
 // These mirror the explicit subpath entries in package.json.
@@ -32,16 +34,40 @@ const DEEP_IMPORT_SUBDIRS = [
   "exchanges",
 ] as const;
 
+async function readPackageJson(): Promise<{
+  exports?: Record<string, unknown>;
+}> {
+  return (await Bun.file(join(SHARED_ROOT, "package.json")).json()) as {
+    exports?: Record<string, unknown>;
+  };
+}
+
+function listNonIndexTs(dir: string): string[] {
+  const names: string[] = [];
+  for (const f of new Bun.Glob("*.ts").scanSync({
+    cwd: dir,
+    onlyFiles: true,
+  })) {
+    if (f === "index.ts" || f.endsWith(".test.ts")) continue;
+    names.push(f);
+  }
+  return names;
+}
+
+/** True when path exists as a regular file (avoids mocked node:fs). */
+function fileExists(path: string): boolean {
+  return Bun.spawnSync(["test", "-f", path]).exitCode === 0;
+}
+
 describe("Shared package exports — deep imports", () => {
   // Schema test: fast, no build needed. Catches missing/typo'd exports.
   // Uses `in` because `toHaveProperty` is broken in bun:test when the
   // property key contains `*`.
   for (const sub of DEEP_IMPORT_SUBDIRS) {
-    it(`declares './${sub}/*' pattern in package.json exports`, () => {
-      const pkg = JSON.parse(
-        readFileSync(join(SHARED_ROOT, "package.json"), "utf8")
-      );
-      expect(`./${sub}/*` in pkg.exports).toBe(true);
+    it(`declares './${sub}/*' pattern in package.json exports`, async () => {
+      const pkg = await readPackageJson();
+      expect(pkg.exports && typeof pkg.exports === "object").toBe(true);
+      expect(`./${sub}/*` in (pkg.exports ?? {})).toBe(true);
     });
   }
 
@@ -59,15 +85,12 @@ describe("Shared package exports — deep imports", () => {
       it(`emits dist/${sub}/<file>.js for every non-index source file`, () => {
         const srcDir = join(SHARED_ROOT, "src", sub);
         const distDir = join(SHARED_ROOT, "dist", sub);
-        const srcFiles = readdirSync(srcDir).filter(
-          (f) =>
-            f.endsWith(".ts") && f !== "index.ts" && !f.endsWith(".test.ts")
-        );
+        const srcFiles = listNonIndexTs(srcDir);
         expect(srcFiles.length).toBeGreaterThan(0);
         for (const f of srcFiles) {
           const baseName = f.replace(/\.ts$/, "");
           const jsPath = join(distDir, `${baseName}.js`);
-          expect(existsSync(jsPath)).toBe(true);
+          expect(fileExists(jsPath)).toBe(true);
         }
       });
     }
