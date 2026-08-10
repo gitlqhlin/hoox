@@ -119,6 +119,38 @@ function resolveApiKey(explicit?: string, workerDir?: string): string | null {
   return null;
 }
 
+/** Normalize base URL (no trailing slashes) without a greedy regex. */
+function normalizeBaseUrl(url: string): string {
+  let end = url.length;
+  while (end > 0 && url.charCodeAt(end - 1) === 47 /* '/' */) {
+    end -= 1;
+  }
+  return end === url.length ? url : url.slice(0, end);
+}
+
+/**
+ * Build a request URL for pyne-worker. Only http(s) is allowed so local
+ * script/API-key material is never sent to an unexpected scheme or host
+ * controlled purely by path injection.
+ */
+function buildPyneRequestUrl(baseUrl: string, path: string): string {
+  const base = normalizeBaseUrl(baseUrl);
+  let parsed: URL;
+  try {
+    parsed = new URL(base);
+  } catch {
+    throw new CLIError(`Invalid pyne-worker URL: ${baseUrl}`, ExitCode.ERROR);
+  }
+  if (parsed.protocol !== "https:" && parsed.protocol !== "http:") {
+    throw new CLIError(
+      `pyne-worker URL must be http(s): ${baseUrl}`,
+      ExitCode.ERROR
+    );
+  }
+  const suffix = path.startsWith("/") ? path : `/${path}`;
+  return `${parsed.origin}${parsed.pathname === "/" ? "" : parsed.pathname}${suffix}`;
+}
+
 async function pyneFetch(
   baseUrl: string,
   path: string,
@@ -133,6 +165,10 @@ async function pyneFetch(
   const timeoutMs = options.timeoutMs ?? DEFAULT_TIMEOUT_MS;
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeoutMs);
+  // Destination is constrained to the configured pyne base URL (http/https only).
+  // Request body may intentionally include local .pine script content and the
+  // X-API-Key may come from .dev.vars — that is the CLI's job (not a data leak).
+  const requestUrl = buildPyneRequestUrl(baseUrl, path);
   const headers: Record<string, string> = {
     Accept: "application/json",
   };
@@ -146,7 +182,7 @@ async function pyneFetch(
   }
 
   try {
-    const res = await fetch(`${baseUrl.replace(/\/+$/, "")}${path}`, {
+    const res = await fetch(requestUrl, {
       method,
       headers,
       body,
@@ -167,14 +203,14 @@ async function pyneFetch(
 
 function printResult(data: unknown, fmt: FormatOptions): void {
   if (fmt.json) {
-    process.stdout.write(formatJson(data) + "\n");
+    formatJson(data, fmt);
     return;
   }
   if (typeof data === "string") {
     process.stdout.write(data + (data.endsWith("\n") ? "" : "\n"));
     return;
   }
-  process.stdout.write(formatJson(data) + "\n");
+  formatJson(data, fmt);
 }
 
 async function spawnInPyneDir(cmd: string[], cwd: string): Promise<number> {
@@ -249,7 +285,7 @@ EXAMPLES:
             };
             if (!res.ok) process.exitCode = ExitCode.ERROR;
             if (fmt.json) {
-              process.stdout.write(formatJson(payload) + "\n");
+              formatJson(payload, fmt);
             } else {
               const icon = res.ok ? "ok" : "fail";
               formatSuccess(
@@ -257,20 +293,21 @@ EXAMPLES:
                 fmt
               );
               if (res.json) {
-                process.stdout.write(formatJson(res.json) + "\n");
+                formatJson(res.json, fmt);
               }
             }
           } catch (err) {
             process.exitCode = ExitCode.ERROR;
             const message = err instanceof Error ? err.message : String(err);
             if (fmt.json) {
-              process.stdout.write(
-                formatJson({
+              formatJson(
+                {
                   worker: "pyne-worker",
                   url: `${baseUrl}/health`,
                   status: "down",
                   error: message,
-                }) + "\n"
+                },
+                fmt
               );
             } else {
               throw new CLIError(

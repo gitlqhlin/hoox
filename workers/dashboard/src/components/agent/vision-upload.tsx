@@ -37,6 +37,22 @@ import { Image, Upload, Sparkles } from "lucide-react";
 import { toast } from "sonner";
 import { useState } from "react";
 
+/** Allow only http(s) and data:image/* for preview src (blocks javascript: etc.). */
+function isSafeImageSrc(url: string): boolean {
+  const trimmed = url.trim();
+  if (!trimmed) return false;
+  if (trimmed.startsWith("data:image/")) {
+    // Reject data:image/...;base64 with embedded HTML-ish payload prefixes
+    return /^data:image\/[a-zA-Z0-9.+-]+;base64,/.test(trimmed);
+  }
+  try {
+    const parsed = new URL(trimmed);
+    return parsed.protocol === "https:" || parsed.protocol === "http:";
+  } catch {
+    return false;
+  }
+}
+
 export function VisionUpload() {
   const [imageUrl, setImageUrl] = useState("");
   const [imageBase64, setImageBase64] = useState<string | null>(null);
@@ -62,6 +78,10 @@ export function VisionUpload() {
     const reader = new FileReader();
     reader.onloadend = () => {
       const base64 = reader.result as string;
+      if (typeof base64 !== "string" || !isSafeImageSrc(base64)) {
+        toast.error("Could not read image file");
+        return;
+      }
       setImageBase64(base64);
       setPreviewUrl(base64);
       setImageUrl("");
@@ -72,7 +92,9 @@ export function VisionUpload() {
 
   const handleUrlChange = (url: string) => {
     setImageUrl(url);
-    setPreviewUrl(url.trim() ? url.trim() : null);
+    const trimmed = url.trim();
+    // Only preview when the URL is a safe image scheme (http/https).
+    setPreviewUrl(trimmed && isSafeImageSrc(trimmed) ? trimmed : null);
     setImageBase64(null);
     setResult(null);
   };
@@ -85,8 +107,8 @@ export function VisionUpload() {
   };
 
   const analyzeImage = async () => {
-    if (!previewUrl) {
-      toast.error("Please provide an image");
+    if (!previewUrl || !isSafeImageSrc(previewUrl)) {
+      toast.error("Please provide a valid image URL or file");
       return;
     }
     if (!prompt.trim()) {
@@ -170,13 +192,14 @@ export function VisionUpload() {
               className="cursor-pointer"
             />
           </div>
-          {previewUrl && (
+          {previewUrl && isSafeImageSrc(previewUrl) && (
             <div className="overflow-hidden rounded-lg border">
-              {/* External chart preview URL — plain img is intentional */}
+              {/* Safe schemes only (http/https/data:image); validated above */}
               <img
                 src={previewUrl}
                 alt="Preview"
                 className="max-h-[300px] w-full object-contain"
+                referrerPolicy="no-referrer"
                 onError={() => {
                   if (!imageBase64) {
                     toast.error("Could not load image from URL");
@@ -185,7 +208,7 @@ export function VisionUpload() {
               />
             </div>
           )}
-          {previewUrl && (
+          {previewUrl && isSafeImageSrc(previewUrl) && (
             <Button
               variant="ghost"
               size="sm"

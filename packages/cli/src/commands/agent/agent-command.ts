@@ -153,11 +153,47 @@ export interface ProbeResult {
   error?: string;
 }
 
+/** Provider health probes only talk to these fixed API hosts. */
+const PROBE_ALLOWED_HOSTS = new Set([
+  "api.cloudflare.com",
+  "api.openai.com",
+  "api.anthropic.com",
+  "generativelanguage.googleapis.com",
+  "api.cognitive.microsoft.com",
+]);
+
+/**
+ * Assert probe destination is https to an allowlisted host.
+ * Secrets may come from env or local .dev.vars — that is intentional for
+ * local CLI health probes against first-party provider APIs.
+ */
+function assertProbeUrl(url: string): void {
+  let parsed: URL;
+  try {
+    parsed = new URL(url);
+  } catch {
+    throw new Error(`Invalid probe URL: ${url}`);
+  }
+  if (parsed.protocol !== "https:") {
+    throw new Error(`Probe URL must be https: ${url}`);
+  }
+  // Allow Azure OpenAI style subdomains under cognitive.microsoft.com / openai.azure.com
+  const host = parsed.hostname.toLowerCase();
+  const allowed =
+    PROBE_ALLOWED_HOSTS.has(host) ||
+    host.endsWith(".openai.azure.com") ||
+    host.endsWith(".cognitiveservices.azure.com");
+  if (!allowed) {
+    throw new Error(`Probe URL host not allowlisted: ${host}`);
+  }
+}
+
 async function timedFetch(
   url: string,
   init: RequestInit,
   timeoutMs: number
 ): Promise<{ response: Response; latencyMs: number }> {
+  assertProbeUrl(url);
   const start = performance.now();
   const response = await fetch(url, {
     ...init,
@@ -318,23 +354,24 @@ async function probeAnthropic(
 
     // Prefer models endpoint; on 404 try a minimal messages count-style request
     if (response.status === 404) {
-      const start = performance.now();
       try {
-        const msgRes = await fetch("https://api.anthropic.com/v1/messages", {
-          method: "POST",
-          headers: {
-            "x-api-key": apiKey,
-            "anthropic-version": "2023-06-01",
-            "content-type": "application/json",
+        const { response: msgRes, latencyMs: lat } = await timedFetch(
+          "https://api.anthropic.com/v1/messages",
+          {
+            method: "POST",
+            headers: {
+              "x-api-key": apiKey,
+              "anthropic-version": "2023-06-01",
+              "content-type": "application/json",
+            },
+            body: JSON.stringify({
+              model: "claude-sonnet-4-20250514",
+              max_tokens: 1,
+              messages: [{ role: "user", content: "ping" }],
+            }),
           },
-          body: JSON.stringify({
-            model: "claude-sonnet-4-20250514",
-            max_tokens: 1,
-            messages: [{ role: "user", content: "ping" }],
-          }),
-          signal: AbortSignal.timeout(timeoutMs),
-        });
-        const lat = Math.round(performance.now() - start);
+          timeoutMs
+        );
         // 200 = online; 400 (bad request but auth ok) / 429 = reachable
         if (msgRes.ok) return { status: "online", latencyMs: lat };
         if (msgRes.status === 401 || msgRes.status === 403) {
@@ -443,7 +480,8 @@ async function probeAzure(
     };
   }
 
-  const base = endpoint.replace(/\/+$/, "");
+  let base = endpoint;
+  while (base.endsWith("/")) base = base.slice(0, -1);
   const url = `${base}/openai/models?api-version=2024-02-01`;
 
   try {

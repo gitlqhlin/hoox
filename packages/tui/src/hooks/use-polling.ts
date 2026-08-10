@@ -46,7 +46,8 @@ export function usePolling(options: UsePollingOptions): void {
         if (cancelled) return;
         retryCount.current++;
       }
-      if (cancelled) return;
+      // cancelled is already checked in both branches above (no await between
+      // those checks and here), so schedule the next tick directly.
       // Read fresh from store on every iteration so config changes take effect
       const currentInterval = useConfigStore.getState().refreshIntervalMs;
       const backoff = Math.min(

@@ -48,8 +48,13 @@ const VALID_TRANSPORTS = new Set<OperatorTransport>([
   "tunnel",
 ]);
 
+/** Strip trailing `/` without a greedy regex (avoids polynomial ReDoS). */
 function stripTrailingSlashes(url: string): string {
-  return url.replace(/\/+$/, "");
+  let end = url.length;
+  while (end > 0 && url.charCodeAt(end - 1) === 47 /* '/' */) {
+    end -= 1;
+  }
+  return end === url.length ? url : url.slice(0, end);
 }
 
 function parseTransport(raw: string | undefined): OperatorTransport | null {
@@ -154,7 +159,7 @@ export function operatorUrl(
   profile: OperatorTransportProfile,
   path: string
 ): string {
-  const base = profile.apiBase.replace(/\/+$/, "");
+  const base = stripTrailingSlashes(profile.apiBase);
   const p = path.startsWith("/") ? path : `/${path}`;
   return `${base}${p}`;
 }

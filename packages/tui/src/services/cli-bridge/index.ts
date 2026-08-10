@@ -357,12 +357,8 @@ function parseSecretsList(stdout: string): SecretMetadata[] {
   if (parsed === null) return [];
 
   // Single-worker envelope: { worker: string, secrets: string[] }
-  if (
-    parsed !== null &&
-    typeof parsed === "object" &&
-    "worker" in parsed &&
-    "secrets" in parsed
-  ) {
+  // `parsed` is non-null after the early return above.
+  if (typeof parsed === "object" && "worker" in parsed && "secrets" in parsed) {
     const envelope = parsed as { worker: string; secrets: unknown };
     if (Array.isArray(envelope.secrets)) {
       const result: SecretMetadata[] = [];
@@ -381,7 +377,7 @@ function parseSecretsList(stdout: string): SecretMetadata[] {
   }
 
   // All-workers envelope: Record<string, string[]>
-  if (parsed !== null && typeof parsed === "object" && !Array.isArray(parsed)) {
+  if (typeof parsed === "object" && !Array.isArray(parsed)) {
     const entries = Object.entries(parsed as Record<string, unknown>);
     const result: SecretMetadata[] = [];
     for (const [, value] of entries) {
@@ -464,10 +460,10 @@ function parseKvList(
   if (parsed === null) return [];
 
   let records: unknown;
+  // `parsed` is non-null after the early return above.
   if (Array.isArray(parsed)) {
     records = parsed;
   } else if (
-    parsed !== null &&
     typeof parsed === "object" &&
     "keys" in parsed &&
     Array.isArray((parsed as { keys: unknown }).keys)
@@ -524,8 +520,8 @@ function parseKvManifest(
   if (parsed === null) return map;
 
   // Manifest shape: { namespace: "CONFIG_KV", keys: [{ key, type, default, ... }] }
+  // `parsed` is non-null after the early return above.
   const keys =
-    parsed !== null &&
     typeof parsed === "object" &&
     "keys" in parsed &&
     Array.isArray((parsed as { keys: unknown }).keys)
