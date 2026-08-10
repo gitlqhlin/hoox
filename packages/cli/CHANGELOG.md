@@ -5,6 +5,21 @@ This project adheres loosely to [Semantic Versioning](https://semver.org/).
 
 ## Unreleased
 
+## [0.11.3] — 2026-08-10
+
+### Fixed / ship-readiness (CLI bootstrap & exit codes)
+
+- **`verifyRepoRoot`**: accept pre-init monorepo markers (`packages/cli` + `wrangler.jsonc.example` / `workers/` / `.gitmodules`) so fresh clones can run `hoox init` / `onboard` without a gitignored root config.
+- **Init cancel / risk decline / bad token**: always `return` after cancel or failed non-interactive validation (no fall-through config write).
+- **Onboard**: do not run setup when init fails; keep `CLOUDFLARE_API_TOKEN` / `CLOUDFLARE_ACCOUNT_ID` for setup; auth gate with actionable hints.
+- **Setup `generateKeys`**: merge mesh keys into existing `.dev.vars` (preserve integration secrets); honor `--skip-secrets`; chmod `.keys` `0700` and secret files `0600`.
+- **Exit codes**: Commander `exitOverride` rethrows so process exit matches card codes; unknown command / missing args → exit `2`; help/version stay `0`.
+- **Double error print**: suppress Commander default lines when we emit a formatted card; completion footer respects `--json` / `--quiet`.
+- **Wrangler preAction**: check-only by default (set `HOOX_AUTO_UPDATE_WRANGLER=1` to auto-install).
+- **Bun guard** in `bin/hoox.js` before imports; recovery text uses `hoox onboard` / `hoox init` (not `config init`).
+- **Defaults / hints**: D1 fallback `trade-data-db`; schema unknown worker throws with known list; next-step map onboard → check setup → deploy.
+- **Docs**: CLI command tree, installation flow, README no-args behavior aligned with code.
+
 ## [0.11.2] — 2026-08-10
 
 ### Fixed / hardened (mesh)

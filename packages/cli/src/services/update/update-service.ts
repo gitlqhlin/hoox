@@ -61,15 +61,21 @@ export class UpdateService {
    * auto-update (non-TTY / --yes flag). Never throws — errors are
    * returned in UpdateResult.
    *
+   * When `silent` is set and `yes` is not true, this is check-only:
+   * it never installs and never writes to stdout (safe for CLI
+   * preAction hooks and CI/JSON).
+   *
    * @param options.yes     Auto-update without prompt when outdated
    * @param options.silent  Suppress “up to date” / skip noise (still
-   *                        reports failures and real updates)
+   *                        reports failures and real updates when
+   *                        an install is actually performed)
    */
   async checkAndPromptUpdate(options?: {
     yes?: boolean;
     silent?: boolean;
   }): Promise<UpdateResult> {
     const silent = options?.silent === true;
+    const yes = options?.yes === true;
     try {
       const versionCheck = await this.prereqs.checkWranglerVersion();
 
@@ -82,13 +88,20 @@ export class UpdateService {
         return { updated: false };
       }
 
+      // Check-only path: silent without --yes never installs (default for
+      // the global preAction hook; auto-install needs HOOX_AUTO_UPDATE_WRANGLER=1).
+      if (silent && !yes) {
+        return { updated: false };
+      }
+
       const current = versionCheck.current ?? "unknown";
       const minimum = versionCheck.minimum ?? "unknown";
 
       // Fetch latest available version for the prompt
       const latest = await this.checkLatestVersion();
 
-      // Determine if we should prompt or auto-update
+      // Determine if we should prompt or auto-update.
+      // Explicit yes:false still prompts on TTY; undefined yes auto-updates on non-TTY.
       let shouldUpdate: boolean;
       if (options?.yes ?? !process.stdout.isTTY) {
         shouldUpdate = true;

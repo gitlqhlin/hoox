@@ -51,8 +51,8 @@ Workspace configuration (`wrangler.jsonc`), path layout (`$HOME/.hoox`, monorepo
 
 To prevent configuration drift, the CLI enforces strict type validation on `wrangler.jsonc` files:
 
-1. **Config Interfaces**: Built-in parsers validate configuration files against type-safe TypeScript interfaces (`Config` and `WorkerConfig`) defined in `src/core/types.ts`.
-2. **Setup Verification (`hoox check setup`)**: Compares active workspace profiles against example files, audits environment variables keys, and scans for missing bindings, outputting formatted terminal reports.
+1. **Config validation**: Built-in parsers validate workspace `wrangler.jsonc` (worker enablement, paths, secrets, vars) via the CLI config/schema services — there is no `src/core/types.ts` path; operator config also lives in `@hoox-sh/hoox-shared`.
+2. **Setup Verification (`hoox check setup`)**: Compares active workspace profiles against expected shape, audits environment variable keys, and scans for missing bindings, outputting formatted terminal reports.
 
 ---
 

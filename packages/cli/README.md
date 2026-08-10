@@ -6,7 +6,7 @@
 
 > **Runtime requirement:** Bun ≥ 1.2. The bin shebang and bundle target are Bun-only; `npm install -g` will install the package but the CLI will not run under Node.js.
 
-**v0.10.1** — operator security plane: fail-closed `tui --remote`, transport profile (Bearer + Access), `doctor --security`, `tunnel check`, management `/v1/*` contract. **v0.9.x** shipped hop-level `perf fastpath` observability and reliability fixes.
+**v0.11.x** — operator security plane (`doctor --security`, `tunnel check`, transport profile Bearer + Access), PYNE edge ops (`hoox pyne`), schema validate/generate, and wrangler **4.x**. **v0.10.x** hardened fail-closed remote TUI / management `/v1/*`. **v0.9.x** shipped hop-level `perf fastpath` observability.
 
 ## Features
 
@@ -24,7 +24,7 @@
 - **Repair & Recovery** (`hoox repair`): Comprehensive system check, guided rebuild, per-component repair.
 - **Top-level Secrets & Keys**: `hoox secrets` and `hoox keys` for Cloudflare Worker secrets and internal auth keys.
 - **Unified Dashboard** (`hoox dashboard dev | deploy`): Start the dev server or build & deploy the Next.js dashboard.
-- **Interactive menu & TUI**: Running `hoox` with no arguments opens the interactive menu; `hoox tui` launches the full OpenTUI operations center.
+- **Interactive menu & TUI**: Running `hoox` with **no arguments**: if `wrangler.jsonc` is missing, auto-runs `onboard` (or `onboard --resume` when `.wizard-state.json` exists); otherwise opens the interactive menu. `hoox tui` launches the full OpenTUI operations center.
 - **Operator security plane** (`hoox doctor`, `hoox tunnel`): Path/TUI hygiene, fail-closed remote transport (Bearer + Access), and private-ingress checks.
 - **Modern-minimal output**: Zinc/indigo palette, completion footer with “next step” suggestions, “did you mean …” for typos, custom help formatter, `--no-color` / `NO_COLOR` / `TERM=dumb`, compact `formatNumber` / `formatBytes`. Shared `format*` helpers available to plugin authors.
 - **Shell Completions**: bash, zsh, and fish completion scripts via `hoox completion <shell>`.

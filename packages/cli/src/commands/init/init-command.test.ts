@@ -22,6 +22,7 @@ import {
   mock,
   spyOn,
 } from "bun:test";
+import * as nodeFs from "node:fs";
 import { runInitCommand, verifyRepoRoot } from "./init-command.js";
 import type { InitOptions } from "./types.js";
 import { ExitCode } from "../../utils/errors.js";
@@ -75,6 +76,9 @@ let captured: CapturedCalls;
 
 /** Paths reported as existing by the Bun.file mock (see beforeEach). */
 const fileExists = new Set<string>();
+
+/** Directories reported as existing by the existsSync mock (see beforeEach). */
+const dirExists = new Set<string>();
 
 /** Configurable responses for each prompt type. */
 interface PromptResponses {
@@ -286,6 +290,7 @@ beforeEach(() => {
   resetCounters();
   simulateCancel = false;
   customPasswordResponder = null;
+  process.exitCode = undefined;
   mockWhoami.mockImplementation(async () => ({
     ok: true,
     value: "user@example.com",
@@ -311,11 +316,12 @@ beforeEach(() => {
 
   // Mock Bun.file to simulate filesystem. Paths listed in `fileExists`
   // are reported as present; everything else is absent. Defaults to the
-  // two repo-root markers so the command's own verifyRepoRoot() guard
-  // passes in the normal-flow tests.
+  // monorepo marker + a wrangler signal so the command's own
+  // verifyRepoRoot() guard passes in the normal-flow tests.
   fileExists.clear();
   fileExists.add("wrangler.jsonc");
   fileExists.add("packages/cli/package.json");
+  dirExists.clear();
 
   spyOn(Bun, "file" as any).mockImplementation(
     (_path: string | URL) =>
@@ -331,6 +337,12 @@ beforeEach(() => {
         stream: () => new ReadableStream(),
         type: "",
       }) as unknown as Bun.BunFile
+  );
+
+  // Mock existsSync so verifyRepoRoot's workers/ check is controllable
+  // (otherwise the real monorepo workers/ dir would always pass).
+  spyOn(nodeFs, "existsSync").mockImplementation((path) =>
+    dirExists.has(String(path))
   );
 
   // Mock process.exit — no-op to prevent actual test termination
@@ -841,6 +853,8 @@ describe("init command", () => {
       await runInitCommand({}, { json: false, quiet: true }, false);
 
       expect(process.exitCode).toBe(0);
+      // Must not fall through and write config after risk decline
+      expect(captured.writes["wrangler.jsonc"]).toBeUndefined();
     });
   });
 
@@ -867,31 +881,60 @@ describe("init command", () => {
   });
 
   describe("verifyRepoRoot", () => {
-    it("passes when both repo-root markers exist", async () => {
-      fileExists.add("wrangler.jsonc");
+    it("passes with packages/cli/package.json + wrangler.jsonc.example (no wrangler.jsonc)", async () => {
+      fileExists.clear();
+      dirExists.clear();
       fileExists.add("packages/cli/package.json");
-      // Should not throw.
+      fileExists.add("wrangler.jsonc.example");
       await expect(verifyRepoRoot()).resolves.toBeUndefined();
     });
 
-    it("throws INVALID_USAGE when wrangler.jsonc is missing", async () => {
+    it("passes with packages/cli/package.json + wrangler.jsonc", async () => {
       fileExists.clear();
-      fileExists.add("packages/cli/package.json"); // only one marker
-      await expect(verifyRepoRoot()).rejects.toThrowError(
-        /Not inside a Hoox repository root/
-      );
+      dirExists.clear();
+      fileExists.add("packages/cli/package.json");
+      fileExists.add("wrangler.jsonc");
+      await expect(verifyRepoRoot()).resolves.toBeUndefined();
+    });
+
+    it("passes with packages/cli/package.json + workers/ directory", async () => {
+      fileExists.clear();
+      dirExists.clear();
+      fileExists.add("packages/cli/package.json");
+      dirExists.add("workers");
+      await expect(verifyRepoRoot()).resolves.toBeUndefined();
+    });
+
+    it("passes with packages/cli/package.json + .gitmodules", async () => {
+      fileExists.clear();
+      dirExists.clear();
+      fileExists.add("packages/cli/package.json");
+      fileExists.add(".gitmodules");
+      await expect(verifyRepoRoot()).resolves.toBeUndefined();
     });
 
     it("throws INVALID_USAGE when packages/cli is missing", async () => {
       fileExists.clear();
-      fileExists.add("wrangler.jsonc"); // only one marker
+      dirExists.clear();
+      fileExists.add("wrangler.jsonc");
+      fileExists.add("wrangler.jsonc.example");
       await expect(verifyRepoRoot()).rejects.toThrowError(
         /this is not the hoox monorepo/
       );
     });
 
+    it("throws INVALID_USAGE when has packages/cli but no other markers", async () => {
+      fileExists.clear();
+      dirExists.clear();
+      fileExists.add("packages/cli/package.json");
+      await expect(verifyRepoRoot()).rejects.toThrowError(
+        /missing Hoox repo markers/
+      );
+    });
+
     it("throws INVALID_USAGE when run from an empty directory", async () => {
-      fileExists.clear(); // neither marker
+      fileExists.clear();
+      dirExists.clear();
       await expect(verifyRepoRoot()).rejects.toThrowError(
         /git clone --recursive/
       );
@@ -1149,16 +1192,37 @@ describe("init command", () => {
     });
   });
 
-  describe("token env restore", () => {
-    it("restores previous CLOUDFLARE_API_TOKEN after validation", async () => {
-      process.env.CLOUDFLARE_API_TOKEN = "pre-existing";
+  describe("token env persistence", () => {
+    it("keeps CLOUDFLARE_API_TOKEN after successful non-interactive validation", async () => {
+      // Bracket access avoids TS narrowing process.env.KEY to undefined after delete.
+      delete process.env["CLOUDFLARE_API_TOKEN"];
+      delete process.env["CLOUDFLARE_ACCOUNT_ID"];
       const options: InitOptions = {
         token: "new-token",
         account: "acct",
       };
       await runInitCommand(options, { json: false, quiet: true }, true);
-      expect(process.env.CLOUDFLARE_API_TOKEN).toBe("pre-existing");
-      delete process.env.CLOUDFLARE_API_TOKEN;
+      expect(process.env["CLOUDFLARE_API_TOKEN"]).toBe("new-token");
+      expect(process.env["CLOUDFLARE_ACCOUNT_ID"]).toBe("acct");
+      delete process.env["CLOUDFLARE_API_TOKEN"];
+      delete process.env["CLOUDFLARE_ACCOUNT_ID"];
+    });
+
+    it("does not persist token when non-interactive validation fails", async () => {
+      delete process.env["CLOUDFLARE_API_TOKEN"];
+      mockWhoami.mockImplementation(async () => ({
+        ok: false as const,
+        error: "Bad token",
+      }));
+      const options: InitOptions = {
+        token: "bad-token",
+        account: "acct",
+      };
+      await runInitCommand(options, { json: false, quiet: true }, true);
+      expect(process.exitCode).toBe(ExitCode.ERROR);
+      expect(process.env.CLOUDFLARE_API_TOKEN).toBeUndefined();
+      // Must not continue and write config after token failure
+      expect(captured.writes["wrangler.jsonc"]).toBeUndefined();
     });
   });
 });

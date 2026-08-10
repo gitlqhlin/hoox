@@ -101,11 +101,13 @@ export function registerSchemaCommand(program: Command): void {
         const svc = new SchemaService();
         const manifest = svc.getManifest(worker);
         if (!manifest) {
-          formatError(
-            new CLIError(`Unknown worker "${worker}"`, ExitCode.INVALID_USAGE),
-            fmt
+          throw new CLIError(
+            `Unknown worker "${worker}"`,
+            ExitCode.INVALID_USAGE,
+            undefined,
+            false,
+            `Known workers: ${svc.getWorkerNames().join(", ") || "(none)"}. Run: hoox schema list`
           );
-          return;
         }
 
         const wranglerContent = generateWranglerJsonc(manifest);

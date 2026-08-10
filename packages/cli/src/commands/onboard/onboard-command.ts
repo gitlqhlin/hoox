@@ -181,6 +181,19 @@ async function runOnboard(
     isNonInteractive
   );
 
+  // Init failed — do not run setup (avoids cascading failures / secret wipes)
+  if (process.exitCode && process.exitCode !== 0) {
+    return;
+  }
+
+  // Belt-and-suspenders: ensure CF credentials are in env for setup/wrangler
+  if (options.token) {
+    process.env.CLOUDFLARE_API_TOKEN = options.token;
+  }
+  if (options.account) {
+    process.env.CLOUDFLARE_ACCOUNT_ID = options.account;
+  }
+
   // ── Step 2: setup ─────────────────────────────────────────────────────
   if (!quiet) {
     process.stdout.write(
@@ -189,6 +202,24 @@ async function runOnboard(
   }
 
   const setupSvc = new SetupService();
+
+  // Same auth gate as `hoox setup` — fail early with actionable next steps
+  const authOk = await setupSvc.checkAuth();
+  if (!authOk) {
+    formatError(
+      new CLIError(
+        "Not authenticated with Cloudflare. Run 'wrangler login' first.",
+        ExitCode.ERROR,
+        undefined,
+        false,
+        "Run `wrangler login` interactively, or set CLOUDFLARE_API_TOKEN and CLOUDFLARE_ACCOUNT_ID environment variables for CI / non-interactive use."
+      ),
+      fmt
+    );
+    process.exitCode = ExitCode.ERROR;
+    return;
+  }
+
   const setupOpts = {
     skipKeys: Boolean(options.skipKeys),
     skipDb: Boolean(options.skipDb),
@@ -202,7 +233,7 @@ async function runOnboard(
     if (result.success) {
       if (!quiet) {
         formatSuccess(
-          "Bootstrap complete! Run: hoox check setup to verify.",
+          "Bootstrap complete! Next: `hoox check setup` then `hoox deploy all`",
           fmt
         );
       }
@@ -210,7 +241,10 @@ async function runOnboard(
       formatError(
         new CLIError(
           "Bootstrap completed with issues. See logs above.",
-          ExitCode.ERROR
+          ExitCode.ERROR,
+          undefined,
+          false,
+          "Retry with `hoox setup`, diagnose with `hoox check setup`, or run `hoox repair check`."
         ),
         fmt
       );
@@ -218,7 +252,13 @@ async function runOnboard(
     }
   } catch (e) {
     formatError(
-      new CLIError(e instanceof Error ? e.message : String(e), ExitCode.ERROR),
+      new CLIError(
+        e instanceof Error ? e.message : String(e),
+        ExitCode.ERROR,
+        undefined,
+        false,
+        "Retry with `hoox setup`, diagnose with `hoox check setup`, or run `hoox repair check`."
+      ),
       fmt
     );
     process.exitCode = ExitCode.ERROR;

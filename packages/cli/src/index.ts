@@ -95,6 +95,23 @@ program
     styleCommandText: (str: string) => theme.bold(str),
     styleOptionText: (str: string) => str,
     styleDescriptionText: (str: string) => theme.dim(str),
+  })
+  // Suppress Commander's default one-line error for paths we reformat in
+  // exitOverride (unknown command/option/missing args). Keeps a single card.
+  .configureOutput({
+    outputError: (str, write) => {
+      if (
+        /^error: unknown command/i.test(str) ||
+        /^error: unknown option/i.test(str) ||
+        /^error: missing required argument/i.test(str) ||
+        /^error: required option/i.test(str) ||
+        // Commander may append its own "(Did you mean …?)" line
+        /^\(Did you mean /i.test(str)
+      ) {
+        return;
+      }
+      write(str);
+    },
   });
 
 // Global options — accessible by all commands via program.opts()
@@ -115,15 +132,21 @@ program.hook("preAction", (thisCmd) => {
   commandStartedAt.set(thisCmd, Date.now());
 });
 
-// Quiet wrangler refresh before commands (no spam when already current).
-// Skipped in tests / when HOOX_SKIP_WRANGLER_UPDATE=1.
+// Quiet wrangler version check before commands (no spam when already current).
+// Does NOT auto-install by default — set HOOX_AUTO_UPDATE_WRANGLER=1 to enable.
+// Skipped in tests / when HOOX_SKIP_WRANGLER_UPDATE=1 / when --json (avoid stdout noise).
 program.hook("preAction", async () => {
   if (process.env.HOOX_SKIP_WRANGLER_UPDATE === "1") return;
   if (process.env.NODE_ENV === "test" || process.env.BUN_TEST === "1") return;
+  if (process.argv.includes("--json")) return;
   try {
     const { UpdateService } = await import("./services/update/index.js");
     const service = new UpdateService();
-    await service.checkAndPromptUpdate({ yes: true, silent: true });
+    const autoUpdate = process.env.HOOX_AUTO_UPDATE_WRANGLER === "1";
+    await service.checkAndPromptUpdate({
+      yes: autoUpdate,
+      silent: true,
+    });
   } catch {
     // Ignore update errors — don't block the actual command
   }
@@ -138,7 +161,14 @@ program.hook("postAction", (thisCmd) => {
   const durationMs = Date.now() - startedAt;
   const path = getCmdPath(thisCmd);
   const suggestion = suggestNextCommand(path);
-  formatCompletion("Done", { durationMs, suggestion });
+  const g = program.opts();
+  formatCompletion("Done", {
+    durationMs,
+    suggestion,
+    json: Boolean(g.json),
+    quiet: Boolean(g.quiet),
+    noColor: g.color === false || Boolean(process.env.NO_COLOR),
+  });
 });
 
 // ---------------------------------------------------------------------------
@@ -152,11 +182,12 @@ program.hook("postAction", (thisCmd) => {
 program.exitOverride((err) => {
   // Global --json / --quiet flags must be honored on the error path too,
   // so scripting users get machine-parseable JSON instead of a human card.
+  // Commander stores --no-color as color:false (not noColor:true).
   const globalOpts = program.opts();
   const errFmtOpts = {
     json: Boolean(globalOpts.json),
     quiet: Boolean(globalOpts.quiet),
-    noColor: Boolean(globalOpts.noColor),
+    noColor: globalOpts.color === false || Boolean(process.env.NO_COLOR),
   };
 
   // Commander's own informational exits — success
@@ -165,20 +196,25 @@ program.exitOverride((err) => {
     err.code === "commander.version"
   ) {
     process.exitCode = ExitCode.SUCCESS;
-    return;
+    // Must throw: if the callback returns, Commander falls through to
+    // process.exit(originalExitCode) which is often 1 even for help.
+    throw err;
   }
 
-  // Parent command without subcommand — already displayed help
+  // Help text already displayed (e.g. parent command without subcommand).
+  // Do NOT treat missingArgument as success — scripts need a non-zero exit.
   if (
-    err.code === "commander.missingArgument" ||
-    err.message === "(outputHelp)" ||
-    err.message?.includes("outputHelp")
+    (err.message === "(outputHelp)" || err.message?.includes("outputHelp")) &&
+    err.code !== "commander.missingArgument"
   ) {
     process.exitCode = ExitCode.SUCCESS;
-    return;
+    throw err;
   }
 
-  // Unknown command: try to suggest a close match
+  // Unknown command: try to suggest a close match.
+  // Commander already wrote a one-line message via outputError; we replace
+  // that with a structured card + suggestion, then rethrow so _exit does
+  // not call process.exit(1).
   if (err.code === "commander.unknownCommand") {
     const match = err.message.match(/'([^']+)'/);
     const badArg = match?.[1] ?? "";
@@ -188,7 +224,7 @@ program.exitOverride((err) => {
       suggestion ? { ...errFmtOpts, suggestions: [suggestion] } : errFmtOpts
     );
     process.exitCode = ExitCode.INVALID_USAGE;
-    return;
+    throw err;
   }
 
   if (err.code === "commander.unknownOption") {
@@ -197,25 +233,25 @@ program.exitOverride((err) => {
       errFmtOpts
     );
     process.exitCode = ExitCode.INVALID_USAGE;
-    return;
+    throw err;
   }
 
   if (
-    err.code === "commander.missingMandatoryOptionValue" ||
-    err.code === "commander.missingArgument"
+    err.code === "commander.missingArgument" ||
+    err.code === "commander.missingMandatoryOptionValue"
   ) {
     formatError(
       new CLIError(err.message, ExitCode.INVALID_USAGE, undefined, false),
       errFmtOpts
     );
     process.exitCode = ExitCode.INVALID_USAGE;
-    return;
+    throw err;
   }
 
   if (err instanceof CLIError) {
     formatError(err, errFmtOpts);
     process.exitCode = (err as CLIError).code;
-    return;
+    throw err;
   }
 
   // Generic fallback
@@ -224,6 +260,7 @@ program.exitOverride((err) => {
     errFmtOpts
   );
   process.exitCode = ExitCode.ERROR;
+  throw err;
 });
 
 // ---------------------------------------------------------------------------
@@ -234,6 +271,8 @@ program.exitOverride((err) => {
 // ---------------------------------------------------------------------------
 
 process.on("uncaughtException", (err) => {
+  // Do not clobber a more specific exit code set by exitOverride / handlers.
+  if (process.exitCode !== undefined && process.exitCode !== 0) return;
   formatError(
     err instanceof CLIError
       ? err
@@ -248,6 +287,9 @@ process.on("uncaughtException", (err) => {
 });
 
 process.on("unhandledRejection", (reason) => {
+  // Commander exitOverride rethrows after setting exitCode — main() catches
+  // that path. If something still escapes, preserve non-zero exit codes.
+  if (process.exitCode !== undefined && process.exitCode !== 0) return;
   const err =
     reason instanceof Error
       ? reason
@@ -312,7 +354,10 @@ export async function main(): Promise<void> {
       const configFile = Bun.file("wrangler.jsonc");
       const hasConfig = await configFile.exists();
       const wizardStateFile = Bun.file(WIZARD_STATE_PATH);
-      const hasWizardState = await wizardStateFile.exists();
+      // Empty leftover state file must not trigger --resume
+      const hasWizardState =
+        (await wizardStateFile.exists()) &&
+        (await wizardStateFile.text()).trim().length > 0;
 
       if (!hasConfig) {
         // No wrangler.jsonc → project is uninitialized → auto-run the
@@ -325,12 +370,35 @@ export async function main(): Promise<void> {
       }
 
       // Clean up stale wizard state if project is already initialized
-      if (hasWizardState) {
-        await Bun.write(WIZARD_STATE_PATH, "");
+      if (await wizardStateFile.exists()) {
+        try {
+          const { unlinkSync } = await import("node:fs");
+          unlinkSync(WIZARD_STATE_PATH);
+        } catch {
+          await Bun.write(WIZARD_STATE_PATH, "");
+        }
       }
 
       // Interactive TUI mode — launches when hoox is called with no arguments
       await runInteractiveTUI(program);
+    }
+  } catch (err) {
+    // Commander exitOverride formats the error, sets process.exitCode
+    // (including 0 for help/version), then rethrows so Commander's _exit
+    // does not call process.exit(1). Preserve any code already set —
+    // including SUCCESS (0) — and only default unexpected throws to ERROR.
+    if (process.exitCode === undefined) {
+      const message =
+        err instanceof Error ? err.message : `Unhandled error: ${String(err)}`;
+      const isCommander =
+        err instanceof Error &&
+        "code" in err &&
+        typeof (err as { code?: string }).code === "string" &&
+        String((err as { code: string }).code).startsWith("commander.");
+      if (!isCommander) {
+        formatError(new CLIError(message, ExitCode.ERROR, undefined, false));
+      }
+      process.exitCode = ExitCode.ERROR;
     }
   } finally {
     // Single, final exit point. We read exitCode (which every other

@@ -14,7 +14,7 @@ import type { HooxConfig, WorkerConfig, GlobalConfig } from "./types";
  *
  * Each variant carries enough context for the caller to surface an
  * actionable error message (e.g. "wrangler.jsonc not found in
- * /home/user/hoox — run `hoox config init`") without re-parsing
+ * /home/user/hoox — run `hoox onboard`") without re-parsing
  * an English string.
  */
 export type ConfigError =
@@ -227,8 +227,8 @@ export class ConfigService {
         case "not-found":
           throw new Error(
             e.triedFallback
-              ? `Config file not found: ${e.path}. Also tried: ${e.triedFallback}. Run 'hoox config init' to create one.`
-              : `Config file not found: ${e.path}. Run 'hoox config init' to create one.`
+              ? `Config file not found: ${e.path}. Also tried: ${e.triedFallback}. Run 'hoox onboard' (or 'hoox init') to create one.`
+              : `Config file not found: ${e.path}. Run 'hoox onboard' (or 'hoox init') to create one.`
           );
         case "invalid-jsonc":
           throw new Error(

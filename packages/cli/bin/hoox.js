@@ -24,6 +24,20 @@
  * when the module is loaded as a side effect from here.
  */
 
+// Runtime guard before any dynamic import: Node users (wrong shebang, or
+// `node bin/hoox.js`) get a clear message instead of ESM resolution stacks.
+// The same check lives in src/index.ts for direct source entry; this one
+// covers the bin path when Node loads this file without Bun globals.
+if (typeof globalThis.Bun === "undefined") {
+  process.stderr.write(
+    "Error: the Hoox CLI requires Bun >= 1.2 to run.\n" +
+      "  Install Bun:  curl -fsSL https://bun.sh | bash\n" +
+      "  Then run:    bunx hoox <command>\n" +
+      "  (npm install -g / node bin/hoox.js will not work.)\n"
+  );
+  process.exit(1);
+}
+
 import { existsSync, statSync, readdirSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { dirname, resolve, join } from "node:path";

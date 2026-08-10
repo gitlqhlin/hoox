@@ -264,6 +264,41 @@ describe("SetupService.generateKeys — full path", () => {
     // exist; the test passes if no throw occurred.
     expect(writeCalls.find((w) => w.path === ".keys/setup.env")).toBeDefined();
   });
+
+  it("merges mesh keys into existing .dev.vars without wiping integration secrets", async () => {
+    const workerDir = join(tmpCwd, "workers", "telegram-worker");
+    mkdirSync(workerDir, { recursive: true });
+    writeFileSync(
+      join(workerDir, ".dev.vars"),
+      "# existing from hoox init\n" +
+        "TELEGRAM_BOT_TOKEN=bot-secret-from-init\n" +
+        "INTERNAL_KEY_BINDING=old-mesh-key\n" +
+        "BYBIT_API_KEY=bybit-key\n"
+    );
+
+    const svc = new SetupService();
+    const keys = await svc.generateKeys(false);
+    expect(keys).not.toBeNull();
+
+    const written = writeCalls.find(
+      (w) => w.path === "workers/telegram-worker/.dev.vars"
+    );
+    expect(written).toBeDefined();
+    // Mesh key overlaid with new value
+    expect(written!.content).toContain(
+      `INTERNAL_KEY_BINDING=${keys!.INTERNAL_KEY_BINDING}`
+    );
+    expect(written!.content).not.toContain("old-mesh-key");
+    // Integration secrets preserved
+    expect(written!.content).toContain(
+      "TELEGRAM_BOT_TOKEN=bot-secret-from-init"
+    );
+    expect(written!.content).toContain("BYBIT_API_KEY=bybit-key");
+    // Header present
+    expect(written!.content).toMatch(
+      /^# \.dev\.vars — local secrets for telegram-worker/m
+    );
+  });
 });
 
 // ---------------------------------------------------------------------------
@@ -494,14 +529,40 @@ describe("SetupService.runAll", () => {
     // skipDb → d1-schema is replaced with a Skipped entry
     const dbStep = result.steps.find((s) => s.step === "d1-schema");
     expect(dbStep?.message).toBe("Skipped");
-    // skipSecrets → secrets step says 0 set
+    // skipSecrets → secrets step is Skipped (does not call setSecrets)
     const secretsStep = result.steps.find((s) => s.step === "secrets");
-    expect(secretsStep?.details).toMatchObject({ total: 0, ok: 0 });
+    expect(secretsStep?.success).toBe(true);
+    expect(secretsStep?.message).toBe("Skipped");
+    expect(result.secrets).toEqual([]);
+    expect(secretPutMock).not.toHaveBeenCalled();
     // skipDashboard=false → dashboard step is not Skipped
     const dashStep = result.steps.find((s) => s.step === "dashboard");
     expect(dashStep?.message).not.toBe("Skipped");
     expect(result.keys).toBeUndefined();
-    expect(result.secrets).toBeDefined();
+  });
+
+  it("skipSecrets alone skips setSecrets even when keys were generated", async () => {
+    const dashboardDir = join(tmpCwd, "workers", "dashboard");
+    mkdirSync(dashboardDir, { recursive: true });
+    writeFileSync(join(dashboardDir, "package.json"), "{}");
+    fileExistsMap["workers/trade-worker/schema.sql"] = true;
+    spawnedExits = [0, 0, 0]; // schema, dashboard build, deploy
+
+    const svc = new SetupService();
+    const result = await svc.runAll({
+      skipSecrets: true,
+      skipDashboard: true,
+    });
+
+    expect(result.keys).toBeDefined();
+    const secretsStep = result.steps.find((s) => s.step === "secrets");
+    expect(secretsStep).toEqual({
+      step: "secrets",
+      success: true,
+      message: "Skipped",
+    });
+    expect(result.secrets).toEqual([]);
+    expect(secretPutMock).not.toHaveBeenCalled();
   });
 
   it("returns failure when any non-skipped step fails", async () => {

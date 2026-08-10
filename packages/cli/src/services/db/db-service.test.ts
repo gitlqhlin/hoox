@@ -131,7 +131,7 @@ describe("DbService", () => {
       expect(configMock.getWorker).toHaveBeenCalledWith("d1-worker");
     });
 
-    it("falls back to my-database when config has no database_name", async () => {
+    it("falls back to trade-data-db when config has no database_name", async () => {
       const configMock = createMockConfigService({
         load: mock(() => Promise.resolve({} as never)),
         getWorker: mock(() => ({ vars: {} })) as never,
@@ -140,10 +140,10 @@ describe("DbService", () => {
 
       const result = await service.resolveDbName();
 
-      expect(result).toBe("my-database");
+      expect(result).toBe("trade-data-db");
     });
 
-    it("falls back to my-database when config load throws", async () => {
+    it("falls back to trade-data-db when config load throws", async () => {
       const configMock = createMockConfigService({
         load: mock(() => Promise.reject(new Error("config not found"))),
       });
@@ -151,10 +151,10 @@ describe("DbService", () => {
 
       const result = await service.resolveDbName();
 
-      expect(result).toBe("my-database");
+      expect(result).toBe("trade-data-db");
     });
 
-    it("falls back to my-database when getWorker returns undefined", async () => {
+    it("falls back to trade-data-db when getWorker returns undefined", async () => {
       const configMock = createMockConfigService({
         load: mock(() => Promise.resolve({} as never)),
         getWorker: mock(() => undefined),
@@ -163,7 +163,7 @@ describe("DbService", () => {
 
       const result = await service.resolveDbName();
 
-      expect(result).toBe("my-database");
+      expect(result).toBe("trade-data-db");
     });
   });
 

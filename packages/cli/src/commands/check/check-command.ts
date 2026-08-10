@@ -323,7 +323,7 @@ async function runDatabaseChecks(
   const d1Worker = configService.getWorker("d1-worker");
   const dbName =
     (d1Worker?.vars as Record<string, string> | undefined)?.database_name ??
-    "my-database";
+    "trade-data-db";
 
   // Check that database exists via wrangler d1 list
   const d1ListResult = await cf.d1List();

@@ -61,6 +61,30 @@ describe("UpdateService", () => {
       expect(result.error).toBeUndefined();
     });
 
+    it("silent without --yes is check-only and never installs when outdated", async () => {
+      const mockPrereqs = createMockPrereqs({
+        outdated: true,
+        current: "3.0.0",
+      });
+      const updateRunner = mock(() =>
+        Promise.resolve({ exitCode: 0, stderr: "" })
+      );
+      const svc = new UpdateService(
+        undefined,
+        mockPrereqs as any,
+        updateRunner
+      );
+
+      const result = await svc.checkAndPromptUpdate({
+        yes: false,
+        silent: true,
+      });
+
+      expect(result.updated).toBe(false);
+      expect(result.error).toBeUndefined();
+      expect(updateRunner).not.toHaveBeenCalled();
+    });
+
     it("auto-updates when wrangler is outdated and --yes is set", async () => {
       const mockPrereqs = createMockPrereqs({
         outdated: true,

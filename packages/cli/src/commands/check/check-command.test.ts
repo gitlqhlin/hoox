@@ -99,7 +99,7 @@ beforeEach(() => {
 
   d1ListMock = mock(async () => ({
     ok: true as const,
-    value: "my-database (abc-123)",
+    value: "trade-data-db (abc-123)",
   }));
   d1ExecuteMock = mock(
     async (_name: string, _sql: string, _remote?: boolean) => ({

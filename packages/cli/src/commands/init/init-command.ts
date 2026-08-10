@@ -15,6 +15,7 @@
 
 import * as p from "@clack/prompts";
 import { Command } from "commander";
+import * as fs from "node:fs";
 import {
   WizardEngine,
   serializeState,
@@ -47,33 +48,55 @@ import type { InitOptions } from "./types.js";
  * non-Hoox project) they would silently scatter files and then fail later
  * with confusing "Worker not found in wrangler.jsonc" / auth errors.
  *
- * We treat a directory as the Hoox repo root when it contains BOTH the
- * root `wrangler.jsonc` AND the `packages/cli` workspace (the CLI
- * package that ships this command). This is a strong, cheap signal that
- * the user cloned `hoox` (or a checkout of it) rather than a
- * random folder.
+ * Required: `packages/cli/package.json` (monorepo workspace marker).
+ *
+ * Also require at least one of these Hoox-repo signals (because
+ * `wrangler.jsonc` is gitignored and created BY init/onboard, so a fresh
+ * clone will not have it yet):
+ *   - `wrangler.jsonc.example`
+ *   - `wrangler.jsonc`
+ *   - `workers/` directory
+ *   - `.gitmodules`
  *
  * @throws CLIError (INVALID_USAGE) with an actionable hint when not in
  *         a Hoox repo root.
  */
 export async function verifyRepoRoot(): Promise<void> {
-  const rootConfig = Bun.file("wrangler.jsonc");
   const cliPackage = Bun.file("packages/cli/package.json");
+  const wranglerExample = Bun.file("wrangler.jsonc.example");
+  const wranglerConfig = Bun.file("wrangler.jsonc");
+  const gitmodules = Bun.file(".gitmodules");
 
-  const [rootConfigExists, cliPackageExists] = await Promise.all([
-    rootConfig.exists(),
+  const [
+    cliPackageExists,
+    wranglerExampleExists,
+    wranglerConfigExists,
+    gitmodulesExists,
+  ] = await Promise.all([
     cliPackage.exists(),
+    wranglerExample.exists(),
+    wranglerConfig.exists(),
+    gitmodules.exists(),
   ]);
 
-  if (rootConfigExists && cliPackageExists) return;
+  const workersDirExists = fs.existsSync("workers");
+  const hasRepoSignal =
+    wranglerExampleExists ||
+    wranglerConfigExists ||
+    workersDirExists ||
+    gitmodulesExists;
+
+  if (cliPackageExists && hasRepoSignal) return;
 
   const reasons: string[] = [];
-  if (!rootConfigExists) {
-    reasons.push("no root `wrangler.jsonc` found in the current directory");
-  }
   if (!cliPackageExists) {
     reasons.push(
       "no `packages/cli` workspace found (this is not the hoox monorepo)"
+    );
+  }
+  if (cliPackageExists && !hasRepoSignal) {
+    reasons.push(
+      "missing Hoox repo markers (expected one of: `wrangler.jsonc.example`, `wrangler.jsonc`, `workers/`, or `.gitmodules`)"
     );
   }
 
@@ -320,7 +343,12 @@ export async function runInitCommand(
     if (error) {
       formatError(new CLIError(error, ExitCode.ERROR), globalOpts);
       process.exitCode = ExitCode.ERROR;
+      return;
     }
+    // Keep credentials for process lifetime so subsequent `hoox setup` /
+    // onboard steps can use wrangler with the validated token.
+    process.env.CLOUDFLARE_API_TOKEN = token;
+    process.env.CLOUDFLARE_ACCOUNT_ID = account;
     if (!globalOpts.quiet) {
       formatSuccess("Cloudflare API token validated", globalOpts);
     }
@@ -376,6 +404,7 @@ export async function runInitCommand(
       if (p.isCancel(resumed)) {
         p.cancel("Setup cancelled.");
         process.exitCode = 0;
+        return;
       }
       if (!resumed) {
         engine = null;
@@ -401,11 +430,13 @@ export async function runInitCommand(
       if (p.isCancel(accepted)) {
         p.cancel("Setup cancelled.");
         process.exitCode = 0;
+        return;
       }
 
       if (!accepted) {
         p.outro("Setup cancelled. See DISCLAIMER.md for full terms.");
         process.exitCode = 0;
+        return;
       }
     }
 
@@ -432,6 +463,7 @@ export async function runInitCommand(
       if (p.isCancel(apiToken)) {
         p.cancel("Setup cancelled.");
         process.exitCode = 0;
+        return;
       }
 
       p.log.step("Validating Cloudflare API token...");
@@ -441,6 +473,8 @@ export async function runInitCommand(
         p.log.warn("Please check your token and try again.");
       } else {
         tokenValid = true;
+        // Keep token for process lifetime so later provision / setup steps work.
+        process.env.CLOUDFLARE_API_TOKEN = apiToken as string;
         formatSuccess("Cloudflare API token validated", globalOpts);
       }
     }
@@ -461,6 +495,7 @@ export async function runInitCommand(
     if (p.isCancel(accountResult)) {
       p.cancel("Setup cancelled.");
       process.exitCode = 0;
+      return;
     }
 
     const secretStoreResult = await p.text({
@@ -471,6 +506,7 @@ export async function runInitCommand(
     if (p.isCancel(secretStoreResult)) {
       p.cancel("Setup cancelled.");
       process.exitCode = 0;
+      return;
     }
 
     const prefixResult = await p.text({
@@ -485,7 +521,10 @@ export async function runInitCommand(
     if (p.isCancel(prefixResult)) {
       p.cancel("Setup cancelled.");
       process.exitCode = 0;
+      return;
     }
+
+    process.env.CLOUDFLARE_ACCOUNT_ID = accountResult as string;
 
     engine.execute({
       apiToken: apiToken as string,
@@ -522,6 +561,7 @@ export async function runInitCommand(
     if (p.isCancel(presetChoice)) {
       p.cancel("Setup cancelled.");
       process.exitCode = 0;
+      return;
     }
 
     engine.execute({ preset: presetChoice as string });
@@ -553,6 +593,7 @@ export async function runInitCommand(
       if (p.isCancel(shouldProvision)) {
         p.cancel("Setup cancelled.");
         process.exitCode = 0;
+        return;
       }
 
       if (shouldProvision) {
@@ -613,6 +654,10 @@ export async function runInitCommand(
           },
         });
 
+        if (p.isCancel(collected)) {
+          return;
+        }
+
         collectedSecrets[key] = {};
         for (const [secretName] of secretEntries) {
           const val = collected[secretName];
@@ -650,6 +695,7 @@ export async function runInitCommand(
     if (p.isCancel(shouldDeploy)) {
       p.cancel("Setup cancelled.");
       process.exitCode = 0;
+      return;
     }
 
     if (shouldDeploy) {

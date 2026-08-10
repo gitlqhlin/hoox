@@ -29,7 +29,12 @@ export interface Suggestion {
  */
 const SUGGEST_NEXT: Record<string, Suggestion> = {
   init: { command: "hoox setup", reason: "provision infrastructure" },
-  setup: { command: "hoox deploy all", reason: "ship to Cloudflare" },
+  onboard: { command: "hoox check setup", reason: "verify bootstrap" },
+  setup: { command: "hoox check setup", reason: "verify infrastructure" },
+  "check setup": {
+    command: "hoox deploy all",
+    reason: "ship workers to Cloudflare",
+  },
   "deploy all": { command: "hoox check health", reason: "verify the deploy" },
   "check health": {
     command: "hoox monitor trades",

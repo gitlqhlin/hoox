@@ -10,7 +10,9 @@ import { suggestNextCommand, getCmdPath } from "./completion.js";
 describe("suggestNextCommand", () => {
   it("returns a suggestion for known happy-path commands", () => {
     expect(suggestNextCommand("init")?.command).toBe("hoox setup");
-    expect(suggestNextCommand("setup")?.command).toBe("hoox deploy all");
+    expect(suggestNextCommand("onboard")?.command).toBe("hoox check setup");
+    expect(suggestNextCommand("setup")?.command).toBe("hoox check setup");
+    expect(suggestNextCommand("check setup")?.command).toBe("hoox deploy all");
     expect(suggestNextCommand("deploy all")?.command).toBe("hoox check health");
     expect(suggestNextCommand("check health")?.command).toBe(
       "hoox monitor trades"
@@ -23,10 +25,6 @@ describe("suggestNextCommand", () => {
   it("returns undefined for commands not in the map", () => {
     expect(suggestNextCommand("disclaimer")).toBeUndefined();
     expect(suggestNextCommand("")).toBeUndefined();
-  });
-
-  it("returns undefined for onboard (already does everything)", () => {
-    expect(suggestNextCommand("onboard")).toBeUndefined();
   });
 
   it("matches the full command path, not the leaf", () => {

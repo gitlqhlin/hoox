@@ -82,7 +82,7 @@ export class DbService {
     } catch {
       // Config not found — use default
     }
-    return "my-database";
+    return "trade-data-db";
   }
 
   async apply(

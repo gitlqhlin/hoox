@@ -5,7 +5,7 @@
 
 ---
 title: "CLI Commands Reference"
-description: "Comprehensive CLI directory detailing all 25 command groups, 60+ subcommands, global flags, and positional options for the hoox binary."
+description: "Comprehensive CLI directory detailing ~30 command groups, 60+ subcommands, global flags, and positional options for the hoox binary."
 ---
 
 The `@hoox-sh/hoox-cli` tool manages the entire monorepo development, provisioning, deployment, monitoring, and self-healing pipelines. This reference provides the complete command tree, positional arguments, optional flags, and concrete examples for all command groups.
@@ -38,12 +38,14 @@ These options are registered globally and can be appended to any command:
 
 ## 🗂️ Command Groups Directory
 
+~30 top-level command groups (including `doctor`, `tunnel`, `pyne`, and the rest below).
+
 ```text
-hoox                                 Launch TUI (when run with no args on an init'd workspace)
+hoox                                 No args: auto-onboard if no wrangler.jsonc; else interactive menu/TUI
 ├── onboard                          One-shot full bootstrap (init + setup) [recommended]
 ├── init                             Interactive setup wizard (config only)
 ├── setup                            Auto-bootstrap infrastructure (keys, D1, secrets, dashboard)
-├── clone [name]                     Bootstrap workspace from template
+├── clone [name]                     Clone worker repositories as submodules
 ├── dev                              Local development execution engine
 │   ├── start                        Start all workers (native or Docker)
 │   ├── worker <name>                Start a single worker
@@ -70,7 +72,8 @@ hoox                                 Launch TUI (when run with no args on an ini
 │   ├── show                         View current configuration
 │   ├── set <key> <value>            Update a config value
 │   ├── env [init/show/validate/generate-dev-vars]  Manage .env.local build variables
-│   ├── kv [set/get/list/delete]     Get/Set dynamic KV runtime parameters
+│   ├── kv [set/get/list/delete/apply-manifest/manifest]  CONFIG_KV runtime keys
+│   ├── transport [show|set]         Operator transport (public|access|mtls|tunnel)
 │   ├── secrets [list/set/delete/sync]  Cloudflare Worker secrets (legacy location)
 │   └── keys [generate/list]         Internal auth keys (legacy location)
 ├── secrets                          Manage Cloudflare Worker secrets [top-level]
@@ -87,6 +90,9 @@ hoox                                 Launch TUI (when run with no args on an ini
 │   ├── health [--fix]               Probe worker /health endpoints
 │   ├── fix [--dry-run]              Auto-repair common issues
 │   └── submodule-gitignore (sg)     Validate/fix worker submodule .gitignore
+├── doctor                           Runtime paths, TUI entry, operator security hygiene
+├── tunnel                           Private ingress helpers (cloudflared / Access)
+│   └── check                        Detect cloudflared; optional /v1/health probe
 ├── db                               SQLite D1 Database administration
 │   ├── apply                        Apply DDL schemas to D1
 │   ├── migrate                      Run schema migrations
@@ -113,25 +119,43 @@ hoox                                 Launch TUI (when run with no args on an ini
 │   ├── kv                           Restore KV manifest defaults
 │   ├── db                           Re-apply Drizzle migrations
 │   └── rebuild                      Full destructive interactive rebuild
-├── logs                             Time-series log extraction
-│   ├── tail <worker>                Stream live edge logging console
-│   └── download <worker>            Download logs to a local file
-├── schema                           Validate wrangler.jsonc schemas and workers
+├── logs                             Real-time Cloudflare Worker log tailing
+│   ├── worker <name>                Tail logs for a specific worker
+│   └── all                          Tail logs from all enabled workers
+├── schema                           Validate/generate worker manifests
+│   ├── validate [worker]            Validate worker(s) against canonical manifest
+│   ├── list                         List workers with binding counts
+│   └── generate <worker>            Generate wrangler.jsonc + .dev.vars from manifest
 ├── update                           Self-update the CLI or wrangler
 ├── test                             Run verification pipeline (CI)
 ├── waf                              Auto-configure Cloudflare WAF firewall rules
-├── clone [name]                     Clone worker repositories as submodules
 ├── dashboard                        Unified dashboard operations
 │   ├── dev                          Start the dashboard dev server
 │   └── deploy [--rebuild]           Build and deploy the dashboard
 ├── tui                              Launch the OpenTUI terminal dashboard
 ├── agent                            AI agent operations and health checks
-├── trace                            Query Cloudflare Workers Observability (events, metrics)
+│   └── health [--probe]             Provider config check; optional live probes
+├── pyne                             PYNE edge evaluate (Pine Script worker)
+│   ├── health                       Probe pyne-worker GET /health
+│   ├── run <script>                 POST /run with a .pine file
+│   ├── scripts [list|get|deploy|delete]  Managed scripts
+│   ├── cron [jobs|run]              Bar-close jobs list / manual trigger
+│   ├── feed refresh                 Pull latest klines into R2
+│   ├── ingest                       Fetch OHLCV into storage
+│   ├── sync-vendor                  Sync pynescript vendor modules
+│   └── deploy                       sync-vendor + wrangler deploy
+├── trace                            Cloudflare Workers Observability (beta)
+│   ├── events                       Query trace events (spans) with filters
+│   ├── metrics                      Aggregate metrics (count, p99, …)
+│   ├── live                         Live tail traces
+│   ├── keys / values <key>          Filter key discovery
+│   ├── destinations [add|remove]    OTLP export destinations
+│   └── usage                        Trace event counts
 ├── perf                             Performance measurement tools
 │   └── fastpath                     Probe-based latency measurement
 │       ├── run [options]            Send N probes, report p50/p95/p99
 │       ├── tail [options]           Continuous probing for a duration
-│       └── report [options]          Query past probe events
+│       └── report [options]         Query past probe events
 ├── disclaimer                       Display legal disclaimer
 └── completion [shell]               Generate shell completion script (bash, zsh, fish)
 ```
