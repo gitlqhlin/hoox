@@ -5,6 +5,16 @@ This project adheres loosely to [Semantic Versioning](https://semver.org/).
 
 ## Unreleased
 
+## [0.11.5] — 2026-08-10
+
+### Added
+
+- **Linear Rail banner**: default CLI banner is compact `◆ H · O · O · X` with tagline/version; TTY assemble → pulse → settle animation; polished `horizon` / `signal` variants; compact `◆ Hoox · v…` line.
+
+### Fixed
+
+- **`hoox check setup` secrets UX**: no longer warns for healthy local secrets or “remote listed OK”; remote check parses secret names and only fails when declared secrets are missing on Cloudflare (with `hoox secrets sync` hints).
+
 ## [0.11.4] — 2026-08-10
 
 ### Fixed / hardened
