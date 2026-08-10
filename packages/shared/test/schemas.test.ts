@@ -192,6 +192,17 @@ describe("TradeQueueMessageSchema", () => {
     }
   });
 
+  test("accepts optional gateway idempotencyKey", () => {
+    const result = TradeQueueMessageSchema.safeParse({
+      ...validMessage,
+      idempotencyKey: "idemp:client-key-abc:live",
+    });
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data.idempotencyKey).toBe("idemp:client-key-abc:live");
+    }
+  });
+
   test("rejects invalid action", () => {
     const result = TradeQueueMessageSchema.safeParse({
       ...validMessage,

@@ -45,7 +45,7 @@ export const TRADE_EXECUTE_AUTH_KEY_FIELDS = [
   InternalAuthKeyFields.AGENT,
 ] as const;
 
-/** trade-worker read routes (GET /api/signals, GET /report). */
+/** trade-worker read routes (GET /api/signals, GET /api/system-logs, GET /report). */
 export const TRADE_READ_AUTH_KEY_FIELDS = [
   InternalAuthKeyFields.TRADE_READ,
   InternalAuthKeyFields.DEFAULT,

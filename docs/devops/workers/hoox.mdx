@@ -205,8 +205,8 @@ Bearer `OPERATOR_API_KEY` (or legacy `INTERNAL_API_KEY`). Prefer Cloudflare Acce
 | ------ | ---- | ----------- |
 | `GET` | `/v1/health` | Operator plane liveness |
 | `GET` | `/v1/workers` | Minimal gateway self-view (`WorkerInfo[]`) |
-| `GET` | `/v1/trades/stream` | SSE stub (connected event) |
-| `GET` | `/v1/logs/stream` | SSE stub (connected event) |
+| `GET` | `/v1/trades/stream` | SSE trade feed (polls trade-worker `/api/signals`) |
+| `GET` | `/v1/logs/stream` | SSE log feed (polls trade-worker `/api/system-logs`) |
 | `GET` | `/workers` | Legacy alias of `/v1/workers` |
 
 ---

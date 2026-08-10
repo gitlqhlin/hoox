@@ -34,8 +34,8 @@ Management routes (all require Bearer):
 | ------ | ---- | ------- |
 | `GET` | `/v1/health` | Operator auth + plane probe |
 | `GET` | `/v1/workers` | Minimal worker list (JSON array) |
-| `GET` | `/v1/trades/stream` | SSE trades (stub → live later) |
-| `GET` | `/v1/logs/stream` | SSE logs (stub → live later) |
+| `GET` | `/v1/trades/stream` | SSE trades (polls trade-worker) |
+| `GET` | `/v1/logs/stream` | SSE logs (polls trade-worker) |
 
 `GET /health` stays public for liveness. Do **not** put operator Bearer on TradingView `/webhook`.
 

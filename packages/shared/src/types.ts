@@ -43,6 +43,11 @@ export const TradeQueueMessageSchema = z
     leverage: z.number().int().positive().max(125).optional(),
     /** When true, execute against exchange testnet/sandbox (if supported). */
     test: z.boolean().optional(),
+    /**
+     * Gateway-resolved idempotency key (client key or auto fingerprint).
+     * When present, trade-worker queue dedupe prefers this over requestId.
+     */
+    idempotencyKey: z.string().min(1).max(512).optional(),
     queuedAt: z.string().min(1).max(64),
   })
   .strict();
