@@ -86,7 +86,7 @@ Before merging, the CI runs:
 ```bash
 bun run lint       # ESLint (flat config)
 bun run typecheck  # Multi-project tsc
-bun test           # All unit tests (80% coverage threshold)
+bun test           # All unit tests (80%+ coverage on core paths)
 bun run build      # Build packages + typecheck
 ```
 

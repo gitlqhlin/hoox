@@ -90,8 +90,8 @@ bunx wrangler tail <name> # live worker logs
 - **Unit**: `bun test` (bun native runner), config in `bunfig.toml` — coverage always on, 60s timeout, NODE_ENV=test
 - **Integration**: `vitest` + `@cloudflare/vitest-pool-workers` (config: vitest.config.ts)
 - **Live**: `bun test tests/live/ --jobs 1` (requires Cloudflare credentials)
-- **Coverage threshold**: 80%
-- Test files live across all workers, `packages/shared`, `packages/cli`
+- **Coverage threshold**: 80%+ line coverage on core paths (CLI/shared/gateway/trade); aspirational 90% line / 95% function per standards doc. Shared ~98%, CLI `src/` ~95% (2026-08).
+- Test files: ~250 across workers, `packages/shared`, `packages/cli`, `packages/tui`, dashboard (~4,600+ unit tests, ~9k `expect()` calls)
 - ESLint relaxes rules in test files (`no-unused-vars`: warn, `no-explicit-any`: warn, `ban-ts-comment`: warn)
 
 ## Local Development
