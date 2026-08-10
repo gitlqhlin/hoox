@@ -14,7 +14,7 @@
     \midrule
     \texttt{hoox} & Gateway & Auth, WAF, rate limiting, idempotency & Webhook/API \\
     \texttt{trade-worker} & Execution & Multi-exchange order placement & Binding/Queue \\
-    \texttt{agent-worker} & Risk manager & Trailing stops, take-profit, kill switch & Cron \texttt{*/5} \\
+    \texttt{agent-worker} & Risk manager & Trailing stops, take-profit, kill switch & Cron (default \texttt{*/15}) \\
     \texttt{telegram-worker} & Notifications & Alerts, RAG queries, bot commands & Binding \\
     \texttt{d1-worker} & Data layer & Centralized D1 SQLite access & Binding \\
     \texttt{email-worker} & Email ingress & Mailgun webhook parsing & Webhook \\
