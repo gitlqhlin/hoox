@@ -20,15 +20,15 @@ This document defines the clear boundary between the **Open Core** (public, open
 
 ### Core Architecture & Infrastructure
 
-| Feature / Component                  | Open Core | Enterprise (Commercial)         | Notes                             |
-| ------------------------------------ | --------- | ------------------------------- | --------------------------------- |
-| 10-worker mesh + Service Bindings    | Yes       | Uses + extends                  | Core model stays open             |
-| Durable Objects (idempotency, basic) | Yes       | Enhanced                        | Basic SQLite DO patterns are open |
-| Smart Placement                      | Yes       | Yes                             | Cloudflare primitive              |
-| Queues (basic failover)              | Yes       | Advanced usage + higher limits  |                                   |
-| D1, R2, KV, Vectorize (basic usage)  | Yes       | Scale + advanced patterns       |                                   |
-| Browser Rendering (PDF reports)      | Yes       | Advanced compliance reports     |                                   |
-| Workers AI + basic RAG               | Yes       | AI Gateway + proprietary models |                                   |
+| Feature / Component                                      | Open Core | Enterprise (Commercial)         | Notes                             |
+| -------------------------------------------------------- | --------- | ------------------------------- | --------------------------------- |
+| Edge worker mesh + Service Bindings (incl. pyne tooling) | Yes       | Uses + extends                  | Core model stays open             |
+| Durable Objects (idempotency, basic)                     | Yes       | Enhanced                        | Basic SQLite DO patterns are open |
+| Smart Placement                                          | Yes       | Yes                             | Cloudflare primitive              |
+| Queues (basic failover)                                  | Yes       | Advanced usage + higher limits  |                                   |
+| D1, R2, KV, Vectorize (basic usage)                      | Yes       | Scale + advanced patterns       |                                   |
+| Browser Rendering (PDF reports)                          | Yes       | Advanced compliance reports     |                                   |
+| Workers AI + basic RAG                                   | Yes       | AI Gateway + proprietary models |                                   |
 
 ### Workers
 
@@ -41,6 +41,7 @@ This document defines the clear boundary between the **Open Core** (public, open
 | `d1-worker`, `analytics-worker`   | Yes           | Tenant-isolated + scale          |                                                  |
 | `report-worker`                   | Yes           | Compliance-grade                 |                                                  |
 | `web3-wallet-worker`              | Yes           | Advanced DeFi                    |                                                  |
+| `pyne-worker` (Pine edge eval)    | Yes           | Hosted scale / Pro API           | Tooling isolate; mesh key for trade forward      |
 | **Dispatch Worker (WfP)**         | Basic example | Full multi-tenant platform       | Core WfP concepts open, full platform commercial |
 | **User Workers**                  | Examples only | Full customer strategy execution |                                                  |
 
