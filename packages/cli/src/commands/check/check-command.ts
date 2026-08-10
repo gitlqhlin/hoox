@@ -249,6 +249,30 @@ async function runInfraChecks(cf: CloudflareService): Promise<CheckCategory> {
 // Category 3: Secrets checks
 // ---------------------------------------------------------------------------
 
+/**
+ * Parse wrangler `secret list` JSON into a set of secret names.
+ * Returns null when the payload cannot be parsed.
+ */
+function parseRemoteSecretNames(raw: string): Set<string> | null {
+  try {
+    const parsed = JSON.parse(raw) as unknown;
+    if (!Array.isArray(parsed)) return null;
+    const names = new Set<string>();
+    for (const item of parsed) {
+      if (
+        item &&
+        typeof item === "object" &&
+        typeof (item as { name?: unknown }).name === "string"
+      ) {
+        names.add((item as { name: string }).name);
+      }
+    }
+    return names;
+  } catch {
+    return null;
+  }
+}
+
 async function runSecretsChecks(
   secretsService: SecretsService,
   configService: ConfigService,
@@ -263,13 +287,18 @@ async function runSecretsChecks(
     const result = await secretsService.checkLocalSecrets(workerName);
     if (result.missing.length > 0) {
       errors.push(
-        `Worker "${workerName}" missing secrets: ${result.missing.join(", ")}`
+        `Worker "${workerName}" missing secrets: ${result.missing.join(", ")}. ` +
+          `Fix: hoox setup --skip-db --skip-dashboard (mesh keys) or ` +
+          `hoox secrets set ${workerName} <NAME>`
       );
     }
+    // Placeholders count as missing above; only warn about present-but-empty
+    // source when a secret is set with a suspicious empty string (already
+    // treated as missing). Do NOT warn for healthy local values — that was noise.
     for (const secret of result.secrets) {
-      if (secret.set && secret.source) {
+      if (!secret.set && secret.source) {
         warnings.push(
-          `Worker "${workerName}": ${secret.name} is set locally (source: ${secret.source})`
+          `Worker "${workerName}": ${secret.name} is present in ${secret.source} but empty/placeholder`
         );
       }
     }
@@ -282,21 +311,35 @@ async function runSecretsChecks(
     warnings,
   });
 
-  // Check remote secrets via CloudflareService
+  // Check remote secrets via CloudflareService — compare declared names.
   const remoteErrors: string[] = [];
   const remoteWarnings: string[] = [];
   for (const workerName of enabledWorkers) {
-    const secrets = secretsService.listSecrets(workerName);
-    if (secrets.length === 0) continue;
+    const expected = secretsService.listSecrets(workerName);
+    if (expected.length === 0) continue;
 
     const result = await cf.secretList(workerName);
     if (!result.ok) {
       remoteErrors.push(`Worker "${workerName}": ${result.error}`);
-    } else {
+      continue;
+    }
+
+    const remoteNames = parseRemoteSecretNames(result.value);
+    if (!remoteNames) {
       remoteWarnings.push(
-        `Worker "${workerName}": remote secrets listed OK (${secrets.length} expected)`
+        `Worker "${workerName}": could not parse remote secret list (raw length ${result.value.length})`
+      );
+      continue;
+    }
+
+    const missingRemote = expected.filter((n) => !remoteNames.has(n));
+    if (missingRemote.length > 0) {
+      remoteErrors.push(
+        `Worker "${workerName}" missing on Cloudflare: ${missingRemote.join(", ")}. ` +
+          `Fix: hoox secrets sync ${workerName}`
       );
     }
+    // Extra remote secrets (not in wrangler.jsonc) are fine — no warning.
   }
 
   checks.push({

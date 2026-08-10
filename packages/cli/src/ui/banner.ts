@@ -4,10 +4,9 @@
  */
 
 /**
- * Hoox CLI top banner — compact HOOX wordmark only (no geometric mark).
+ * Hoox CLI top banner — Linear Rail default (◆ H · O · O · X).
  *
- * Small multi-line ASCII wordmark + tagline/version. On a TTY,
- * `animateBanner()` does a short type-in + shimmer, then settles.
+ * On a TTY, `animateBanner()` does assemble → pulse → settle.
  * Non-TTY / CI / NO_COLOR get a single static frame.
  */
 
@@ -15,7 +14,7 @@ import { existsSync, readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
 import ansis from "ansis";
-import { theme, stripAnsi } from "../utils/theme.js";
+import { theme } from "../utils/theme.js";
 
 // ── Brand palette ─────────────────────────────────────────────────
 
@@ -59,89 +58,126 @@ const VERSION: string = findCliVersion();
 export const DISCLAIMER =
   "DISCLAIMER: Trading cryptocurrencies involves substantial risk of loss. Use at your own risk.";
 
-// ── Small HOOX wordmark (4-line, no side logo) ─────────────────────
+// ── Linear Rail wordmark ──────────────────────────────────────────
 //
-// Compact "small" face — much shorter/narrower than the old 6-line
-// box-drawing block letters.
+// Static settle (~38 cols):
+//   ◆  H · O · O · X
+//   ────────────────────────────────────
+//   Cloudflare Workers Platform · vX.Y.Z
 
-const WORDMARK = [
-  " _   _  ___   _____  _  ",
-  "| | | |/ _ \\ / _ \\ \\/ / ",
-  "| |_| | (_) | (_) >  <  ",
-  " \\___/ \\___/ \\___/_/\\_\\ ",
-] as const;
-
-const WORD_W = WORDMARK[0]!.length;
+const LETTERS = ["H", "O", "O", "X"] as const;
+/** Rule length ≈ tagline + version width (~38). */
+const RULE_W = 38;
+const PAD = " ";
 
 type PhaseMode = "assemble" | "pulse" | "static";
 
-function colorWordmark(phase: number, mode: PhaseMode): string[] {
-  return WORDMARK.map((line, row) => {
-    if (mode === "assemble") {
-      const local = Math.max(0, Math.min(1, phase));
-      const cut = Math.floor(local * line.length);
-      let out = "";
-      for (let col = 0; col < line.length; col++) {
-        const ch = line[col]!;
-        if (ch === " ") {
-          out += " ";
-          continue;
-        }
-        if (col > cut) out += ZINC_FAINT("·");
-        else if (local < 0.85) out += ZINC(ch);
-        else out += theme.heading(ch);
-      }
-      return out;
-    }
-
-    if (mode === "pulse") {
-      let out = "";
-      for (let col = 0; col < line.length; col++) {
-        const ch = line[col]!;
-        if (ch === " ") {
-          out += " ";
-          continue;
-        }
-        const t = (phase * 1.5 + col * 0.05 + row * 0.06) % 1;
-        if (t < 0.12) out += AMBER(ch);
-        else if (t < 0.25) out += ORANGE(ch);
-        else if (t < 0.4) out += INDIGO_SOFT(ch);
-        else out += INDIGO.bold(ch);
-      }
-      return out;
-    }
-
-    return theme.heading(line);
-  });
+/** Color the diamond mark (◆). */
+function colorDiamond(phase: number, mode: PhaseMode): string {
+  if (mode === "assemble") {
+    // Appear first, slightly dim until letters start
+    if (phase < 0.05) return " ";
+    if (phase < 0.2) return ZINC_FAINT("◆");
+    return AMBER("◆");
+  }
+  if (mode === "pulse") {
+    // Amber ↔ orange shimmer
+    const t = (phase * 2) % 1;
+    return t < 0.5 ? AMBER("◆") : ORANGE("◆");
+  }
+  return AMBER("◆");
 }
 
-// ── Frame composition ─────────────────────────────────────────────
+/** Color a single HOOX letter by index (0–3). */
+function colorLetter(
+  letter: string,
+  index: number,
+  phase: number,
+  mode: PhaseMode
+): string {
+  if (mode === "assemble") {
+    // Letters reveal left-to-right after the diamond
+    // phase 0.15..1.0 maps across 4 letters
+    const start = 0.12;
+    const span = 0.88;
+    const letterPhase = (phase - start) / span;
+    const revealAt = index / LETTERS.length;
+    if (letterPhase < revealAt) return " ";
+    // Soft fill, then solid indigo
+    if (letterPhase < revealAt + 0.12) return ZINC(letter);
+    return INDIGO.bold(letter);
+  }
 
-const PAD = " ";
+  if (mode === "pulse") {
+    // Subtle indigo pulse sweeping across letters
+    const t = (phase * 1.4 + index * 0.18) % 1;
+    if (t < 0.15) return INDIGO_SOFT(letter);
+    if (t < 0.3) return AMBER(letter);
+    return INDIGO.bold(letter);
+  }
+
+  return INDIGO.bold(letter);
+}
+
+/** Color an interpunct between letters. */
+function colorDot(
+  afterLetterIndex: number,
+  phase: number,
+  mode: PhaseMode
+): string {
+  // Dot appears with the letter that follows it (or with previous letter)
+  if (mode === "assemble") {
+    const start = 0.12;
+    const span = 0.88;
+    const letterPhase = (phase - start) / span;
+    // Show dot once letter `afterLetterIndex + 1` is about to appear
+    const revealAt = (afterLetterIndex + 1) / LETTERS.length;
+    if (letterPhase < revealAt - 0.02) return " ";
+    return ZINC_FAINT("·");
+  }
+  return ZINC_FAINT("·");
+}
+
+/** Build the linear-rail title line: ◆  H · O · O · X */
+function composeTitleLine(phase: number, mode: PhaseMode): string {
+  const diamond = colorDiamond(phase, mode);
+  const parts: string[] = [diamond, "  "];
+
+  for (let i = 0; i < LETTERS.length; i++) {
+    parts.push(colorLetter(LETTERS[i]!, i, phase, mode));
+    if (i < LETTERS.length - 1) {
+      parts.push(" ");
+      parts.push(colorDot(i, phase, mode));
+      parts.push(" ");
+    }
+  }
+
+  return PAD + parts.join("");
+}
+
+/** Build the meta line: tagline · vX.Y.Z */
+function composeMetaLine(): string {
+  return (
+    PAD +
+    ZINC_SOFT(TAGLINE) +
+    " " +
+    ZINC_FAINT("·") +
+    " " +
+    INDIGO_SOFT(`v${VERSION}`)
+  );
+}
 
 function composeFrame(phase: number, mode: PhaseMode): string {
-  const word = colorWordmark(phase, mode);
-  const contentW = WORD_W;
-
-  const body = word.map((line) => PAD + line);
-
-  const rule = PAD + ZINC_FAINT("─".repeat(contentW));
-  const metaInner =
-    ZINC_SOFT(TAGLINE) +
-    "  " +
-    ZINC_FAINT("·") +
-    "  " +
-    INDIGO_SOFT(`v${VERSION}`);
-  const metaVis = stripAnsi(metaInner).length;
-  const metaPad = Math.max(0, Math.floor((contentW - metaVis) / 2));
-  const meta = PAD + " ".repeat(metaPad) + metaInner;
-
-  return [rule, ...body, rule, meta].join("\n");
+  const title = composeTitleLine(phase, mode);
+  // Soft left accent dot + faint rule (modern-minimal chrome)
+  const rule = PAD + ZINC_SOFT("·") + " " + ZINC_FAINT("─".repeat(RULE_W - 2));
+  const meta = composeMetaLine();
+  return [title, rule, meta].join("\n");
 }
 
 // ── Public static API ─────────────────────────────────────────────
 
-/** Default static banner — compact HOOX wordmark (final frame). */
+/** Default static banner — Linear Rail (final frame). */
 export function renderBannerLogo(): string {
   return composeFrame(1, "static");
 }
@@ -174,63 +210,78 @@ export function renderLegacy(): string {
   return [top, ...ascii, line, tag, bottom].join("\n");
 }
 
+/**
+ * Horizon — readable 4-line FIGlet HOOX (letters clearly separated).
+ * Pure ASCII, indigo-friendly for multi-line moments.
+ */
 const HORIZON_LINES = [
-  "╔═══╗ ╔═══╗ ╔═══╗ ╔═══╗",
-  "║ ║ ║ ║   ║ ║   ║ ║ ║ ║",
-  "║ ║ ║ ║ ║ ║ ║ ║ ║ ║ ║ ║",
-  "║ ╚═╝ ║ ╚═╝ ║ ║ ║ ║ ╚═╝",
-  "║     ║     ║ ╚═╝ ║     ",
-  "╚═════╝ ╚═════╝ ╚═══╝ ╚═════╝",
-];
+  " _   _     ___      ___     __  __",
+  "| | | |   / _ \\    / _ \\    \\ \\/ /",
+  "| |_| |  | (_) |  | (_) |    >  < ",
+  " \\___/    \\___/    \\___/    /_/\\_\\",
+] as const;
 
 export function renderBannerHorizon(): string {
-  const bw = 56;
+  const contentW = Math.max(...HORIZON_LINES.map((l) => l.length));
+  const bw = Math.max(contentW + 4, TAGLINE.length + VERSION.length + 8);
   const inner = theme.box.horizontal.repeat(bw - 2);
-  const topLeft = theme.textFaint("╭");
-  const topRight = theme.textFaint("╮");
-  const bottomLeft = theme.textFaint("╰");
-  const bottomRight = theme.textFaint("╯");
-  const top = ` ${topLeft}${inner}${topRight}`;
-  const bottom = ` ${bottomLeft}${inner}${bottomRight}`;
-  const ascii = HORIZON_LINES.map((l) => ` ${theme.accent(l)}`);
-  const gap = Math.floor((bw - TAGLINE.length - VERSION.length - 4) / 2);
-  const tag = ` ${" ".repeat(gap)}${theme.textMuted(TAGLINE)} ${theme.textMuted(`v${VERSION}`)}`;
+  const top = ` ${theme.textFaint("╭")}${inner}${theme.textFaint("╮")}`;
+  const bottom = ` ${theme.textFaint("╰")}${inner}${theme.textFaint("╯")}`;
+  const ascii = HORIZON_LINES.map((l, i) => {
+    // Soft gradient: top rows slightly brighter
+    const color = i < 2 ? theme.heading : theme.accent;
+    return `  ${color(l)}`;
+  });
+  const gap = Math.max(
+    0,
+    Math.floor((bw - TAGLINE.length - VERSION.length - 4) / 2)
+  );
+  const tag = ` ${" ".repeat(gap)}${theme.textMuted(TAGLINE)} ${INDIGO_SOFT(`v${VERSION}`)}`;
   return [
     top,
     ...ascii,
-    ` ${theme.box.horizontal.repeat(bw)}`,
+    ` ${ZINC_SOFT("·")} ${ZINC_FAINT("─".repeat(bw - 4))}`,
     tag,
     bottom,
   ].join("\n");
 }
 
-const SIGNAL_LINES = [
-  "  _   _           _   _   ",
-  " | | | | ___   __| | | | ",
-  " | |_| |/ _ \\ / _` | | | ",
-  " |  _  | (_) | (_| | | | ",
-  " |_| |_|\\___/ \\__,_| |_| ",
-];
-
+/**
+ * Signal — slim rail + pulse wave (edge-ops vibe).
+ * Keeps the default diamond mark and adds a soft activity line.
+ */
 export function renderBannerSignal(): string {
-  const bw = 54;
-  const line = theme.box.horizontal.repeat(bw);
-  const top = ` ${theme.box.topLeft}${line.slice(2)}${theme.box.topRight}`;
-  const bottom = ` ${theme.box.bottomLeft}${line.slice(2)}${theme.box.bottomRight}`;
-
-  const wordmark = SIGNAL_LINES.map((l) => {
-    return ` ${theme.heading(l.slice(0, 26))}${theme.textFaint(l.slice(26))}`;
-  });
-
-  const wave = ` ${theme.accent("~~")}${theme.textFaint("~")}${theme.accent("_")}${theme.textFaint(".")}${theme.accent("/\\")}${theme.textFaint("~")}${theme.accent("\\/")}${theme.textFaint("..")}${theme.accent("/~~\\")}${theme.textFaint("~")}  ${theme.textMuted(TAGLINE)} ${theme.textMuted(`v${VERSION}`)}`;
-
-  return [
-    top,
-    ...wordmark,
-    ` ${theme.box.horizontal.repeat(bw)}`,
-    wave,
-    bottom,
-  ].join("\n");
+  const title =
+    PAD +
+    AMBER("◆") +
+    "  " +
+    INDIGO.bold("H") +
+    " " +
+    ZINC_FAINT("·") +
+    " " +
+    INDIGO.bold("O") +
+    " " +
+    ZINC_FAINT("·") +
+    " " +
+    INDIGO.bold("O") +
+    " " +
+    ZINC_FAINT("·") +
+    " " +
+    INDIGO.bold("X");
+  const wave =
+    PAD +
+    ZINC_FAINT("·") +
+    " " +
+    theme.accent("▁▂▃▅▃▂▁") +
+    ZINC_FAINT("·") +
+    theme.accent("▂▄▆▄▂") +
+    ZINC_FAINT("·") +
+    "  " +
+    ZINC_SOFT(TAGLINE) +
+    " " +
+    INDIGO_SOFT(`v${VERSION}`);
+  const rule = PAD + ZINC_SOFT("·") + " " + ZINC_FAINT("─".repeat(RULE_W - 2));
+  return [title, rule, wave].join("\n");
 }
 
 export const BANNER_VARIANTS = {
@@ -243,14 +294,18 @@ export const BANNER_VARIANTS = {
 
 export type BannerVariant = keyof typeof BANNER_VARIANTS;
 
-/** Default banner — compact HOOX wordmark (static final frame). */
+/** Default banner — Linear Rail (static final frame). */
 export function renderBanner(variant?: BannerVariant): string {
   return variant ? BANNER_VARIANTS[variant]() : renderBannerLogo();
 }
 
 /** Compact one-line banner for inline display. */
 export function renderCompactBanner(): string {
-  return `${ORANGE("◆")} ${theme.heading("Hoox CLI")} ${theme.textMuted(`v${VERSION}`)}`;
+  return (
+    `${AMBER("◆")} ${INDIGO.bold("Hoox")}` +
+    `  ${ZINC_FAINT("·")}  ` +
+    INDIGO_SOFT(`v${VERSION}`)
+  );
 }
 
 // ── Animation ─────────────────────────────────────────────────────
@@ -268,7 +323,7 @@ function sleep(ms: number): Promise<void> {
 }
 
 /**
- * Play the banner animation on a TTY (type-in → pulse → settle).
+ * Play the banner animation on a TTY (assemble → pulse → settle).
  * Falls back to a single static print when animation is not available.
  *
  * @returns number of lines written

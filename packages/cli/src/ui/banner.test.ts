@@ -35,19 +35,21 @@ describe("renderBanner", () => {
     expect(stripAnsi(horizon)).not.toBe(stripAnsi(logo));
   });
 
-  it("is wordmark-only (no geometric side mark)", () => {
+  it("renders Linear Rail wordmark (◆ H · O · O · X)", () => {
     const plain = stripAnsi(renderBannerLogo());
-    // No brand-mark diagonal hooks
-    expect(plain).not.toContain("██╲");
-    expect(plain).not.toContain("╱██");
-    // Compact small-font HOOX glyphs
-    expect(plain).toContain("_   _");
-    expect(plain).toContain("| | | |");
+    // No old ASCII box-drawing wordmark patterns
+    expect(plain).not.toContain("_   _");
+    expect(plain).not.toContain("| | | |");
+    // Linear Rail letters + diamond
+    expect(plain).toContain("◆");
+    expect(plain).toMatch(/H\s*·\s*O\s*·\s*O\s*·\s*X/);
   });
 
   it("includes the HOOX wordmark and tagline", () => {
     const plain = stripAnsi(renderBannerLogo());
-    expect(plain).toMatch(/_\/\\_|_\/\\_/); // bottom of O/X style
+    expect(plain).toContain("H");
+    expect(plain).toContain("O");
+    expect(plain).toContain("X");
     expect(plain).toContain("Cloudflare Workers Platform");
   });
 
@@ -93,6 +95,13 @@ describe("renderCompactBanner", () => {
     const out = renderCompactBanner();
     expect(out.split("\n").length).toBe(1);
   });
+
+  it("includes diamond, Hoox, and version", () => {
+    const plain = stripAnsi(renderCompactBanner());
+    expect(plain).toContain("◆");
+    expect(plain).toContain("Hoox");
+    expect(plain).toMatch(/v\d+\.\d+\.\d+/);
+  });
 });
 
 describe("animateBanner", () => {
@@ -106,10 +115,12 @@ describe("animateBanner", () => {
 
     try {
       const lines = await animateBanner({ static: true });
-      // Compact wordmark: rule + 4 lines + rule + meta = 7
-      expect(lines).toBeGreaterThan(4);
+      // Linear Rail: title + rule + meta ≈ 3 lines
+      expect(lines).toBeGreaterThanOrEqual(2);
+      expect(lines).toBeLessThanOrEqual(5);
       const out = chunks.join("");
       expect(stripAnsi(out)).toContain("Cloudflare Workers Platform");
+      expect(stripAnsi(out)).toMatch(/H\s*·\s*O\s*·\s*O\s*·\s*X/);
       // Static path must not use cursor hide / line-clear animation sequences
       expect(out).not.toContain("\x1b[?25l");
       expect(out).not.toContain("\x1b[2K");
