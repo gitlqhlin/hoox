@@ -65,7 +65,7 @@ beforeEach(() => {
   mock.restore();
 
   // Reset process.exitCode between tests
-  process.exitCode = undefined;
+  process.exitCode = 0;
 
   // Restore prototypes to originals
   (ConfigService.prototype as unknown as Record<string, unknown>).load =

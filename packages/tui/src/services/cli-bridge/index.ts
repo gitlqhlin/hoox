@@ -178,7 +178,8 @@ function killProc(
  *   [ { "results": [ {...}, {...} ], "success": true,
  *       "meta": { "duration": 0.123, "rows_read": 42, ... } } ]
  */
-function parseDbQueryResult(stdout: string): DbQueryResult {
+/** Exported for unit tests — pure stdout → DbQueryResult normalizer. */
+export function parseDbQueryResult(stdout: string): DbQueryResult {
   const cleaned = stdout.trim();
   if (!cleaned) {
     return {
@@ -266,7 +267,7 @@ function parseDbQueryResult(stdout: string): DbQueryResult {
 }
 
 /** Compute the {@link QueueDepthStatus} for a given depth + paused flag. */
-function deriveQueueDepthStatus(
+export function deriveQueueDepthStatus(
   depth: number,
   paused: boolean
 ): QueueDepthStatus {
@@ -285,7 +286,8 @@ function deriveQueueDepthStatus(
  * Expected envelope shape:
  *   { "queues": [ { "queue_name": "...", "producers_total_count": 2, ... } ] }
  */
-function parseQueueDepths(stdout: string): QueueDepth[] {
+/** Exported for unit tests — pure queue-depth envelope parser. */
+export function parseQueueDepths(stdout: string): QueueDepth[] {
   const timestamp = new Date().toISOString();
   const cleaned = stdout.trim();
   if (!cleaned) return [];
@@ -349,7 +351,8 @@ function parseQueueDepths(stdout: string): QueueDepth[] {
  * Values are intentionally omitted — the viewer is strictly read-only.
  * The parser never throws on malformed input.
  */
-function parseSecretsList(stdout: string): SecretMetadata[] {
+/** Exported for unit tests — pure secrets-list envelope parser. */
+export function parseSecretsList(stdout: string): SecretMetadata[] {
   const cleaned = stdout.trim();
   if (!cleaned) return [];
 
@@ -404,7 +407,8 @@ function parseSecretsList(stdout: string): SecretMetadata[] {
  * Cloudflare secrets store does not expose per-secret type metadata,
  * so we derive it from the key name suffix.
  */
-function inferSecretType(name: string): SecretMetadata["type"] {
+/** Exported for unit tests — naming-convention secret type inference. */
+export function inferSecretType(name: string): SecretMetadata["type"] {
   const lower = name.toLowerCase();
   if (lower.includes("key") || lower.includes("api")) return "api_key";
   if (lower.includes("token")) return "token";
@@ -446,7 +450,8 @@ interface WranglerKeyRecord {
  * This parser accepts both. Unknown rows are skipped; the parser never
  * throws on malformed input — it returns an empty `keys` array instead.
  */
-function parseKvList(
+/** Exported for unit tests — pure KV list + manifest merge. */
+export function parseKvList(
   stdout: string,
   manifest: Map<
     string,
@@ -506,7 +511,8 @@ function parseKvList(
  * return a `Map` keyed by key name. Returns an empty map on any failure
  * — the view still functions, it just cannot flag secret keys.
  */
-function parseKvManifest(
+/** Exported for unit tests — pure KV manifest parser. */
+export function parseKvManifest(
   stdout: string
 ): Map<string, { type: "boolean" | "number" | "string"; secret: boolean }> {
   const map = new Map<
@@ -547,8 +553,8 @@ function parseKvManifest(
 // eslint-disable-next-line no-control-regex -- intentional: matches ESC (\x1b) sequences
 const ANSI_PATTERN = /\x1b\[[0-9;]*[A-Za-z]/g;
 
-/** Remove ANSI color escape codes from a string. */
-function stripAnsi(input: string): string {
+/** Remove ANSI color escape codes from a string. Exported for unit tests. */
+export function stripAnsi(input: string): string {
   return input.replace(ANSI_PATTERN, "");
 }
 
@@ -575,7 +581,8 @@ interface WranglerQueueRecord {
  * switches the format for set actions), so we detect the engaged/released
  * state from the message text.
  */
-function parseKillSwitchStatus(
+/** Exported for unit tests — pure kill-switch status parser. */
+export function parseKillSwitchStatus(
   action: KillSwitchAction,
   stdout: string
 ): KillSwitchStatus {
@@ -1517,7 +1524,8 @@ class CliBridgeImpl {
 /**
  * Parse `hoox pyne health --json` stdout into {@link PyneHealthResult}.
  */
-function parsePyneHealth(stdout: string): PyneHealthResult {
+/** Exported for unit tests — pure pyne health envelope parser. */
+export function parsePyneHealth(stdout: string): PyneHealthResult {
   const timestamp = new Date().toISOString();
   const cleaned = stdout.trim();
   if (!cleaned) {
@@ -1563,7 +1571,8 @@ function parsePyneHealth(stdout: string): PyneHealthResult {
   };
 }
 
-function parseAgentHealth(stdout: string): AgentHealthResult {
+/** Exported for unit tests — pure agent health envelope parser. */
+export function parseAgentHealth(stdout: string): AgentHealthResult {
   const timestamp = new Date().toISOString();
   const cleaned = stdout.trim();
   if (!cleaned) {
@@ -1620,7 +1629,8 @@ function parseAgentHealth(stdout: string): AgentHealthResult {
  * exists so future manifest changes can light up the namespace column
  * without touching the viewer.
  */
-function extractNamespaceId(_manifestStdout: string): string | null {
+/** Exported for unit tests — reserved namespace-id extractor (currently always null). */
+export function extractNamespaceId(_manifestStdout: string): string | null {
   // Reserved for future CLI versions — manifest envelope does not yet
   // surface the namespace ID. Kept as a separate function to keep the
   // test surface stable.

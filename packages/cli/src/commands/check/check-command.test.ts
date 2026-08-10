@@ -65,7 +65,7 @@ beforeEach(() => {
   mock.restore();
 
   // Reset process.exitCode between tests
-  process.exitCode = undefined;
+  process.exitCode = 0;
 
   // Reset to originals on prototypes
   ConfigService.prototype.load = origLoad;
@@ -182,7 +182,7 @@ afterEach(() => {
 
   // Reset process.exitCode so a lingering async callback from a prior test
   // cannot leak its exit code into the next test.
-  process.exitCode = undefined;
+  process.exitCode = 0;
 
   // Restore originals
   ConfigService.prototype.load = origLoad;

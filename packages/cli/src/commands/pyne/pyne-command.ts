@@ -34,22 +34,28 @@ import { CLIError, ExitCode } from "../../utils/errors.js";
 // Paths & helpers
 // ---------------------------------------------------------------------------
 
-const PYNE_WORKER_DIR = resolve(process.cwd(), "workers/pyne-worker");
 const DEFAULT_TIMEOUT_MS = 30_000;
 
+/** Resolve pyne-worker path from cwd (lazy so tests can chdir). */
+function getPyneWorkerDir(): string {
+  return resolve(process.cwd(), "workers/pyne-worker");
+}
+
 function requirePyneDir(): string {
-  if (!existsSync(PYNE_WORKER_DIR)) {
+  const dir = getPyneWorkerDir();
+  if (!existsSync(dir)) {
     throw new CLIError(
-      `pyne-worker directory not found: ${PYNE_WORKER_DIR}\n` +
+      `pyne-worker directory not found: ${dir}\n` +
         `  Clone it with: hoox clone pyne-worker\n` +
         `  Or: git submodule update --init workers/pyne-worker`,
       ExitCode.ERROR
     );
   }
-  return PYNE_WORKER_DIR;
+  return dir;
 }
 
-function loadDevVars(workerDir: string): Record<string, string> {
+/** Parse KEY=value pairs from .dev.vars candidates (exported for unit tests). */
+export function loadDevVars(workerDir: string): Record<string, string> {
   const out: Record<string, string> = {};
   const candidates = [
     resolve(workerDir, ".dev.vars"),
@@ -81,7 +87,8 @@ function loadDevVars(workerDir: string): Record<string, string> {
   return out;
 }
 
-async function resolvePyneBaseUrl(explicit?: string): Promise<string> {
+/** Resolve base URL from flag / env / config (exported for unit tests). */
+export async function resolvePyneBaseUrl(explicit?: string): Promise<string> {
   if (explicit?.trim()) return explicit.trim().replace(/\/+$/, "");
 
   const envUrl =
@@ -107,7 +114,11 @@ async function resolvePyneBaseUrl(explicit?: string): Promise<string> {
   return "https://pyne-worker.cryptolinx.workers.dev";
 }
 
-function resolveApiKey(explicit?: string, workerDir?: string): string | null {
+/** Resolve API key from flag / env / .dev.vars (exported for unit tests). */
+export function resolveApiKey(
+  explicit?: string,
+  workerDir?: string
+): string | null {
   if (explicit?.trim()) return explicit.trim();
   if (process.env.PYNE_API_KEY?.trim()) return process.env.PYNE_API_KEY.trim();
   if (process.env.API_KEY?.trim()) return process.env.API_KEY.trim();
@@ -120,7 +131,7 @@ function resolveApiKey(explicit?: string, workerDir?: string): string | null {
 }
 
 /** Normalize base URL (no trailing slashes) without a greedy regex. */
-function normalizeBaseUrl(url: string): string {
+export function normalizeBaseUrl(url: string): string {
   let end = url.length;
   while (end > 0 && url.charCodeAt(end - 1) === 47 /* '/' */) {
     end -= 1;
@@ -133,7 +144,8 @@ function normalizeBaseUrl(url: string): string {
  * script/API-key material is never sent to an unexpected scheme or host
  * controlled purely by path injection.
  */
-function buildPyneRequestUrl(baseUrl: string, path: string): string {
+/** Build request URL for pyne-worker (exported for unit tests). */
+export function buildPyneRequestUrl(baseUrl: string, path: string): string {
   const base = normalizeBaseUrl(baseUrl);
   let parsed: URL;
   try {

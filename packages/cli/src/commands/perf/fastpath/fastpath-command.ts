@@ -230,14 +230,15 @@ function renderReport(report: FastPathReport): void {
   process.stdout.write(lines.join("\n") + "\n");
 }
 
-function formatMs(n: number): string {
+/** Format milliseconds for human-readable report lines. */
+export function formatMs(n: number): string {
   if (n === 0) return "0ms";
   if (n < 1) return `${n.toFixed(1)}ms`;
   if (n < 10) return `${n.toFixed(1)}ms`;
   return `${Math.round(n)}ms`;
 }
 
-function formatTableAsText(
+export function formatTableAsText(
   rows: Array<Record<string, string>>,
   columns: string[]
 ): string {
@@ -248,7 +249,8 @@ function formatTableAsText(
   return out.join("\n");
 }
 
-function parseTimeRange(
+/** Parse CLI --from/--to into absolute epoch ms. */
+export function parseTimeRange(
   fromStr: string | undefined,
   toStr: string | undefined
 ): { from: number; to: number } {
@@ -260,7 +262,7 @@ function parseTimeRange(
   return { from, to };
 }
 
-function parseTimeOrThrow(s: string, name: string): number {
+export function parseTimeOrThrow(s: string, name: string): number {
   // Relative: "1h", "30m", "2d"
   const m = /^(\d+)([smhd])$/.exec(s);
   if (m) {

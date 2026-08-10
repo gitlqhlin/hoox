@@ -193,7 +193,7 @@ export async function createCliBridgeModuleMock(): Promise<
   Record<string, unknown>
 > {
   // Load real module exports *before* mock.module is installed so tests that
-  // import tryParseJsonLoose / sanitizeCliArgsForLog still get the real fns.
+  // import pure parsers / sanitize helpers still get the real fns.
   const realBridge = await import("./services/cli-bridge/index");
   const standalone = await import("./services/cli-bridge/standalone");
   const types = await import("./services/cli-bridge/types");
@@ -204,6 +204,18 @@ export async function createCliBridgeModuleMock(): Promise<
     AI_MODEL_OPTIONS: standalone.AI_MODEL_OPTIONS,
     tryParseJsonLoose: realBridge.tryParseJsonLoose,
     sanitizeCliArgsForLog: realBridge.sanitizeCliArgsForLog,
+    parseDbQueryResult: realBridge.parseDbQueryResult,
+    deriveQueueDepthStatus: realBridge.deriveQueueDepthStatus,
+    parseQueueDepths: realBridge.parseQueueDepths,
+    parseSecretsList: realBridge.parseSecretsList,
+    inferSecretType: realBridge.inferSecretType,
+    parseKvList: realBridge.parseKvList,
+    parseKvManifest: realBridge.parseKvManifest,
+    stripAnsi: realBridge.stripAnsi,
+    parseKillSwitchStatus: realBridge.parseKillSwitchStatus,
+    parsePyneHealth: realBridge.parsePyneHealth,
+    parseAgentHealth: realBridge.parseAgentHealth,
+    extractNamespaceId: realBridge.extractNamespaceId,
     // Type re-exports are erased at runtime; keep values if any exist
     ...Object.fromEntries(
       Object.entries(types).filter(([, v]) => typeof v !== "undefined")

@@ -52,7 +52,7 @@ import * as jsonc from "jsonc-parser";
  * Check if dashboard build exists and get its modification date.
  * Returns null if no build exists.
  */
-function getDashboardBuildInfo(dashboardPath: string): {
+export function getDashboardBuildInfo(dashboardPath: string): {
   exists: boolean;
   lastModified?: Date;
   age?: string;

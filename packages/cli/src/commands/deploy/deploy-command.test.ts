@@ -44,7 +44,7 @@ beforeEach(() => {
   mock.restore();
 
   // Reset process.exitCode between tests
-  process.exitCode = undefined;
+  process.exitCode = 0;
 
   // Reset prototypes to originals (in case a previous test didn't restore)
   (ConfigService.prototype as unknown as Record<string, unknown>).load =
@@ -325,5 +325,558 @@ describe("registerDeployCommand", () => {
     await program.parseAsync(["deploy", "workers"], { from: "user" });
 
     expect(process.exitCode).toBe(1);
+  });
+
+  // -- additional subcommand registration -----------------------------------
+
+  it("registers history, rollback, telegram-webhook, update-internal-urls, kv-config", async () => {
+    const program = await createProgram();
+    const deployCmd = program.commands.find((c) => c.name() === "deploy")!;
+    const names = deployCmd.commands.map((c) => c.name());
+    for (const n of [
+      "history",
+      "rollback",
+      "telegram-webhook",
+      "update-internal-urls",
+      "kv-config",
+      "all",
+    ]) {
+      expect(names).toContain(n);
+    }
+  });
+
+  // -- deploy all --dry-run -------------------------------------------------
+
+  describe("deploy all --dry-run", () => {
+    it("prints deployment plan without calling deploy", async () => {
+      listEnabledWorkersMock = mock(() => [
+        "d1-worker",
+        "trade-worker",
+        "custom-worker",
+      ]);
+      (
+        ConfigService.prototype as unknown as Record<string, unknown>
+      ).listEnabledWorkers = listEnabledWorkersMock;
+
+      let stdout = "";
+      const origWrite = process.stdout.write.bind(process.stdout);
+      process.stdout.write = ((chunk: string | Uint8Array) => {
+        stdout += typeof chunk === "string" ? chunk : chunk.toString();
+        return true;
+      }) as typeof process.stdout.write;
+
+      try {
+        const program = await createProgram();
+        await program.parseAsync(["deploy", "all", "--dry-run"], {
+          from: "user",
+        });
+      } finally {
+        process.stdout.write = origWrite;
+      }
+
+      expect(stdout).toContain("Deployment Plan");
+      expect(stdout).toContain("d1-worker");
+      expect(stdout).toContain("trade-worker");
+      expect(stdout).toContain("custom-worker");
+      expect(stdout).toContain("Dashboard");
+      expect(deployMock).toHaveBeenCalledTimes(0);
+    });
+  });
+
+  // -- deploy history -------------------------------------------------------
+
+  describe("deploy history", () => {
+    const origVersionsList = CloudflareService.prototype
+      .versionsList as typeof CloudflareService.prototype.versionsList;
+
+    afterEach(() => {
+      (
+        CloudflareService.prototype as unknown as Record<string, unknown>
+      ).versionsList = origVersionsList;
+    });
+
+    it("prints version table on success", async () => {
+      (
+        CloudflareService.prototype as unknown as Record<string, unknown>
+      ).versionsList = mock(async () => ({
+        ok: true as const,
+        value: [
+          {
+            id: "abc12345-version",
+            number: 3,
+            created_on: "2026-01-01T00:00:00Z",
+            author: "ci",
+            source: "api",
+          },
+        ],
+      }));
+
+      let stdout = "";
+      const origWrite = process.stdout.write.bind(process.stdout);
+      process.stdout.write = ((chunk: string | Uint8Array) => {
+        stdout += typeof chunk === "string" ? chunk : chunk.toString();
+        return true;
+      }) as typeof process.stdout.write;
+
+      try {
+        const program = await createProgram();
+        await program.parseAsync(["deploy", "history", "trade-worker"], {
+          from: "user",
+        });
+      } finally {
+        process.stdout.write = origWrite;
+      }
+
+      expect(stdout).toContain("abc12345-version");
+      expect(stdout).toMatch(/version/i);
+    });
+
+    it("sets exitCode when versionsList fails", async () => {
+      (
+        CloudflareService.prototype as unknown as Record<string, unknown>
+      ).versionsList = mock(async () => ({
+        ok: false as const,
+        error: "auth failed",
+      }));
+
+      const program = await createProgram();
+      await program.parseAsync(["deploy", "history", "trade-worker"], {
+        from: "user",
+      });
+      expect(process.exitCode).toBe(1);
+    });
+
+    it("handles empty version history", async () => {
+      (
+        CloudflareService.prototype as unknown as Record<string, unknown>
+      ).versionsList = mock(async () => ({
+        ok: true as const,
+        value: [],
+      }));
+
+      let stdout = "";
+      const origWrite = process.stdout.write.bind(process.stdout);
+      process.stdout.write = ((chunk: string | Uint8Array) => {
+        stdout += typeof chunk === "string" ? chunk : chunk.toString();
+        return true;
+      }) as typeof process.stdout.write;
+
+      try {
+        const program = await createProgram();
+        await program.parseAsync(["deploy", "history", "trade-worker"], {
+          from: "user",
+        });
+      } finally {
+        process.stdout.write = origWrite;
+      }
+
+      expect(stdout).toMatch(/No deployment history|0 version/i);
+    });
+  });
+
+  // -- deploy rollback ------------------------------------------------------
+
+  describe("deploy rollback", () => {
+    const origVersionsList = CloudflareService.prototype
+      .versionsList as typeof CloudflareService.prototype.versionsList;
+    const origRollback = CloudflareService.prototype
+      .versionsRollback as typeof CloudflareService.prototype.versionsRollback;
+
+    afterEach(() => {
+      (
+        CloudflareService.prototype as unknown as Record<string, unknown>
+      ).versionsList = origVersionsList;
+      (
+        CloudflareService.prototype as unknown as Record<string, unknown>
+      ).versionsRollback = origRollback;
+    });
+
+    it("rolls back with --yes and explicit version", async () => {
+      const rollbackMock = mock(async () => ({
+        ok: true as const,
+        value: "Rolled back successfully\n",
+      }));
+      (
+        CloudflareService.prototype as unknown as Record<string, unknown>
+      ).versionsRollback = rollbackMock;
+
+      const program = await createProgram();
+      await program.parseAsync(
+        ["deploy", "rollback", "trade-worker", "ver-abc-12345678", "--yes"],
+        { from: "user" }
+      );
+
+      expect(rollbackMock).toHaveBeenCalledTimes(1);
+      const calls = (
+        rollbackMock as unknown as { mock: { calls: Array<unknown[]> } }
+      ).mock.calls;
+      expect(calls[0][0]).toBe("trade-worker");
+      expect(calls[0][1]).toBe("ver-abc-12345678");
+    });
+
+    it("sets exitCode when rollback fails", async () => {
+      (
+        CloudflareService.prototype as unknown as Record<string, unknown>
+      ).versionsRollback = mock(async () => ({
+        ok: false as const,
+        error: "version not found",
+      }));
+
+      const program = await createProgram();
+      await program.parseAsync(
+        ["deploy", "rollback", "trade-worker", "bad-ver", "--yes"],
+        { from: "user" }
+      );
+      expect(process.exitCode).toBe(1);
+    });
+  });
+
+  // -- deploy telegram-webhook ----------------------------------------------
+
+  describe("deploy telegram-webhook", () => {
+    it("errors when bot token is missing", async () => {
+      // Ensure no TG_BOT_TOKEN_BINDING from env load path — EnvService may
+      // fail to load .env.local in test cwd; token flag omitted.
+      const program = await createProgram();
+      await program.parseAsync(["deploy", "telegram-webhook"], {
+        from: "user",
+      });
+      expect(process.exitCode).toBe(1);
+    });
+
+    it("errors when secret token is missing but bot token provided", async () => {
+      const program = await createProgram();
+      await program.parseAsync(
+        ["deploy", "telegram-webhook", "--token", "123:ABC"],
+        { from: "user" }
+      );
+      expect(process.exitCode).toBe(1);
+    });
+
+    it("sets webhook when tokens provided", async () => {
+      const { TelegramService } = await import("./telegram-service.js");
+      const origInfo = TelegramService.prototype.getWebhookInfo;
+      const origSet = TelegramService.prototype.setWebhook;
+      (
+        TelegramService.prototype as unknown as Record<string, unknown>
+      ).getWebhookInfo = mock(async () => ({
+        ok: true,
+        url: "https://old.example/webhook",
+        pending_update_count: 0,
+      }));
+      (
+        TelegramService.prototype as unknown as Record<string, unknown>
+      ).setWebhook = mock(async () => ({
+        ok: true,
+        description: "Webhook was set",
+      }));
+
+      // Avoid ConfigService path for subdomain
+      const origGetGlobal = ConfigService.prototype.getGlobal;
+      (
+        ConfigService.prototype as unknown as Record<string, unknown>
+      ).getGlobal = mock(() => ({ subdomain_prefix: "hoox" }));
+
+      let stdout = "";
+      const origWrite = process.stdout.write.bind(process.stdout);
+      process.stdout.write = ((chunk: string | Uint8Array) => {
+        stdout += typeof chunk === "string" ? chunk : chunk.toString();
+        return true;
+      }) as typeof process.stdout.write;
+
+      try {
+        const program = await createProgram();
+        await program.parseAsync(
+          [
+            "deploy",
+            "telegram-webhook",
+            "--token",
+            "123:ABC",
+            "--secret-token",
+            "sec",
+            "--subdomain",
+            "myapp",
+          ],
+          { from: "user" }
+        );
+      } finally {
+        process.stdout.write = origWrite;
+        (
+          TelegramService.prototype as unknown as Record<string, unknown>
+        ).getWebhookInfo = origInfo;
+        (
+          TelegramService.prototype as unknown as Record<string, unknown>
+        ).setWebhook = origSet;
+        (
+          ConfigService.prototype as unknown as Record<string, unknown>
+        ).getGlobal = origGetGlobal;
+      }
+
+      expect(stdout).toMatch(/webhook|successfully/i);
+    });
+  });
+
+  // -- deploy update-internal-urls ------------------------------------------
+
+  describe("deploy update-internal-urls", () => {
+    it("errors when dashboard wrangler.jsonc is missing", async () => {
+      const origGetGlobal = ConfigService.prototype.getGlobal;
+      (
+        ConfigService.prototype as unknown as Record<string, unknown>
+      ).getGlobal = mock(() => ({ subdomain_prefix: "hoox" }));
+      listEnabledWorkersMock = mock(() => ["trade-worker"]);
+      (
+        ConfigService.prototype as unknown as Record<string, unknown>
+      ).listEnabledWorkers = listEnabledWorkersMock;
+
+      const program = await createProgram();
+      // Run from a temp-like cwd without workers/dashboard — use process.cwd()
+      // which typically has the monorepo; if dashboard exists, skip assertion
+      // by forcing path check via chdir to tmp.
+      const { mkdtempSync, rmSync } = await import("node:fs");
+      const { tmpdir } = await import("node:os");
+      const { join } = await import("node:path");
+      const dir = mkdtempSync(join(tmpdir(), "hoox-deploy-urls-"));
+      const prev = process.cwd();
+      try {
+        process.chdir(dir);
+        await program.parseAsync(["deploy", "update-internal-urls"], {
+          from: "user",
+        });
+        expect(process.exitCode).toBe(1);
+      } finally {
+        process.chdir(prev);
+        rmSync(dir, { recursive: true, force: true });
+        (
+          ConfigService.prototype as unknown as Record<string, unknown>
+        ).getGlobal = origGetGlobal;
+      }
+    });
+
+    it("updates vars when dashboard wrangler.jsonc exists", async () => {
+      const { mkdtempSync, mkdirSync, writeFileSync, readFileSync, rmSync } =
+        await import("node:fs");
+      const { tmpdir } = await import("node:os");
+      const { join } = await import("node:path");
+      const dir = mkdtempSync(join(tmpdir(), "hoox-deploy-urls-ok-"));
+      mkdirSync(join(dir, "workers", "dashboard"), { recursive: true });
+      writeFileSync(
+        join(dir, "workers", "dashboard", "wrangler.jsonc"),
+        JSON.stringify({
+          name: "dashboard",
+          vars: { TRADE_WORKER_URL: "https://old.example" },
+        })
+      );
+
+      const origGetGlobal = ConfigService.prototype.getGlobal;
+      (
+        ConfigService.prototype as unknown as Record<string, unknown>
+      ).getGlobal = mock(() => ({ subdomain_prefix: "myprefix" }));
+      listEnabledWorkersMock = mock(() => ["trade-worker", "hoox"]);
+      (
+        ConfigService.prototype as unknown as Record<string, unknown>
+      ).listEnabledWorkers = listEnabledWorkersMock;
+
+      const prev = process.cwd();
+      let stdout = "";
+      const origWrite = process.stdout.write.bind(process.stdout);
+      process.stdout.write = ((chunk: string | Uint8Array) => {
+        stdout += typeof chunk === "string" ? chunk : chunk.toString();
+        return true;
+      }) as typeof process.stdout.write;
+
+      try {
+        process.chdir(dir);
+        const program = await createProgram();
+        await program.parseAsync(["deploy", "update-internal-urls"], {
+          from: "user",
+        });
+        const content = readFileSync(
+          join(dir, "workers", "dashboard", "wrangler.jsonc"),
+          "utf-8"
+        );
+        expect(content).toContain("https://trade-worker.myprefix.workers.dev");
+        expect(content).toContain("https://hoox.myprefix.workers.dev");
+        expect(stdout).toMatch(/Updated|up to date/i);
+      } finally {
+        process.stdout.write = origWrite;
+        process.chdir(prev);
+        rmSync(dir, { recursive: true, force: true });
+        (
+          ConfigService.prototype as unknown as Record<string, unknown>
+        ).getGlobal = origGetGlobal;
+      }
+    });
+  });
+
+  // -- deploy kv-config -----------------------------------------------------
+
+  describe("deploy kv-config", () => {
+    it("sets exitCode when resolveNamespaceId throws", async () => {
+      const { KvSyncService } =
+        await import("../../services/kv/kv-sync-service.js");
+      const origResolve = KvSyncService.prototype.resolveNamespaceId;
+      KvSyncService.prototype.resolveNamespaceId = mock(async () => {
+        throw new Error("no namespace");
+      }) as typeof origResolve;
+
+      try {
+        const program = await createProgram();
+        await program.parseAsync(["deploy", "kv-config"], { from: "user" });
+        expect(process.exitCode).toBe(1);
+      } finally {
+        KvSyncService.prototype.resolveNamespaceId = origResolve;
+      }
+    });
+  });
+
+  // -- getDashboardBuildInfo ------------------------------------------------
+
+  describe("getDashboardBuildInfo", () => {
+    it("returns exists=false when worker.js is missing", async () => {
+      const { getDashboardBuildInfo } = await import("./deploy-command.js");
+      const { mkdtempSync, rmSync } = await import("node:fs");
+      const { tmpdir } = await import("node:os");
+      const { join } = await import("node:path");
+      const dir = mkdtempSync(join(tmpdir(), "hoox-dash-build-"));
+      try {
+        const info = getDashboardBuildInfo(dir);
+        expect(info.exists).toBe(false);
+      } finally {
+        rmSync(dir, { recursive: true, force: true });
+      }
+    });
+
+    it("returns age string when worker.js exists", async () => {
+      const { getDashboardBuildInfo } = await import("./deploy-command.js");
+      const { mkdtempSync, mkdirSync, writeFileSync, utimesSync, rmSync } =
+        await import("node:fs");
+      const { tmpdir } = await import("node:os");
+      const { join } = await import("node:path");
+      const dir = mkdtempSync(join(tmpdir(), "hoox-dash-build-"));
+      const workerDir = join(dir, ".open-next");
+      mkdirSync(workerDir, { recursive: true });
+      const workerPath = join(workerDir, "worker.js");
+      writeFileSync(workerPath, "// stub\n");
+      // 2 hours ago
+      const past = new Date(Date.now() - 2 * 60 * 60 * 1000);
+      utimesSync(workerPath, past, past);
+      try {
+        const info = getDashboardBuildInfo(dir);
+        expect(info.exists).toBe(true);
+        expect(info.age).toMatch(/hour|minute|just now|day/);
+      } finally {
+        rmSync(dir, { recursive: true, force: true });
+      }
+    });
+
+    it("formats multi-day age", async () => {
+      const { getDashboardBuildInfo } = await import("./deploy-command.js");
+      const { mkdtempSync, mkdirSync, writeFileSync, utimesSync, rmSync } =
+        await import("node:fs");
+      const { tmpdir } = await import("node:os");
+      const { join } = await import("node:path");
+      const dir = mkdtempSync(join(tmpdir(), "hoox-dash-build-"));
+      const workerDir = join(dir, ".open-next");
+      mkdirSync(workerDir, { recursive: true });
+      const workerPath = join(workerDir, "worker.js");
+      writeFileSync(workerPath, "// stub\n");
+      const past = new Date(Date.now() - 3 * 24 * 60 * 60 * 1000);
+      utimesSync(workerPath, past, past);
+      try {
+        const info = getDashboardBuildInfo(dir);
+        expect(info.age).toMatch(/3 days ago/);
+      } finally {
+        rmSync(dir, { recursive: true, force: true });
+      }
+    });
+  });
+
+  // -- deploy workers ordering + rawOutput path -----------------------------
+
+  describe("deploy workers details", () => {
+    it("orders workers by DEPLOY_ORDER and appends unknown", async () => {
+      listEnabledWorkersMock = mock(() => [
+        "trade-worker",
+        "d1-worker",
+        "zzz-custom",
+      ]);
+      (
+        ConfigService.prototype as unknown as Record<string, unknown>
+      ).listEnabledWorkers = listEnabledWorkersMock;
+
+      getWorkerMock = mock((name: string) => ({
+        enabled: true,
+        path: `workers/${name}`,
+      }));
+      (
+        ConfigService.prototype as unknown as Record<string, unknown>
+      ).getWorker = getWorkerMock;
+
+      const order: string[] = [];
+      deployMock = mock(async (path: string) => {
+        order.push(path);
+        return {
+          ok: true as const,
+          value: {
+            url: "https://x.workers.dev",
+            rawOutput: "Deployed version id 123",
+            size: "1.2 MiB",
+            startupTime: "10 ms",
+            versionId: "abcdef0123456789",
+          },
+        };
+      });
+      (
+        CloudflareService.prototype as unknown as Record<string, unknown>
+      ).deploy = deployMock;
+
+      const program = await createProgram();
+      await program.parseAsync(["deploy", "workers"], { from: "user" });
+
+      expect(order.length).toBe(3);
+      // d1 before trade
+      expect(order[0]).toContain("d1-worker");
+      expect(order[1]).toContain("trade-worker");
+      expect(order[2]).toContain("zzz-custom");
+    });
+
+    it("surfaces rawOutput when metrics are absent", async () => {
+      listEnabledWorkersMock = mock(() => ["only"]);
+      (
+        ConfigService.prototype as unknown as Record<string, unknown>
+      ).listEnabledWorkers = listEnabledWorkersMock;
+      getWorkerMock = mock(() => ({ enabled: true, path: "workers/only" }));
+      (
+        ConfigService.prototype as unknown as Record<string, unknown>
+      ).getWorker = getWorkerMock;
+
+      deployMock = mock(async () => ({
+        ok: true as const,
+        value: {
+          url: undefined,
+          rawOutput: "Uploaded worker successfully\nmore",
+        },
+      }));
+      (
+        CloudflareService.prototype as unknown as Record<string, unknown>
+      ).deploy = deployMock;
+
+      let stdout = "";
+      const origWrite = process.stdout.write.bind(process.stdout);
+      process.stdout.write = ((chunk: string | Uint8Array) => {
+        stdout += typeof chunk === "string" ? chunk : chunk.toString();
+        return true;
+      }) as typeof process.stdout.write;
+
+      try {
+        const program = await createProgram();
+        await program.parseAsync(["deploy", "workers"], { from: "user" });
+      } finally {
+        process.stdout.write = origWrite;
+      }
+
+      expect(stdout).toMatch(/Output:|Uploaded worker/);
+    });
   });
 });

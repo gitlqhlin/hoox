@@ -90,7 +90,8 @@ beforeEach(() => {
   clearProviderEnv();
   // Ignore on-disk .dev.vars so workspace secrets don't leak into unit tests
   __setSecretSourceForTests(() => ({}));
-  process.exitCode = undefined;
+  // Bun does not clear exitCode when assigned `undefined` — must set 0.
+  process.exitCode = 0;
   globalThis.fetch = origFetch;
 });
 
@@ -100,7 +101,7 @@ afterEach(() => {
     else process.env[k] = origEnv[k];
   }
   __setSecretSourceForTests(null);
-  process.exitCode = undefined;
+  process.exitCode = 0;
   globalThis.fetch = origFetch;
   mock.restore();
 });

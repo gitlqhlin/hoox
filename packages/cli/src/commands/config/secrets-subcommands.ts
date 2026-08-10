@@ -30,7 +30,7 @@ import type { FormatOptions } from "../../utils/formatters.js";
 import { sanitizeWranglerOutput } from "../../utils/wrangler-output.js";
 
 /** Render a structured secret-sync result; set exitCode on failure. */
-function reportSecretSync(
+export function reportSecretSync(
   result: SecretSyncResult,
   opts: FormatOptions,
   scopeLabel: string
@@ -168,7 +168,8 @@ async function readLine(): Promise<string> {
   return line.trim();
 }
 
-async function updateDevVars(
+/** Update or create a `.dev.vars` file with a single key=value pair. */
+export async function updateDevVars(
   filePath: string,
   key: string,
   value: string
