@@ -22,7 +22,7 @@ git clone --recursive https://github.com/hoox-sh/hoox.git
 bun install
 ```
 
-10 worker isolates under `workers/*` (except `workers/dashboard`) are Git submodules — without `--recursive` they are empty directories. `workers/dashboard` is a Next.js app living in the parent repo. `pyne-worker` is the Python PYNE edge evaluate host (tooling isolate; uses `API_KEY`, not mesh `INTERNAL_KEY_BINDING`).
+**11 compute surfaces:** 10 Worker isolates under `workers/*` (except `workers/dashboard`) are Git submodules — without `--recursive` they are empty directories. `workers/dashboard` is a Next.js app living in the parent repo (11th surface). `pyne-worker` is the Python PYNE edge evaluate host (tooling isolate; public routes use `API_KEY`, not mesh `INTERNAL_KEY_BINDING`; strategy forward to trade-worker uses mesh internal auth).
 
 ## Monorepo
 
@@ -127,7 +127,7 @@ Self-hosted production server: `bun run server.js` (Bun.serve, maps path prefixe
 
 ## Architecture
 
-10 workers communicating via Cloudflare Service Bindings (no public URLs). Gateway (`workers/hoox-worker`) and Dashboard are the only public-facing endpoints.
+**11 compute surfaces** (gateway + trade + agent + dashboard + telegram + d1 + web3 + email + analytics + report + **pyne**). Mesh workers communicate via Cloudflare Service Bindings (no public URLs). Gateway (`workers/hoox-worker`) and Dashboard are the primary public-facing endpoints; **pyne-worker** is a tooling isolate (`API_KEY` on public evaluate routes; mesh internal key on trade forward).
 
 ```
 External Inputs → hoox (Gateway) → trade-worker → d1-worker → analytics-worker
@@ -137,7 +137,7 @@ email-worker → trade-worker
 web3-wallet-worker → telegram-worker
 report-worker → telegram-worker
 dashboard → d1-worker, agent-worker, pyne-worker
-pyne-worker → trade-worker
+pyne-worker → trade-worker   (TRADE_SERVICE + X-Internal-Auth-Key)
 ```
 
 **Infrastructure:** D1 (SQLite at edge), R2 (S3-compatible, zero-egress), KV (sub-ms config), DO (idempotency), Queues (async backpressure), Workers AI (5 providers), Vectorize (RAG), Analytics Engine, Browser Rendering.

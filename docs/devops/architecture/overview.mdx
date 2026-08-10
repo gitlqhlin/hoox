@@ -8,9 +8,9 @@ title: "System Topology & Overview"
 description: "High-level architectural blueprint of the Hoox trading ecosystem, detailing edge microservice layouts, and multi-layered security models."
 ---
 
-Hoox is an enterprise-grade, serverless algorithmic trading platform built entirely on **Cloudflare's Edge V8 isolates** and globally distributed resources. By using a modular, service-oriented architecture, Hoox decomposes complex trading processes into ten highly specialized micro-workers.
+Hoox is an enterprise-grade, serverless algorithmic trading platform built entirely on **Cloudflare's Edge V8 isolates** and globally distributed resources. By using a modular, service-oriented architecture, Hoox decomposes complex trading processes into **11 compute surfaces**: gateway, trade, agent, dashboard (Next.js), telegram, d1, web3, email, analytics, report, and **pyne** (Python Pine edge evaluate).
 
-These workers communicate privately in microseconds, auto-scale globally near exchange servers, and store transaction logs in localized databases—all while running within Cloudflare's $0 free tiers.
+Most workers communicate privately via Service Bindings in microseconds, auto-scale globally near exchange servers, and store transaction logs in localized databases—all while running within Cloudflare's $0 free tiers. **pyne-worker** is a tooling isolate: public evaluate/management routes use `API_KEY` auth (not mesh `INTERNAL_KEY_BINDING`); live strategy forwards to `trade-worker` use mesh internal auth.
 
 ---
 
@@ -47,6 +47,7 @@ graph TB
         W3W["🌐 web3-wallet (DeFi Swaps)"]:::worker
         ANW["📊 analytics-worker (observability)"]:::worker
         RPW["📄 report-worker (PDF Generator)"]:::worker
+        PYNE["🐍 pyne-worker (Pine edge eval — tooling)"]:::worker
     end
 
     %% ── Storage & Resource Layer ─────────────────────────────────────
@@ -90,6 +91,9 @@ graph TB
     RPW -->|Cron 2x/day / Render PDFs| BR
     RPW -.->|Save Reports| R2
     RPW -->|Push PDF Link| TGW
+
+    PYNE -.->|R2 OHLCV / scripts| R2
+    PYNE -->|TRADE_SERVICE + X-Internal-Auth-Key| TW
 ```
 
 ---
@@ -107,6 +111,10 @@ graph TB
 | **`email-worker`**     |   IMAP Parsing   |  Cron `*/5`  |    No (Isolated)     |             No             |   Parse Statistics    |
 | **`web3-wallet`**      | DeFi Swap Engine |      No      |    No (Isolated)     |             No             |     Tx Sign Logs      |
 | **`analytics-worker`** |  Observability   |      No      |    No (Isolated)     |             No             |    Metrics Dataset    |
+| **`pyne-worker`**      | Pine edge evaluate | Cron `* * * * *` | **Tooling** (`API_KEY` / `X-API-Key`) | **Yes** (evaluate path) | Evaluate / forward logs |
+| **`dashboard`**        | Next.js ops UI   |      No      | **Yes** (public)     |             No             |    UI / binding calls |
+
+> **Public tooling vs mesh-private workers:** Mesh workers (`trade-worker`, `d1-worker`, `agent-worker`, etc.) expose **no** public HTTP and require `INTERNAL_KEY_BINDING` / `X-Internal-Auth-Key` on service-to-service calls. **`pyne-worker`** is a tooling isolate: its evaluate and management APIs use **`API_KEY`**, not mesh `INTERNAL_KEY` on public routes. When pyne forwards strategy events to `trade-worker`, that hop uses mesh internal auth.
 
 ---
 

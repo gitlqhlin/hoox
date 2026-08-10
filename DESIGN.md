@@ -23,7 +23,7 @@ See:
 
 The open core remains the foundation. Enterprise code is strictly separated and not public.
 
-The system runs **10 Cloudflare Workers** across dedicated services: gateway, trade execution, AI agent, D1 data access, notifications, email parsing, on-chain execution, analytics, PDF reporting, and the Next.js dashboard. All project intelligence, plans, specs, and conventions are maintained in `.opencode/` — the central knowledge hub for AI agents.
+The system runs **11 compute surfaces**: gateway, trade execution, AI agent, D1 data access, notifications, email parsing, on-chain execution, analytics, PDF reporting, **pyne** (Python Pine edge evaluate), and the Next.js dashboard. Dashboard is Next.js (OpenNext on Workers); the other ten are dedicated Worker isolates. All project intelligence, plans, specs, and conventions are maintained in `.opencode/` — the central knowledge hub for AI agents.
 
 ## 2. System Architecture & Workflows
 
@@ -95,6 +95,12 @@ The system runs **10 Cloudflare Workers** across dedicated services: gateway, tr
 │ └──────────────────────────────┘ └──────────────────────┘ └────────────────────┘ └────────────────────────────┘  │
 │                                                                                                                   │
 │ ┌──────────────────────────────────────────────────────────────────────────────────────────────────────────────┐ │
+│ │  pyne-worker (Python Pine edge evaluate — tooling isolate)                                                     │ │
+│ │    Cron * * * * * (bar-close) │ R2 OHLCV │ /run evaluate │ API_KEY auth (not mesh INTERNAL_KEY on public)   │ │
+│ │    Strategy events → trade-worker TRADE_SERVICE /webhook with X-Internal-Auth-Key (mesh internal secret)    │ │
+│ └──────────────────────────────────────────────────────────────────────────────────────────────────────────────┘ │
+│                                                                                                                   │
+│ ┌──────────────────────────────────────────────────────────────────────────────────────────────────────────────┐ │
 │ │                    analytics-worker (Observability & Time-Series)                                             │ │
 │ │    Service bindings from: hoox │ trade-worker │ d1-worker │ telegram │ email │ web3-wallet                    │ │
 │ │    Stores to: Analytics Engine (hoox-analytics dataset) — Connected to all system components                    │ │
@@ -117,10 +123,13 @@ The system runs **10 Cloudflare Workers** across dedicated services: gateway, tr
 | **analytics-worker**   | `workers/analytics-worker/`   | Analytics Engine tracking          | -                |
 | **report-worker**      | `workers/report-worker/`      | PDF reports via Browser Rendering  | `0 8 * * *`      |
 |                       |                               |                                    | `0 18 * * *`     |
+| **pyne-worker**        | `workers/pyne-worker/`        | Python Pine edge evaluate (tooling)| `* * * * *`      |
 
 ### 2.3 Communication Pattern
 
 Internal workers communicate via **Cloudflare Service Bindings** (not public URLs). The Hoox Gateway is the only user-facing entry point. The Dashboard has its own public URL but uses service bindings to reach internal workers.
+
+**pyne-worker** is a **tooling isolate**: public HTTP routes use **`API_KEY`** (`X-API-Key`), not mesh `INTERNAL_KEY_BINDING`. When it forwards strategy trade events to `trade-worker` via the `TRADE_SERVICE` binding, it authenticates with the mesh internal key (`X-Internal-Auth-Key` / `INTERNAL_KEY_BINDING` or trade-execute key secret).
 
 ## 3. Data Models (D1 & R2)
 
@@ -474,8 +483,9 @@ d1-worker      → analytics-worker
 telegram-worker → analytics-worker
 email-worker   → trade-worker, analytics-worker
 report-worker  → telegram-worker
-dashboard      → d1-worker, agent-worker
+dashboard      → d1-worker, agent-worker, pyne-worker
 web3-wallet-worker → telegram-worker, analytics-worker
+pyne-worker    → trade-worker   (TRADE_SERVICE; mesh internal auth on forward)
 ```
 
 ## 11. Code Graph (AI/LLM Context)

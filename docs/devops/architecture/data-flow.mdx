@@ -10,7 +10,7 @@ description: "Comprehensive data routing, transaction sequence diagrams, time-se
 
 Hoox operates as a highly orchestrated **distributed event loop**. Because execution logic is split into isolated compute nodes, data flows recursively through multiple V8 transitions, asynchronous queues, time-series datasets, and database ledgers.
 
-This document provides complete, low-level technical specifications and Mermaid sequence diagrams for our four primary data routing pipelines: Webhook Trade execution, AI Risk management, PDF browser rendering, and Observability tracking.
+This document provides complete, low-level technical specifications and Mermaid sequence diagrams for our primary data routing pipelines: Webhook Trade execution, AI Risk management, PDF browser rendering, Observability tracking, and Pine strategy bar-close → trade-worker.
 
 ---
 
@@ -133,7 +133,44 @@ sequenceDiagram
 
 ---
 
-## 💾 5. Global Data Persistence Mapping
+## 5. Pine strategy bar-close → trade-worker
+
+When a deployed Pine strategy is scheduled for bar-close evaluation, **pyne-worker** runs on cron, loads newer OHLCV bars from R2, evaluates the script, and forwards actionable strategy events to **trade-worker** over the `TRADE_SERVICE` binding with mesh internal auth and an idempotency key.
+
+```mermaid
+sequenceDiagram
+    autonumber
+    participant Cron as Cloudflare Cron (* * * * *)
+    participant PY as pyne-worker
+    participant R2 as R2 OHLCV_DATA
+    participant TW as trade-worker
+    participant D1 as d1-worker
+
+    Cron->>PY: triggers.crons (bar-close scheduler)
+    PY->>R2: Read script registry + latest OHLCV bars
+    Note over PY: Skip if no newer bar than last eval watermark
+    alt Newer bar available
+        R2-->>PY: Bars + deployed script
+        PY->>PY: Evaluate Pine (interpret / compile)
+        Note over PY: Map StrategyEvent → WebhookPayload
+        PY->>TW: TRADE_SERVICE POST /webhook<br/>X-Internal-Auth-Key + Idempotency-Key
+        Note over TW: requireInternalAuth; dedupe by idempotency key
+        TW->>D1: Persist fill / position updates
+        TW-->>PY: 200 Executed (or 409 duplicate)
+    else No new bar
+        Note over PY: No-op (scheduler idle)
+    end
+```
+
+| Hop | Auth / header | Notes |
+| --- | ------------- | ----- |
+| Public `/run`, `/scripts`, cron job APIs | `X-API-Key` (`API_KEY` secret) | Tooling isolate — not mesh `INTERNAL_KEY` |
+| pyne → trade-worker `/webhook` | `X-Internal-Auth-Key` (`INTERNAL_KEY_BINDING` or trade-execute key) | Required for live forward; optional `DEFAULT_EXCHANGE` on payload |
+| Duplicate protection | Idempotency key on forward | trade-worker / DO path rejects replays |
+
+---
+
+## 💾 6. Global Data Persistence Mapping
 
 | Storage Platform | Namespace / Database Name      | Data Payload Details                                           | Associated Compute Workers                  |
 | :--------------- | :----------------------------- | :------------------------------------------------------------- | :------------------------------------------ |

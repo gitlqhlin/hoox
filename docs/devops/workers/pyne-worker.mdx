@@ -30,19 +30,24 @@ Cron: `* * * * *` (bar-close scheduler; only re-runs when R2 has a newer bar).
 | Secret | Required | Purpose |
 | ------ | -------- | ------- |
 | `API_KEY` | **Yes** (production) | HTTP auth for `/run` and management APIs (`X-API-Key`). Unset = open dev mode — do not ship that way. |
+| `INTERNAL_KEY_BINDING` | **Yes** (live trade forward) | Mesh internal key sent as `X-Internal-Auth-Key` when forwarding strategy events to `trade-worker` via `TRADE_SERVICE`. Same secret family as the rest of the mesh (or a dedicated trade-execute key bound for that hop). Without it, live strategy → trade-worker calls are rejected by `requireInternalAuth`. |
 | `ALERT_WEBHOOK_URL` | No | Default **HTTPS** destination for `alert()` / `alertcondition()` (public hosts only; private/loopback IPs rejected) |
+| `DEFAULT_EXCHANGE` | No | Default exchange id on forwarded WebhookPayloads when the strategy event does not specify one (e.g. `binance`, `bybit`, `mexc`) |
 
 Dashboard callers that use the public URL or binding should set **`PYNE_API_KEY`** to the same value as `API_KEY`.
 
 ```bash
 hoox secrets set pyne-worker API_KEY
-hoox secrets set pyne-worker ALERT_WEBHOOK_URL   # optional
+hoox secrets set pyne-worker INTERNAL_KEY_BINDING  # required for live TRADE_SERVICE forward
+hoox secrets set pyne-worker ALERT_WEBHOOK_URL     # optional
+hoox secrets set pyne-worker DEFAULT_EXCHANGE      # optional
 hoox secrets set dashboard PYNE_API_KEY            # optional, match API_KEY
 ```
 
 ### Security notes
 
-- Auth: constant-time key compare; rate limit 100 req / 60s per key (per isolate).
+- **Public / tooling routes:** `API_KEY` via `X-API-Key` — constant-time key compare; rate limit 100 req / 60s per key (per isolate). **Not** mesh `INTERNAL_KEY_BINDING` on these routes.
+- **Strategy forward → trade-worker:** sends `X-Internal-Auth-Key` (from `INTERNAL_KEY_BINDING` / trade-execute key) on `TRADE_SERVICE` `POST /webhook`, plus an idempotency key for replay safety.
 - Payload caps: 5 MB body, 100 KB script, 100 K bars; `/run` wall timeout 30 s.
 - Alert webhooks: HTTPS + public host only (SSRF fail-closed).
 - R2 OHLCV keys: sanitized `symbol` / `timeframe` only — no path separators.

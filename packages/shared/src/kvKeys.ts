@@ -55,6 +55,7 @@ export const KV_AGENT_GOOGLE_KEY = "agent:google_key";
 export const KV_DASHBOARD_AI_HEALTH_SUMMARY = "dashboard:ai_health_summary";
 
 // --- Global Keys ---
+export const KV_GLOBAL_KILL_SWITCH = "global:kill_switch";
 export const KV_HEALTH_CHECK = "health_check";
 export const KV_HOUSEKEEPING_LAST_CHECK = "housekeeping:last_check";
 
@@ -90,6 +91,7 @@ export const KVKeys = {
   KV_AGENT_ANTHROPIC_KEY,
   KV_AGENT_GOOGLE_KEY,
   KV_DASHBOARD_AI_HEALTH_SUMMARY,
+  KV_GLOBAL_KILL_SWITCH,
   KV_HEALTH_CHECK,
   KV_HOUSEKEEPING_LAST_CHECK,
   QUEUE_MODE_FAILOVER,

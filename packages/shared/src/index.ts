@@ -61,6 +61,19 @@ export type {
 } from "./types";
 export { KVKeys } from "./kvKeys";
 export {
+  KILL_SWITCH_KEYS,
+  KILL_SWITCH_ACTIVE_PREFIX,
+  isTruthyKillSwitchFlag,
+  checkKillSwitch,
+  isTradingPaused,
+} from "./kill-switch";
+export type {
+  KillSwitchFailMode,
+  KillSwitchResult,
+  CheckKillSwitchOptions,
+  KillSwitchKv,
+} from "./kill-switch";
+export {
   toError,
   Errors,
   createJsonResponse,
