@@ -58,7 +58,7 @@
 
 \paragraph{Context.} Monolithic trading bots couple ingestion, execution, notifications, and persistence---a failure in PDF rendering or Telegram formatting can block order placement.
 
-\paragraph{Decision.} Split production logic into ten specialized Workers (Table~\ref{tab:workers}), communicating exclusively via Service Bindings except for outbound exchange HTTPS. A canonical binding registry in \texttt{hoox-shared} drives CLI deployment ordering and documentation sync (Listing~\ref{lst:registry-hoox}).
+\paragraph{Decision.} Split production logic into ten core Workers (Table~\ref{tab:workers}) plus optional Pine tooling isolates, communicating exclusively via Service Bindings except for outbound exchange HTTPS. A canonical binding registry in \texttt{hoox-shared} drives CLI deployment ordering and documentation sync (Listing~\ref{lst:registry-hoox}).
 
 \paragraph{Alternatives considered.}
 \begin{itemize}
@@ -111,7 +111,7 @@ The full \texttt{runWithFallback} state machine appears in Listing~\ref{lst:prov
 
 \subsection{ADR-006: Bun Workspaces for Monorepo Management}
 
-\paragraph{Context.} The repository contains ten Workers, three shared packages (CLI, TUI, \texttt{hoox-shared}), tests, and paper tooling---all sharing TypeScript types and middleware.
+\paragraph{Context.} The repository contains the core worker mesh, optional \texttt{pyne-worker} tooling, three shared packages (CLI, TUI, \texttt{hoox-shared}), tests, and paper tooling---all sharing TypeScript types and middleware where applicable.
 
 \paragraph{Decision.} Use Bun workspaces with a single \texttt{bun.lock} lockfile. Workers import \texttt{hoox-shared} via Wrangler \texttt{alias} paths and workspace protocol dependencies (Listing~\ref{lst:workspaces}).
 

@@ -71,6 +71,18 @@ The `trade-worker` does not expose a public URL, communicating internally via V8
 
 ---
 
+## 🔄 Position reconciliation
+
+Fills write D1 positions via non-blocking `waitUntil` for latency. To recover ledger drift, **`POST /api/positions/reconcile`** (trade-execute internal auth) pulls open positions from each exchange with credentials and upserts D1 (`OPEN` / `CLOSED`). Agent housekeeping cron invokes this path automatically.
+
+| Body field | Effect |
+| ---------- | ------ |
+| `exchanges` | Optional list (`binance` / `bybit` / `mexc`) |
+| `testnet` | Reconcile testnet namespace + clients |
+| `dryRun` | Diff only — no D1 writes |
+
+---
+
 ## 🧪 Test trading (`test: true`)
 
 | Topic | Behavior |

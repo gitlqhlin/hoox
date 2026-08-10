@@ -98,7 +98,7 @@ Key primitives leveraged by the PoC include Service Bindings, Durable Objects, S
 
 \section{Proof-of-Concept Architecture}
 
-\textsc{HOOX} consists of ten specialized Workers plus supporting Durable Objects and bindings. The signal lifecycle is divided into seven explicit stages: ingress, validation \& authentication, idempotency \& deduplication (Durable Object), risk \& position management, routing \& exchange adaptation, execution \& confirmation, and observability/reporting/analytics.
+\textsc{HOOX} consists of a multi-Worker edge mesh (ten core production Workers plus optional Pine tooling) plus supporting Durable Objects and bindings. The signal lifecycle is divided into seven explicit stages: ingress, validation \& authentication, idempotency \& deduplication (Durable Object), risk \& position management, routing \& exchange adaptation, execution \& confirmation, and observability/reporting/analytics.
 
 The architecture deliberately keeps the critical execution path free of blocking I/O. All durable side effects occur via \texttt{ctx.waitUntil} or background Queues.
 

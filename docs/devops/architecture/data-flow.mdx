@@ -114,7 +114,31 @@ sequenceDiagram
 
 ---
 
-## 4. Observability & Time-Series Analytics Flow
+## 4. Exchange ↔ D1 position reconciliation
+
+After fills, D1 position rows are updated asynchronously (`waitUntil`). Agent housekeeping (and a manual operator call) re-syncs the ledger from live exchange APIs:
+
+```mermaid
+sequenceDiagram
+    autonumber
+    participant Cron as agent-worker cron
+    participant TW as trade-worker
+    participant CEX as Binance / Bybit / MEXC
+    participant D1 as d1-worker
+
+    Cron->>TW: POST /api/positions/reconcile (X-Internal-Auth-Key)
+    TW->>CEX: getPositions (signed REST)
+    CEX-->>TW: Open interest snapshot
+    TW->>D1: /api/dashboard/positions (OPEN rows)
+    TW->>D1: /rpc/upsert-position for size changes / missing closes / new opens
+    TW-->>Cron: totals { upserted, closed, unchanged }
+```
+
+Exchange is the source of truth; D1 is a cache for risk + dashboard.
+
+---
+
+## 5. Observability & Time-Series Analytics Flow
 
 To maintain complete cross-worker telemetry without blocking critical order threads, Hoox routes analytics data points asynchronously to a dedicated metrics warehouse.
 
@@ -133,7 +157,7 @@ sequenceDiagram
 
 ---
 
-## 5. Pine strategy bar-close → trade-worker
+## 6. Pine strategy bar-close → trade-worker
 
 When a deployed Pine strategy is scheduled for bar-close evaluation, **pyne-worker** runs on cron, loads newer OHLCV bars from R2, evaluates the script, and forwards actionable strategy events to **trade-worker** over the `TRADE_SERVICE` binding with mesh internal auth and an idempotency key.
 
@@ -170,7 +194,7 @@ sequenceDiagram
 
 ---
 
-## 💾 6. Global Data Persistence Mapping
+## 💾 7. Global Data Persistence Mapping
 
 | Storage Platform | Namespace / Database Name      | Data Payload Details                                           | Associated Compute Workers                  |
 | :--------------- | :----------------------------- | :------------------------------------------------------------- | :------------------------------------------ |

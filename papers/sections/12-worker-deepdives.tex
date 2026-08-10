@@ -1,11 +1,11 @@
 \section{Worker Implementation Reference}
 \label{sec:worker-deepdives}
 
-Table~\ref{tab:worker-index} indexes all ten production Workers. Listings for latency-critical paths appear in Section~\ref{sec:mechanisms}; this section documents bindings, triggers, and operational roles sourced from \texttt{docs/devops/workers/} and \texttt{graph-metadata.json}.
+Table~\ref{tab:worker-index} indexes the ten core production Workers (dashboard included). Listings for latency-critical paths appear in Section~\ref{sec:mechanisms}; this section documents bindings, triggers, and operational roles sourced from \texttt{docs/devops/workers/} and \texttt{graph-metadata.json}. Pine tooling (\texttt{pyne-worker}) is summarized after the mesh table.
 
 \begin{table}[t]
   \centering
-  \caption{Production Worker index (core mesh). \texttt{pine-worker} and \texttt{pyne-worker} are tooling isolates outside this table.}
+  \caption{Production Worker index (core mesh). \texttt{pyne-worker} is a tooling isolate that can forward strategy events into \texttt{trade-worker} with mesh internal auth.}
   \label{tab:worker-index}
   \small
   \begin{tabular*}{\linewidth}{@{\extracolsep{\fill}}llll@{}}
@@ -40,22 +40,23 @@ The \texttt{hoox} isolate is the only public ingress for TradingView webhooks. I
 
 No public URL; reached via Service Binding or \texttt{trade-execution} queue consumer. Smart Placement minimizes CEX API RTT.
 
-\paragraph{Endpoints.} \texttt{POST /webhook}, \texttt{POST /process}, \texttt{GET /api/signals}, queue consumer (Listings~\ref{lst:queue-handler},~\ref{lst:trade-queue-consumer}).
+\paragraph{Endpoints.} \texttt{POST /webhook}, \texttt{POST /process}, \texttt{GET /api/signals}, \texttt{POST /api/positions/reconcile}, queue consumer (Listings~\ref{lst:queue-handler},~\ref{lst:trade-queue-consumer}).
 
 \paragraph{Storage.} \texttt{D1\_SERVICE}, \texttt{REPORTS\_BUCKET}, \texttt{CONFIG\_KV}, \texttt{EXCHANGE\_CONNECTION\_MANAGER}.
 
-\paragraph{Execution.} Provider-composed \texttt{ExchangeRouter} (Listing~\ref{lst:exchange-router}), KV risk gates and REST placement (Listing~\ref{lst:execute-trade-risk}). DLQ failures log to D1 and notify Telegram.
+\paragraph{Execution.} Provider-composed \texttt{ExchangeRouter} (Listing~\ref{lst:exchange-router}), KV risk gates and REST placement (Listing~\ref{lst:execute-trade-risk}). DLQ failures log to D1 and notify Telegram. Entry-level CONFIG\_KV idempotency covers non-gateway callers (email, agent, pyne). Position reconciliation pulls live exchange positions and upserts D1 so risk/dashboard views recover from \texttt{waitUntil} write loss.
 
 \subsection{Agent Worker (\texttt{agent-worker})}
 
-Cron-driven (\texttt{*/5 * * * *}) risk manager. Uses \texttt{createCronHandler} from \texttt{hoox-shared} with a five-minute observation loop:
+Cron-driven risk manager (default \texttt{*/15 * * * *}, configurable 1--1440\,min). Uses \texttt{createCronHandler} from \texttt{hoox-shared}:
 
 \begin{enumerate}
+  \item Housekeeping: service health probes and \texttt{POST trade-worker/api/positions/reconcile} (exchange $\leftrightarrow$ D1).
   \item Fetch open positions from \texttt{d1-worker}.
   \item Poll public exchange mark prices (no signed calls on the hot path).
   \item Evaluate trailing stops (5\% watermark in KV), take-profit scale-out (50\% at 10\% gain), and global drawdown ($-5\%$ $\rightarrow$ \texttt{trade:kill\_switch}).
   \item Optionally summarize \texttt{system\_logs} via LLM and alert \texttt{telegram-worker}.
-  \item Dispatch \texttt{CLOSE\_*} payloads to \texttt{trade-worker} when rules fire.
+  \item Dispatch \texttt{CLOSE\_*} payloads to \texttt{trade-worker} when rules fire (with idempotency keys).
 \end{enumerate}
 
 \paragraph{AI gateway.} \texttt{ProviderManager} with fallback chain \texttt{[workers-ai, openai]} (Listings~\ref{lst:agent-config},~\ref{lst:provider-fallback}). LLM output is sanitized; it does not place orders directly.

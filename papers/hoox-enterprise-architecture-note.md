@@ -23,7 +23,7 @@ This short note accompanies the main HOOX academic paper / PoC, which focuses on
 - **AI scale**: AI Gateway + larger Vectorize + higher limits.
 - Higher/custom limits, data residency (R2 jurisdictions), dedicated support.
 
-The architecture remains grounded in the same 10-worker + Service Bindings + DO + Smart Placement model described in the main paper.
+The architecture remains grounded in the same multi-Worker edge mesh (core production Workers + optional Pine tooling) + Service Bindings + DO + Smart Placement model described in the main paper.
 
 See `docs/enterprise/` for public architecture design docs of the commercial layer (see root OPEN_CORE\* files for boundaries).
 

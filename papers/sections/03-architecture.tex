@@ -1,7 +1,7 @@
 \section{System Architecture}
 \label{sec:architecture}
 
-\textsc{HOOX} consists of ten specialized Workers (Table~\ref{tab:workers}) that together form a complete trading pipeline. Two additional Workers---\texttt{pine-worker} and \texttt{pyne-worker}---provide Pine Script tooling and are outside the core production mesh.
+\textsc{HOOX} consists of ten core production Workers (Table~\ref{tab:workers}) that form the trading mesh, plus optional Pine tooling isolates (\texttt{pine-worker}, \texttt{pyne-worker}) that evaluate strategies and can forward events into \texttt{trade-worker} over Service Bindings with mesh internal auth. Counting the OpenNext dashboard as a compute surface yields eleven operator-facing surfaces in the monorepo.
 
 \begin{table}[t]
   \centering
@@ -61,8 +61,8 @@ A representative TradingView signal traverses seven stages:
   \item \textbf{Idempotency:} A composite key \texttt{trade:\{exchange\}:\{symbol\}:\{action\}:\{quantity\}} is checked against the \texttt{IdempotencyStore} Durable Object.
   \item \textbf{Routing:} On success, the payload is forwarded via Service Binding to \texttt{trade-worker}, or enqueued on \texttt{trade-execution} depending on KV-configured queue mode (Table~\ref{tab:queue-modes}).
   \item \textbf{Execution:} \texttt{trade-worker} resolves the exchange via dynamic KV routing and places the order using HMAC-SHA256 signed REST requests.
-  \item \textbf{Persistence and notification:} Results are written to D1 via \texttt{d1-worker}, logged to R2, and forwarded to \texttt{telegram-worker} and \texttt{analytics-worker} via non-blocking \texttt{waitUntil} calls.
-  \item \textbf{Risk management:} Every five minutes, \texttt{agent-worker} runs a deterministic cron---trailing stops, take-profit scale-out, and a drawdown kill switch. The cron is intentionally simple; event-driven risk management via the WebSocket connection manager is planned future work.
+  \item \textbf{Persistence and notification:} Results are written to D1 via \texttt{d1-worker}, logged to R2, and forwarded to \texttt{telegram-worker} and \texttt{analytics-worker} via non-blocking \texttt{waitUntil} calls. Because D1 writes are intentionally non-blocking for latency, the ledger can lag fills; \texttt{trade-worker} therefore exposes \texttt{POST /api/positions/reconcile} so exchange open interest is treated as source of truth.
+  \item \textbf{Risk management:} On a configurable cron (default every fifteen minutes), \texttt{agent-worker} runs a deterministic loop---trailing stops, take-profit scale-out, drawdown kill switch, housekeeping health probes, and position reconciliation against live exchanges. Event-driven risk via the WebSocket connection manager remains future work.
 \end{enumerate}
 
 \begin{table}[t]

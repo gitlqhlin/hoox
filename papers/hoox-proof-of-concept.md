@@ -61,7 +61,7 @@ Key primitives leveraged by the PoC:
 
 ## 3. Proof-of-Concept Architecture
 
-HOOX consists of ten specialized Workers plus supporting Durable Objects and bindings. The signal lifecycle is divided into seven explicit stages:
+HOOX consists of a multi-Worker edge mesh (ten core production Workers plus optional Pine tooling isolates) and supporting Durable Objects and bindings. The signal lifecycle is divided into seven explicit stages:
 
 1. Ingress (hoox webhook gateway + Telegram/email workers)
 2. Validation & Authentication

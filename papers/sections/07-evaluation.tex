@@ -153,7 +153,7 @@ Independent verifiers can reproduce the hop and trace aggregates above using the
 
 \subsection{Cost Analysis}
 
-A complete production deployment---ten Workers, dashboard, D1, KV, R2, Queues, and Vectorize---operates within Cloudflare's free tier for typical retail volumes (${<}100{,}000$ requests/day, ${<}10^5$ Durable Object requests/day, modest Analytics Engine write volume). Over the same 12-month window, no paid Workers, KV, D1, or R2 overages were incurred. Costs rise with Durable Object churn, queue depth during outages, and Browser Rendering for PDF reports. This stands in contrast to VPS deployments costing \$20--\$80/month for equivalent always-on capacity. Detailed per-service cost decomposition is left to future work.
+A complete production deployment---core worker mesh, dashboard, optional \texttt{pyne-worker}, D1, KV, R2, Queues, and Vectorize---operates within Cloudflare's free tier for typical retail volumes (${<}100{,}000$ requests/day, ${<}10^5$ Durable Object requests/day, modest Analytics Engine write volume). Over the same 12-month window, no paid Workers, KV, D1, or R2 overages were incurred. Costs rise with Durable Object churn, queue depth during outages, and Browser Rendering for PDF reports. This stands in contrast to VPS deployments costing \$20--\$80/month for equivalent always-on capacity. Detailed per-service cost decomposition is left to future work.
 
 \subsection{Reliability}
 \label{sec:reliability}
