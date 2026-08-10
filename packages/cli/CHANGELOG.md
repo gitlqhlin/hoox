@@ -5,6 +5,15 @@ This project adheres loosely to [Semantic Versioning](https://semver.org/).
 
 ## Unreleased
 
+## [0.11.2] — 2026-08-10
+
+### Fixed / hardened (mesh)
+
+- **Signal path hardening** (workers + shared): unified kill-switch helper (`@hoox-sh/hoox-shared/kill-switch`), trade-worker entry idempotency, pyne→trade mesh auth + safe event mapping, exchange↔D1 position reconciliation on agent housekeeping.
+- **Idempotency alignment**: gateway forwards resolved `Idempotency-Key` to trade-worker (binding + queue); queue consumer stores dedupe keys only after successful execute.
+- **Operator SSE**: `/v1/trades/stream` and `/v1/logs/stream` poll live trade-worker feeds (no longer one-shot stubs).
+- Depends on `@hoox-sh/hoox-shared@^1.2.1`.
+
 ## [0.11.1] — 2026-08-09
 
 ### Fixed
