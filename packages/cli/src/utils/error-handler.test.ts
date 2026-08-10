@@ -14,12 +14,16 @@ describe("withErrorHandling — [code] badge in output", () => {
   const originalExit = process.exit;
   const originalExitCode = process.exitCode;
 
+  const originalStderrWrite = process.stderr.write.bind(process.stderr);
+
   beforeEach(() => {
     chunks = [];
-    process.stdout.write = mock((chunk: string | Buffer) => {
+    const writeMock = mock((chunk: string | Buffer) => {
       chunks.push(typeof chunk === "string" ? chunk : chunk.toString());
       return true;
     }) as unknown as typeof process.stdout.write;
+    process.stdout.write = writeMock;
+    process.stderr.write = writeMock as unknown as typeof process.stderr.write;
     // Don't actually exit in tests.
     process.exit = mock(() => {}) as unknown as typeof process.exit;
     process.exitCode = 0;
@@ -27,6 +31,7 @@ describe("withErrorHandling — [code] badge in output", () => {
 
   afterEach(() => {
     process.stdout.write = originalWrite;
+    process.stderr.write = originalStderrWrite;
     process.exit = originalExit;
     process.exitCode = originalExitCode;
   });

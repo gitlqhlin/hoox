@@ -202,6 +202,8 @@ export async function updateDevVars(
   } else {
     await Bun.write(filePath, `${key}=${value}\n`);
   }
+  const { secureSecretFile } = await import("../../utils/fs-secure.js");
+  secureSecretFile(filePath);
 }
 
 /**

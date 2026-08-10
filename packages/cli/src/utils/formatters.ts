@@ -200,6 +200,14 @@ export function formatError(
   const message = typeof error === "string" ? error : error.message;
   const cliError = error instanceof CLIError ? error : null;
 
+  // Prefer stderr so pipes can separate success data (stdout) from failures.
+  // Also mirror to stdout for interactive terminals and for tests that capture
+  // stdout historically — JSON/scripts can still use `2>` alone if desired.
+  const write = (s: string) => {
+    process.stderr.write(s);
+    process.stdout.write(s);
+  };
+
   if (opts.json) {
     const output: Record<string, unknown> = {
       success: false,
@@ -211,12 +219,12 @@ export function formatError(
     if (opts.suggestions && opts.suggestions.length > 0) {
       output.suggestions = opts.suggestions;
     }
-    process.stdout.write(JSON.stringify(output) + "\n");
+    write(JSON.stringify(output) + "\n");
     return;
   }
 
   if (opts.quiet) {
-    process.stdout.write(`${message}\n`);
+    write(`${message}\n`);
     return;
   }
 
@@ -228,7 +236,7 @@ export function formatError(
     titleParts.push(theme.textSubtle(`[${cliError.code}]`));
   }
   titleParts.push(theme.text(message));
-  process.stdout.write(`${titleParts.join(" ")}\n`);
+  write(`${titleParts.join(" ")}\n`);
 
   if (cliError?.details) {
     // Multi-line details (e.g. per-secret failures) render as indented bullets
@@ -236,7 +244,7 @@ export function formatError(
       .split("\n")
       .filter((l) => l.length > 0);
     for (const line of detailLines) {
-      process.stdout.write(`  ${theme.textMuted(line)}\n`);
+      write(`  ${theme.textMuted(line)}\n`);
     }
   }
 
@@ -245,25 +253,25 @@ export function formatError(
 
   if (hasHint || hasSuggestions) {
     if (inCard) {
-      process.stdout.write(`  ${theme.border(icons.pipe)}\n`);
+      write(`  ${theme.border(icons.pipe)}\n`);
     }
     if (hasHint) {
-      process.stdout.write(
+      write(
         `  ${inCard ? theme.border(icons.pipe) : " "}  ${theme.dim("↳ hint:")} ${theme.value(cliError!.hint!)}\n`
       );
     }
     if (hasSuggestions) {
       const sugText = opts.suggestions!.map((s) => `'${s}'`).join(", ");
-      process.stdout.write(
+      write(
         `  ${inCard ? theme.border(icons.pipe) : " "}  ${theme.dim("did you mean:")} ${theme.accent(sugText)} ${theme.dim("?")}\n`
       );
     }
     if (inCard) {
-      process.stdout.write(`  ${theme.border(icons.pipe)}\n`);
+      write(`  ${theme.border(icons.pipe)}\n`);
     }
   } else if (inCard && !cliError?.details) {
     // No hint / suggestions / details: still frame with a single pipe
-    process.stdout.write(`  ${theme.border(icons.pipe)}\n`);
+    write(`  ${theme.border(icons.pipe)}\n`);
   }
 }
 

@@ -487,6 +487,20 @@ describe("SetupService.rebuildDashboard — full path", () => {
 // ---------------------------------------------------------------------------
 
 describe("SetupService.runAll", () => {
+  const origListMissing = SetupService.prototype.listMissingWorkers;
+  const origEnsureWorkers = SetupService.prototype.ensureWorkers;
+
+  beforeEach(() => {
+    // Isolate runAll from real monorepo worker/submodule state under tmpCwd.
+    SetupService.prototype.listMissingWorkers = mock(() => []);
+    SetupService.prototype.ensureWorkers = mock(async () => []);
+  });
+
+  afterEach(() => {
+    SetupService.prototype.listMissingWorkers = origListMissing;
+    SetupService.prototype.ensureWorkers = origEnsureWorkers;
+  });
+
   it("runs the standard pipeline and emits steps", async () => {
     fileExistsMap["workers/trade-worker/schema.sql"] = true;
     spawnedExits = [0, 0, 0]; // schema, dashboard build, dashboard deploy

@@ -197,6 +197,8 @@ async function createDevVars(
 
     try {
       await Bun.write(filePath, content);
+      const { secureSecretFile } = await import("../../utils/fs-secure.js");
+      secureSecretFile(filePath);
       if (!opts?.quiet) {
         formatSuccess(`Created ${filePath}`, opts);
       }
@@ -204,6 +206,8 @@ async function createDevVars(
       const { mkdir } = await import("node:fs/promises");
       await mkdir(dir, { recursive: true });
       await Bun.write(filePath, content);
+      const { secureSecretFile } = await import("../../utils/fs-secure.js");
+      secureSecretFile(filePath);
       if (!opts?.quiet) {
         formatSuccess(`Created ${filePath}`, opts);
       }

@@ -5,6 +5,21 @@ This project adheres loosely to [Semantic Versioning](https://semver.org/).
 
 ## Unreleased
 
+## [0.11.4] — 2026-08-10
+
+### Fixed / hardened
+
+- **Onboard**: do not run setup when init cancels/incomplete (require `wrangler.jsonc` after step 1).
+- **ensurePackages**: detect built packages via `dist/*.js` directory scan (no more always-rebuild).
+- **Workers gate**: abort setup when worker trees are still missing after submodule clone.
+- **`--skip-keys`**: load mesh keys from `.keys/setup.env` so secrets can still push.
+- **`hoox keys generate`**: also write `setup.env` + chmod `0700`/`0600` on key material.
+- **Secret files**: chmod `0600` on `.dev.vars` / `.env.local` writers (init, env, secrets, setup).
+- **formatError**: emit on **stderr** (mirrored to stdout for compatibility).
+- **Secrets missing config**: recovery text points to `hoox onboard` / `hoox init`.
+- **Release workflow**: idempotent TUI re-publish; fail only when CLI/auth fails.
+- **Docs**: `logs worker` / `check setup` (removed stale `logs tail` / `check-setup`).
+
 ## [0.11.3] — 2026-08-10
 
 ### Fixed / ship-readiness (CLI bootstrap & exit codes)

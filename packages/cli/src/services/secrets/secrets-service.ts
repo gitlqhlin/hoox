@@ -249,6 +249,8 @@ export class SecretsService {
 
     try {
       await Bun.write(devVarsPath, content);
+      const { secureSecretFile } = await import("../../utils/fs-secure.js");
+      secureSecretFile(devVarsPath);
       return { ok: true, value: devVarsPath };
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : String(err);

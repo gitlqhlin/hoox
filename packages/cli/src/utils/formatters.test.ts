@@ -44,6 +44,24 @@ function captureStdout(): { output: () => string; restore: () => void } {
   };
 }
 
+/** Capture stderr (formatError writes errors there). */
+function captureStderr(): { output: () => string; restore: () => void } {
+  const chunks: string[] = [];
+  const originalWrite = process.stderr.write.bind(process.stderr);
+  const writeMock = mock((chunk: string | Buffer) => {
+    chunks.push(typeof chunk === "string" ? chunk : chunk.toString());
+    return true;
+  });
+  process.stderr.write = writeMock as unknown as typeof process.stderr.write;
+
+  return {
+    output: () => chunks.join(""),
+    restore: () => {
+      process.stderr.write = originalWrite;
+    },
+  };
+}
+
 describe("formatSuccess", () => {
   let capture: ReturnType<typeof captureStdout>;
 
@@ -360,10 +378,11 @@ describe("formatList", () => {
 });
 
 describe("formatError", () => {
-  let capture: ReturnType<typeof captureStdout>;
+  // Errors are written to stderr so success data can stay on stdout alone.
+  let capture: ReturnType<typeof captureStderr>;
 
   beforeEach(() => {
-    capture = captureStdout();
+    capture = captureStderr();
   });
 
   afterEach(() => {
@@ -596,11 +615,11 @@ describe("formatHint", () => {
 });
 
 describe("formatError with hint", () => {
-  let capture: ReturnType<typeof captureStdout>;
+  let capture: ReturnType<typeof captureStderr>;
   const originalIsTTY = process.stdout.isTTY;
 
   beforeEach(() => {
-    capture = captureStdout();
+    capture = captureStderr();
     Object.defineProperty(process.stdout, "isTTY", {
       value: true,
       configurable: true,
@@ -739,10 +758,10 @@ describe("formatTable refinements", () => {
 });
 
 describe("formatError refinements", () => {
-  let capture: ReturnType<typeof captureStdout>;
+  let capture: ReturnType<typeof captureStderr>;
 
   beforeEach(() => {
-    capture = captureStdout();
+    capture = captureStderr();
   });
 
   afterEach(() => {

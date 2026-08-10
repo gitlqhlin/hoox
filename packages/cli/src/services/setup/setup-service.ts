@@ -205,6 +205,38 @@ function safeChmod(path: string, mode: number): void {
   }
 }
 
+/**
+ * Load mesh keys previously written by setup/keys generate from `.keys/setup.env`.
+ * Used when `--skip-keys` so secrets can still be pushed to Cloudflare.
+ */
+function loadExistingKeysFromDisk(): GeneratedKeys | null {
+  const setupEnv = join(KEYS_DIR, "setup.env");
+  if (!existsSync(setupEnv)) return null;
+  let text: string;
+  try {
+    text = readFileSync(setupEnv, "utf-8");
+  } catch {
+    return null;
+  }
+  const map = parseEnvFile(text);
+  const required: (keyof GeneratedKeys)[] = [
+    "INTERNAL_KEY_BINDING",
+    "AGENT_INTERNAL_KEY",
+    "SESSION_SECRET",
+    "WEBHOOK_API_KEY_BINDING",
+    "TELEGRAM_INTERNAL_KEY_BINDING",
+    "TRADE_INTERNAL_KEY",
+    "API_SERVICE_KEY_BINDING",
+  ];
+  const keys = {} as GeneratedKeys;
+  for (const name of required) {
+    const v = map.get(name);
+    if (!v) return null;
+    keys[name] = v;
+  }
+  return keys;
+}
+
 // ---------------------------------------------------------------------------
 // Service
 // ---------------------------------------------------------------------------
@@ -228,7 +260,20 @@ export class SetupService {
    */
   async generateKeys(skip = false): Promise<GeneratedKeys | null> {
     if (skip) {
-      this.onProgress({ type: "info", step: "keys", message: "Skipped" });
+      const existing = loadExistingKeysFromDisk();
+      if (existing) {
+        this.onProgress({
+          type: "info",
+          step: "keys",
+          message: "Using existing keys from .keys/setup.env (--skip-keys)",
+        });
+        return existing;
+      }
+      this.onProgress({
+        type: "info",
+        step: "keys",
+        message: "Skipped (no existing .keys/setup.env)",
+      });
       return null;
     }
 
@@ -790,11 +835,36 @@ export class SetupService {
     return markers.some((p) => existsSync(p));
   }
 
+  /** Return logical worker names whose trees are empty / not checked out. */
+  listMissingWorkers(): string[] {
+    const workerDirs = [
+      ...ALL_WORKERS,
+      ...TOOLING_WORKERS,
+      "dashboard",
+    ] as const;
+    const missing: string[] = [];
+    for (const name of workerDirs) {
+      const dir = `workers/${workerFsDir(name)}`;
+      try {
+        const gitEntry = readFileSync(join(dir, ".git"), "utf-8").trim();
+        if (gitEntry.startsWith("gitdir:") || gitEntry.length > 0) {
+          if (!this.isWorkerTreePopulated(dir, name)) missing.push(name);
+        } else if (!this.isWorkerTreePopulated(dir, name)) {
+          missing.push(name);
+        }
+      } catch {
+        if (!this.isWorkerTreePopulated(dir, name)) missing.push(name);
+      }
+    }
+    return missing;
+  }
+
   /**
    * Ensure all worker directories are cloned (git submodules). If any worker
    * directory is empty, runs `git submodule update --init --recursive`.
    *
-   * Returns a list of workers that were cloned (empty = none needed).
+   * Returns a list of workers that were missing *before* the clone attempt
+   * (callers should re-scan with {@link listMissingWorkers} afterward).
    */
   async ensureWorkers(): Promise<string[]> {
     this.onProgress({
@@ -803,35 +873,8 @@ export class SetupService {
       message: "Checking worker submodules...",
     });
 
-    const workerDirs = [
-      ...ALL_WORKERS,
-      ...TOOLING_WORKERS,
-      "dashboard",
-    ] as const;
-
-    const missing: string[] = [];
+    const missing = this.listMissingWorkers();
     const gitmodulesPath = ".gitmodules";
-
-    for (const name of workerDirs) {
-      const dir = `workers/${workerFsDir(name)}`;
-      // Empty submodule = directory exists but has no files
-      try {
-        const gitEntry = readFileSync(join(dir, ".git"), "utf-8").trim();
-        // A submodule .git is a file containing "gitdir:" — it exists but points elsewhere
-        if (gitEntry.startsWith("gitdir:") || gitEntry.length > 0) {
-          if (!this.isWorkerTreePopulated(dir, name)) {
-            missing.push(name);
-          }
-        } else if (!this.isWorkerTreePopulated(dir, name)) {
-          missing.push(name);
-        }
-      } catch {
-        // Either .git file missing or tree empty — submodule not populated
-        if (!this.isWorkerTreePopulated(dir, name)) {
-          missing.push(name);
-        }
-      }
-    }
 
     if (missing.length === 0) {
       this.onProgress({
@@ -1373,13 +1416,26 @@ export class SetupService {
     }
 
     // 0b. Ensure worker submodules are cloned
-    const cloned = await this.ensureWorkers();
-    if (cloned.length > 0) {
-      this.onProgress({
-        type: "warn",
+    const missingAfterClone = await this.ensureWorkers();
+    // Re-verify trees after submodule update (ensureWorkers returns the
+    // pre-clone missing list, so re-scan for residual empties).
+    const stillMissing = this.listMissingWorkers();
+    if (stillMissing.length > 0) {
+      steps.push({
         step: "workers",
-        message: "Run `hoox setup` again after clone completes.",
+        success: false,
+        message: `Missing worker trees: ${stillMissing.join(", ")}. Run: git submodule update --init --recursive`,
       });
+      this.onProgress({
+        type: "step-error",
+        step: "workers",
+        message:
+          missingAfterClone.length > 0
+            ? "Workers still missing after clone attempt — aborting setup."
+            : "Workers missing — aborting setup.",
+      });
+      results.success = false;
+      return results;
     }
 
     // 0c. Ensure packages are built
@@ -1390,12 +1446,14 @@ export class SetupService {
         success: false,
         message: "Package build failed — check dependencies",
       });
+      results.success = false;
+      return results;
     }
 
     // 0d. Fix wrangler configs (null vars → secrets)
     this.fixWranglerConfigs();
 
-    // ── 1. Keys (auto-generate if missing) ─────────────────────────────
+    // ── 1. Keys (auto-generate if missing; --skip-keys loads .keys/setup.env)
     const keys = await this.generateKeys(options.skipKeys);
     results.keys = keys ?? undefined;
 

@@ -120,6 +120,8 @@ async function handleInit(
     await Bun.file(tmpPath)
       .delete()
       .catch(() => {});
+    const { secureSecretFile } = await import("../../utils/fs-secure.js");
+    secureSecretFile(".env.local");
     if (!opts.quiet) formatSuccess(".env.local written", opts);
 
     p.log.step("Writing .dev.vars files...");
@@ -133,6 +135,9 @@ async function handleInit(
         "",
       ].join("\n");
       await Bun.write(`${workerPath}/.dev.vars`, content);
+      const { secureSecretFile: chmodDev } =
+        await import("../../utils/fs-secure.js");
+      chmodDev(`${workerPath}/.dev.vars`);
       if (!opts.quiet) formatSuccess(`Created ${workerPath}/.dev.vars`, opts);
     }
 
@@ -239,6 +244,8 @@ async function handleGenerateDevVars(opts: FormatOptions): Promise<void> {
       "",
     ].join("\n");
     await Bun.write(`${workerPath}/.dev.vars`, content);
+    const { secureSecretFile } = await import("../../utils/fs-secure.js");
+    secureSecretFile(`${workerPath}/.dev.vars`);
     count++;
   }
 
