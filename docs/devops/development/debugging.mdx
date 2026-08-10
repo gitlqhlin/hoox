@@ -22,10 +22,10 @@ You can trigger this streaming telemetry via the Hoox CLI or Wrangler:
 
 ```bash
 # A. Recommended: Stream live console logs for a specific worker via Hoox CLI
-hoox logs tail trade-worker
+hoox logs worker trade-worker
 
 # B. Stream gateway traffic in real-time
-hoox logs tail hoox
+hoox logs worker hoox
 
 # C. Alternatively, invoke Wrangler directly for custom configurations
 npx wrangler tail hoox --config workers/hoox-worker/wrangler.jsonc

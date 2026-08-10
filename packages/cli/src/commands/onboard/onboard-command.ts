@@ -186,6 +186,26 @@ async function runOnboard(
     return;
   }
 
+  // Cancel / risk-decline leave exitCode 0 but never write wrangler.jsonc.
+  // Without this gate, onboard would still run setup after "Setup cancelled."
+  const configReady = await Bun.file("wrangler.jsonc").exists();
+  if (!configReady) {
+    if (!quiet) {
+      formatError(
+        new CLIError(
+          "Onboard stopped: workspace config was not written (init cancelled or incomplete).",
+          ExitCode.ERROR,
+          undefined,
+          false,
+          "Re-run `hoox onboard` or `hoox init` to finish configuration, then `hoox setup`."
+        ),
+        fmt
+      );
+    }
+    process.exitCode = ExitCode.ERROR;
+    return;
+  }
+
   // Belt-and-suspenders: ensure CF credentials are in env for setup/wrangler
   if (options.token) {
     process.env.CLOUDFLARE_API_TOKEN = options.token;

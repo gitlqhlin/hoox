@@ -95,7 +95,7 @@ When the Moving Average crossover occurs on your chart:
    ```
 4. Stream live gateway telemetry logs to verify execution latency:
    ```bash
-   hoox logs tail hoox
+   hoox logs worker hoox
    ```
 
 ---
@@ -104,7 +104,7 @@ When the Moving Average crossover occurs on your chart:
 
 | Symptom / Error                       | Primary Cause                           | Resolution                                                                                                                                    |
 | :------------------------------------ | :-------------------------------------- | :-------------------------------------------------------------------------------------------------------------------------------------------- |
-| **Alert fires but no trade executes** | Mismatched API keys or WAF block.       | Run `hoox logs tail hoox` to stream traffic. Check if the client IP was dropped by Cloudflare WAF.                                            |
+| **Alert fires but no trade executes** | Mismatched API keys or WAF block.       | Run `hoox logs worker hoox` to stream traffic. Check if the client IP was dropped by Cloudflare WAF.                                            |
 | **`401 Unauthorized`**                | Incorrect `apiKey` in Pine Script.      | Run `hoox config kv get webhooks:api_key` to check your key. Paste the exact string into your Pine Script alert payload.                      |
 | **`409 Conflict`**                    | Double-alert fired within the same bar. | Adjust the alert frequency in Pine Script: use `alert.freq_once_per_bar_close` instead of `alert.freq_all` to prevent rapid-fire retries.     |
 | **`Invalid Symbol` API reject**       | Symbol format mismatch.                 | Hoox automatically converts variations (like `BTC-USDT` or `btc/usdt`) to `BTCUSDT`, but ensure your script sends standard uppercase symbols. |

@@ -92,9 +92,23 @@ jobs:
         run: cd packages/tui && bun run build
 
       - name: Publish @hoox-sh/hoox-tui to npm
+        # Idempotent: re-tag releases often re-publish the same TUI version.
+        # Treat "already published" as success so a CLI-only bump does not fail the job.
         id: npm_tui
         continue-on-error: true
-        run: cd packages/tui && npm publish --access public --ignore-scripts
+        run: |
+          set +e
+          out=$(cd packages/tui && npm publish --access public --ignore-scripts 2>&1)
+          code=$?
+          echo "$out"
+          if [ "$code" -eq 0 ]; then
+            exit 0
+          fi
+          if echo "$out" | grep -qiE 'previously published|cannot publish over|E403|E409|EPUBLISHCONFLICT'; then
+            echo "::warning::@hoox-sh/hoox-tui version already on npm — skipping re-publish"
+            exit 0
+          fi
+          exit "$code"
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
 
@@ -139,7 +153,9 @@ jobs:
           make_latest: true
 
       - name: Fail if npm publish failed
-        if: steps.npm_cli.outcome == 'failure' || steps.npm_tui.outcome == 'failure' || steps.npm_whoami.outcome == 'failure'
+        # Gate only on CLI + auth. TUI re-publish of an unchanged version is a
+        # soft skip (see Publish TUI step) and must not fail CLI-only releases.
+        if: steps.npm_cli.outcome == 'failure' || steps.npm_whoami.outcome == 'failure'
         run: |
-          echo "::error::npm registry publish failed. After renaming the npm account to hoox-sh, regenerate an automation token and update the GitHub secret NPM_TOKEN, then re-run 'Publish packages to npm' (workflow_dispatch)."
+          echo "::error::npm registry publish failed for @hoox-sh/hoox-cli. Check NPM_TOKEN (automation token with publish rights on @hoox-sh), then re-run the release workflow."
           exit 1

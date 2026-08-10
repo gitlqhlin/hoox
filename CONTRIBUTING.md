@@ -18,7 +18,7 @@ This section guides you through submitting a bug report for Hoox. Following thes
 - Use the [GitHub Issues](https://github.com/hoox-sh/hoox/issues) tracker to report bugs.
 - Provide a clear and descriptive title (e.g., "Webhook returns 500 when `cluster` param missing from payload").
 - Describe the exact steps to reproduce the problem.
-- Include relevant logs from `hoox logs tail <worker>`.
+- Include relevant logs from `hoox logs worker <worker>`.
 - Note the environment: local Docker vs. native Wrangler, Bun version, Wrangler version, Cloudflare account region.
 
 ### 💡 Suggesting Enhancements

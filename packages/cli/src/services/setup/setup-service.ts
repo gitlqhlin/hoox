@@ -19,6 +19,7 @@ import {
   chmodSync,
   existsSync,
   mkdirSync,
+  readdirSync,
   readFileSync,
   statSync,
   writeFileSync,
@@ -907,14 +908,17 @@ export class SetupService {
     const toBuild: string[] = [];
 
     for (const pkg of packages) {
+      // dist/ is a directory — never readFileSync it as a file (always EISDIR).
+      let built = false;
       try {
-        const jsFiles = readFileSync(pkg.dist, "utf-8");
-        if (!jsFiles.includes(".js")) {
-          toBuild.push(pkg.name);
+        if (existsSync(pkg.dist) && statSync(pkg.dist).isDirectory()) {
+          const entries = readdirSync(pkg.dist);
+          built = entries.some((e) => e.endsWith(".js"));
         }
       } catch {
-        toBuild.push(pkg.name);
+        built = false;
       }
+      if (!built) toBuild.push(pkg.name);
     }
 
     if (toBuild.length === 0) {

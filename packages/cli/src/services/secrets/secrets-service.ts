@@ -125,7 +125,9 @@ export class SecretsService {
     const path = configPath ?? "wrangler.jsonc";
     const file = Bun.file(path);
     if (!(await file.exists())) {
-      throw new Error(`Config file not found: ${path}`);
+      throw new Error(
+        `Config file not found: ${path}. Run 'hoox onboard' (or 'hoox init') to create one.`
+      );
     }
     const text = await file.text();
     const config = parseJsonc(text) as WorkersJsonc;

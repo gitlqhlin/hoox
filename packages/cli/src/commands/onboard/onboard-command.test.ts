@@ -153,6 +153,48 @@ describe("registerOnboardCommand", () => {
     expect(process.exitCode).toBe(1);
   });
 
+  it("does not run setup when init cancels without writing wrangler.jsonc", async () => {
+    // Cancel/risk-decline leave exitCode 0 but write no config.
+    runInitMock.mockImplementationOnce(async () => {
+      process.exitCode = 0;
+    });
+    mockSetup();
+
+    const origFile = Bun.file.bind(Bun);
+
+    (Bun as any).file = (path: string | URL) => {
+      const p = String(path);
+      if (p === "wrangler.jsonc" || p.endsWith("/wrangler.jsonc")) {
+        return {
+          exists: async () => false,
+          text: async () => "",
+        };
+      }
+      return origFile(path as string);
+    };
+
+    try {
+      const program = new Command();
+      program.exitOverride();
+      program.option("--json");
+      program.option("--quiet");
+      program.option("-y, --yes");
+      registerOnboardCommand(program);
+
+      await program.parseAsync(
+        ["onboard", "--token", "t", "--account", "a", "--quiet"],
+        { from: "user" }
+      );
+
+      expect(runInitMock).toHaveBeenCalledTimes(1);
+      expect(checkAuth).not.toHaveBeenCalled();
+      expect(runAll).not.toHaveBeenCalled();
+      expect(process.exitCode).toBe(1);
+    } finally {
+      (Bun as any).file = origFile;
+    }
+  });
+
   it("aborts setup when Cloudflare auth check fails", async () => {
     mockSetup(undefined, false);
 

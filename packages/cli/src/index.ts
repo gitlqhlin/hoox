@@ -219,8 +219,12 @@ program.exitOverride((err) => {
     const match = err.message.match(/'([^']+)'/);
     const badArg = match?.[1] ?? "";
     const suggestion = suggestForCommand(program, badArg);
+    // Strip Commander's embedded "(Did you mean …?)" — we render our own card.
+    const cleanMsg = err.message
+      .replace(/\n?\(Did you mean[^)]*\)\s*/gi, "")
+      .trim();
     formatError(
-      new CLIError(err.message, ExitCode.INVALID_USAGE, undefined, false),
+      new CLIError(cleanMsg, ExitCode.INVALID_USAGE, undefined, false),
       suggestion ? { ...errFmtOpts, suggestions: [suggestion] } : errFmtOpts
     );
     process.exitCode = ExitCode.INVALID_USAGE;

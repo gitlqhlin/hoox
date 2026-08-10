@@ -54,7 +54,7 @@ The CLI runs asynchronous concurrent health probes, displaying green indicators 
 | Indicator   | Meaning                               | Action Required                            |
 | ----------- | ------------------------------------- | ------------------------------------------ |
 | ✅ OK       | All bindings active, D1 responsive    | None — operating normally                  |
-| ⚠️ DEGRADED | Some bindings unavailable             | Check `hoox logs tail <worker>` for errors |
+| ⚠️ DEGRADED | Some bindings unavailable             | Check `hoox logs worker <worker>` for errors |
 | ❌ FAILED   | Worker unreachable or D1 disconnected | Run `hoox repair check` immediately        |
 | 🔄 STARTING | Worker is still booting after deploy  | Wait 30–60 seconds and retry               |
 
@@ -171,16 +171,16 @@ When debugging custom strategies, you can stream verbose console logs directly f
 
 ```bash
 # A. Stream live console logs for a specific worker
-hoox logs tail trade-worker
+hoox logs worker trade-worker
 
 # B. Stream gateway traffic in real-time
-hoox logs tail hoox
+hoox logs worker hoox
 
 # C. Stream all workers simultaneously (diagnostic mode)
-hoox logs tail --all
+hoox logs all
 
 # D. Filter logs by severity level
-hoox logs tail trade-worker --level error
+hoox logs worker trade-worker --level error
 ```
 
 ### Downloading Logs for Off-Line Analysis
@@ -188,10 +188,10 @@ hoox logs tail trade-worker --level error
 To download historical logs offloaded to your R2 storage bucket for compliance audits or tax reports:
 
 ```bash
-hoox logs download hoox --output logs/gateway-backup.log
+hoox logs worker hoox --output logs/gateway-backup.log
 
 # Download trade-worker logs for the last 24 hours
-hoox logs download trade-worker --output logs/trade-execution.log --since 24h
+hoox logs worker trade-worker --output logs/trade-execution.log --since 24h
 ```
 
 ---
