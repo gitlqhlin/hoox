@@ -21,7 +21,7 @@ This is the primary transaction pipeline. When a trade signal is received, the s
 ```mermaid
 sequenceDiagram
     autonumber
-    actor TV as Signal Source (TradingView)
+    actor TV as Signal Source (TradingView®)
     participant GW as hoox Gateway
     participant DO as IdempotencyStore (Durable Object)
     participant TW as trade-worker
@@ -159,7 +159,7 @@ sequenceDiagram
 
 ## 6. Pine strategy bar-close → trade-worker
 
-When a deployed Pine strategy is scheduled for bar-close evaluation, **pyne-worker** runs on cron, loads newer OHLCV bars from R2, evaluates the script, and forwards actionable strategy events to **trade-worker** over the `TRADE_SERVICE` binding with mesh internal auth and an idempotency key.
+When a deployed Pine Script™ strategy is scheduled for bar-close evaluation, **pyne-worker** runs on cron, loads newer OHLCV bars from R2, evaluates the script, and forwards actionable strategy events to **trade-worker** over the `TRADE_SERVICE` binding with mesh internal auth and an idempotency key.
 
 ```mermaid
 sequenceDiagram

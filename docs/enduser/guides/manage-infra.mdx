@@ -5,10 +5,10 @@
 
 ---
 title: "Infrastructure Management"
-description: "How to provision and manage Cloudflare D1 databases, KV namespaces, R2 buckets, Queues, and Vectorize indexes using hoox infra."
+description: "How to provision and manage Cloudflare® D1 databases, KV namespaces, R2 buckets, Queues, and Vectorize indexes using hoox infra."
 ---
 
-Hoox is fully serverless, using Cloudflare’s distributed services as its compute and storage engine. Managing these resources—such as provisioning D1 databases, registering KV config buckets, setting up S3-compatible R2 storage, and mounting asynchronous Queues—is done directly via the **`hoox infra`** command group.
+Hoox is fully serverless, using Cloudflare®’s distributed services as its compute and storage engine. Managing these resources—such as provisioning D1 databases, registering KV config buckets, setting up S3-compatible R2 storage, and mounting asynchronous Queues—is done directly via the **`hoox infra`** command group (prefer this over manual dashboard / Wrangler calls).
 
 This guide is your operations manual for provisioning, inspecting, and managing Hoox edge infrastructure.
 
@@ -16,14 +16,14 @@ This guide is your operations manual for provisioning, inspecting, and managing 
 
 ## ⚡ 1. One-Click Quick Provisioning
 
-When setting up your trading workspace for the first time, you do not need to manually configure resources in Cloudflare’s dashboard. The Hoox CLI automatically parses your enabled workers' configurations and spins up the entire infrastructure stack in one command:
+When setting up your trading workspace for the first time, you do not need to manually configure resources in Cloudflare®’s dashboard. The Hoox CLI automatically parses your enabled workers' configurations and spins up the entire infrastructure stack in one command:
 
 ```bash
 # Auto-provision all required KV, D1, R2, Vectorize, and Queue resources
 hoox infra provision
 ```
 
-This command performs a dependency audit and calls Cloudflare's APIs to provision:
+This command performs a dependency audit and calls Cloudflare®'s APIs to provision:
 
 <ol>
   <li>
@@ -63,7 +63,7 @@ This command performs a dependency audit and calls Cloudflare's APIs to provisio
 D1 databases store your critical transactional data (ledger, positions, balance history).
 
 ```bash
-# A. List all active D1 databases in your Cloudflare account
+# A. List all active D1 databases in your Cloudflare® account
 hoox infra d1 list
 
 # B. Create a new custom database instance
@@ -104,7 +104,7 @@ hoox config kv apply-manifest
 Queues guarantee order delivery during periods of extreme exchange rate limits or network congestion.
 
 ```bash
-# A. List all active Cloudflare Queues
+# A. List all active Cloudflare® Queues
 hoox infra queues list
 
 # B. Create the trade execution queue

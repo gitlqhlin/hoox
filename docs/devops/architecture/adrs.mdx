@@ -46,7 +46,7 @@ This directory contains the Architecture Decision Records for the Hoox trading p
 
 **Status:** Accepted
 
-**Context:** Webhook-based trade execution is inherently unreliable — network timeouts can cause TradingView to retry the same signal, potentially resulting in duplicate trades. Financial systems require exactly-once execution semantics.
+**Context:** Webhook-based trade execution is inherently unreliable — network timeouts can cause TradingView® to retry the same signal, potentially resulting in duplicate trades. Financial systems require exactly-once execution semantics.
 
 **Decision:** Implement idempotency using Cloudflare Durable Objects with SQLite-backed state. Each incoming trade signal is hashed into a unique trace ID. A singleton DO instance per trace ID acts as a distributed mutex lock, atomically checking and recording whether the signal has been processed.
 
@@ -74,7 +74,7 @@ This directory contains the Architecture Decision Records for the Hoox trading p
 | `d1-worker`          | All SQLite read/write operations                |
 | `telegram-worker`    | Push notifications, chat command handling       |
 | `web3-wallet-worker` | On-chain DeFi swap execution                    |
-| `email-worker`       | Email signal parsing (POP3/IMAP)                |
+| `email-worker`       | Email signal parsing (Mailgun / Email Routing)  |
 | `analytics-worker`   | Metrics collection and reporting                |
 | `report-worker`      | PDF portfolio report generation                 |
 

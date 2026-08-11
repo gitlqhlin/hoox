@@ -5,7 +5,7 @@
 
 ---
 title: "Configuration Dictionary"
-description: "Exhaustive matrix of all 31 environment variable keys and 16 Cloudflare KV dynamic manifest parameters."
+description: "Exhaustive matrix of all 31 environment variable keys and 16 Cloudflare® KV dynamic manifest parameters."
 ---
 
 This document serves as the absolute, exhaustive reference dictionary for every environment variable, encrypted Workers Secret, and dynamic KV runtime setting utilized in the Hoox trading ecosystem.
@@ -20,8 +20,8 @@ These parameters are configured in your local `.env.local` file for building/dep
 
 | Variable                | Required |   Type   |   Default    | Description                                                           |
 | :---------------------- | :------: | :------: | :----------: | :-------------------------------------------------------------------- |
-| `CLOUDFLARE_API_TOKEN`  | **Yes**  | `string` |      —       | Cloudflare API Token with Workers, D1, and KV read/write permissions. |
-| `CLOUDFLARE_ACCOUNT_ID` | **Yes**  | `string` |      —       | Your 32-character Cloudflare Dashboard Account hash.                  |
+| `CLOUDFLARE_API_TOKEN`  | **Yes**  | `string` |      —       | Cloudflare® API Token with Workers, D1, and KV read/write permissions. |
+| `CLOUDFLARE_ACCOUNT_ID` | **Yes**  | `string` |      —       | Your 32-character Cloudflare® Dashboard Account hash.                  |
 | `SUBDOMAIN_PREFIX`      | **Yes**  | `string` |      —       | Subdomain prefix under which public worker gateways deploy.           |
 | `NODE_ENV`              |    No    | `string` | `production` | Environment profile: `development`, `staging`, or `production`.       |
 | `HOOX_API_URL`          |    No    | `string` |      —       | Local API target URL (automatically configured during dev runs).      |
@@ -95,7 +95,7 @@ These runtime variables exist inside the `CONFIG_KV` namespace. They are accesse
 | `email:coin_pattern`               | `string`  |   `BTC or ETH`   | Regex expression used to extract asset tokens from email bodies.        |
 | `email:action_pattern`             | `string`  |  `BUY or SELL`   | Regex expression used to resolve buy/sell actions in email bodies.      |
 | `email:authorized_senders`         |  `array`  |       `[]`       | List of email addresses authorized to submit trade signals.             |
-| `webhook:tradingview:ip_check`     | `boolean` |     `false`      | Toggles dropping payloads that don't originate from TradingView IPs.    |
+| `webhook:tradingview:ip_check`     | `boolean` |     `false`      | Toggles dropping payloads that don't originate from TradingView® IPs.   |
 
 ---
 

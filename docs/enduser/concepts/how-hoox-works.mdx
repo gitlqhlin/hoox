@@ -19,10 +19,10 @@ Here is the exact lifecycle of an edge trade execution, from alert trigger to br
 ```mermaid
 sequenceDiagram
     autonumber
-    actor Trigger as Signal Source (TradingView / Email / Telegram)
+    actor Trigger as Signal Source (TradingView® / Email / Telegram)
     participant GW as hoox Gateway (Public WAF + V8 Isolate)
     participant DO as Durable Object (Idempotency Lock)
-    participant Q as Cloudflare Queue (Asynchronous Backup)
+    participant Q as Cloudflare® Queue (Asynchronous Backup)
     participant TW as trade-worker (Execution Engine)
     participant CEX as Exchange API (Bybit / Binance / MEXC)
     participant D1 as D1 Database (Edge-SQLite)
@@ -60,9 +60,9 @@ sequenceDiagram
 
 Signals represent specific instructions to buy, sell, or close positions. Hoox ingests these instructions through three primary channels:
 
-- **TradingView Webhooks**: High-integrity trade alerts configured via Pine Script that issue JSON POST payloads to your gateway's public `/webhook` route.
+- **TradingView® Webhooks**: High-integrity trade alerts configured via Pine Script™ (`//@version=6`) that issue JSON POST payloads to your gateway's public `/webhook` route.
 - **Telegram Commands**: Direct user commands sent to your private Telegram Bot (e.g. `/trade buy btc quantity=0.01 exchange=bybit`), parsed via your webhook router.
-- **Email Signals**: Secure email triggers forwarded from specialized alerts (e.g. TradingView email alerts), parsed natively by `email-worker`.
+- **Email Signals**: Secure email triggers forwarded from specialized alerts (e.g. TradingView® email alerts), parsed natively by `email-worker`.
 
 ---
 
@@ -74,12 +74,12 @@ When a signal hits your public endpoint, the **`hoox` gateway** interceptor imme
   <li>
     <strong>API Key Authorization</strong>: Authenticates the payload's{" "}
     <code>apiKey</code> property against your secure manifest stored in
-    Cloudflare KV.
+    Cloudflare® KV.
   </li>
   <li>
     <strong>IP Allow-listing</strong>: Verifies that the client IP matches a
     authorized IP range in KV (essential for restricting access solely to
-    TradingView's known webhook IPs).
+    TradingView®'s known webhook IPs).
   </li>
   <li>
     <strong>Global Kill Switch check</strong>: Ensures{" "}

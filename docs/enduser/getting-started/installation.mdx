@@ -5,115 +5,148 @@
 
 ---
 title: "Installation Guide"
-description: "Prepare your local machine, install the hoox CLI tool, bootstrap workspaces, and verify system prerequisites."
+description: "Install the hoox CLI, bootstrap the monorepo with hoox onboard, and verify system prerequisites."
 ---
 
-This guide walks you through preparing your environment, installing the `@hoox-sh/hoox-cli` tool, cloning the microservices monorepo recursively, and validating your local system prerequisites.
+This guide walks you through installing the `@hoox-sh/hoox-cli` tool, cloning the microservices monorepo, running `hoox onboard`, and validating local prerequisites.
 
 ---
 
 ## 📋 System Prerequisites
 
-Before installing the Hoox command-line workspace, ensure your system meets the following standard software requirements:
-
 ### 1. 🧅 Bun JavaScript Runtime (Version ≥ 1.2)
 
-Hoox uses **Bun** as its primary package manager, script runner, and native testing engine. Bun's blazing-fast startup time and zero-config TypeScript compilation are critical to our local developer feedback loops.
+Hoox uses **Bun** as its package manager, script runner, and test engine. The CLI is a Bun bundle and will not run under Node.
 
 - **macOS / Linux**:
   ```bash
-  curl -fsSL https://bun.sh | bash
+  curl -fsSL https://bun.sh/install | bash
   ```
-- **Windows (via Powershell)**:
+- **Windows (via PowerShell)**:
   ```powershell
   powershell -c "irm https://bun.sh/install.ps1 | iex"
   ```
 
-### 2. ⚡ Cloudflare Account & Wrangler CLI
+### 2. ⚡ Cloudflare® Account
 
-All Hoox workers are compiled to run on **Cloudflare's Edge V8 isolates**. You will need a free Cloudflare account:
+All Hoox workers run on **Cloudflare® Workers** (V8 isolates). A free account is enough for typical retail volume:
 
-- **Account**: [Register a free account](https://dash.cloudflare.com/) (the free tier provides 100,000 requests/day, D1 database, KV storage, Queues, R2, and vector search—costing \$0/month).
-- **Cloudflare CLI**: Ensure you have `wrangler` installed globally (though Hoox manages local wrangler operations automatically, having it indexed globally is recommended):
-  ```bash
-  bun add -g wrangler
-  ```
+- **Account**: [Register free](https://dash.cloudflare.com/) (Workers, D1, KV, Queues, R2, Vectorize — free-tier limits apply).
+- **API token**: Created during `hoox onboard` (or pass `--token` / `--account` non-interactively). Permissions: Workers Scripts Edit, D1 Edit, KV Edit, R2 Edit, Queues Edit, AI Read.
+
+The CLI ships with **Wrangler** as a dependency — you do not need a separate global `wrangler` install for normal operator workflows. Prefer `hoox` / `hx` commands over raw Wrangler for provision, secrets, and deploy.
 
 ### 3. 🐳 Docker & Docker Compose (Optional)
 
-If you prefer running the entire Hoox local trading workspace in fully isolated container environments with one command, ensure you have **Docker Desktop** installed and running:
+For isolated local mesh / self-host profiles:
 
 - Check status: `docker compose version`
 
 ---
 
-## 📦 Option A: Install via Package Manager (Recommended)
-
-To install the global management CLI tool directly from npm/bun registry to manage new workspaces:
+## 📦 Install the CLI (Recommended)
 
 ```bash
 # Install globally using Bun
 bun add -g @hoox-sh/hoox-cli
 ```
 
-Once installed, verify that the `hoox` command is registered globally in your system path:
+Verify the binary (alias `hx` is identical):
 
 ```bash
 hoox --version
-# alias also works:
+# e.g. 0.11.x
 hx --version
 ```
 
 ---
 
-## 🛠️ Option B: Build & Run from Source
+## 🛠️ Clone the Workspace
 
-If you plan to contribute to the Hoox CLI packages or prefer working directly inside a monolithic source clone:
+Workers are git submodules. Clone recursively:
 
 ```bash
-# 1. Clone the parent repository with git submodules recursively
-git clone --recursive https://github.com/hoox-sh/hoox.git hoox-trading
-cd hoox-trading
+git clone --recursive https://github.com/hoox-sh/hoox.git
+cd hoox
+```
 
-# 2. Install all monorepo workspace dependencies via Bun
+If you already cloned without submodules:
+
+```bash
+git submodule update --init --recursive
+# or: hoox clone --all
+```
+
+**From source (contributors)** — install workspace deps and build the local CLI if needed:
+
+```bash
 bun install
-
-# 3. Verify the locally linked CLI runs from root
-bun run build:cli
+bun run build:cli   # optional; monorepo scripts can invoke packages/cli
 ./packages/cli/bin/hoox.js --help
 ```
 
 <Warning>
   You MUST use `git clone --recursive` or run `git submodule update --init
   --recursive` after cloning. If you omit submodules, the worker directories
-  under `workers/` will be empty and deployments will fail.
+  under `workers/` will be empty and setup gates will abort deployment.
 </Warning>
 
 ---
 
-## 🚀 Bootstrapping Your Trading Workspace
+## 🪄 Bootstrap with `hoox onboard`
 
-Now, initialize your new algorithmic trading workspace. This compiles directories, configures workspace settings, and sets up Git tracking.
+`hoox onboard` is the recommended entry point. It writes `wrangler.jsonc`, collects secrets, generates keys, applies the D1 schema, pushes secrets, and deploys the dashboard (init + setup in one shot).
 
 ```bash
-# Bootstrap your trading folder
-hoox clone my-trading-empire
-cd my-trading-empire
+# From the monorepo (first run discovers & remembers the path)
+hoox onboard
+
+# Non-interactive
+hoox onboard --token cfut_xxx --account xxx --preset full
 ```
 
-This command automatically structures your directories as a clean monorepo:
+For fine-grained control, run the two steps separately:
+
+```bash
+hoox init    # Step 1: write wrangler.jsonc, collect integration secrets
+hoox setup   # Step 2: generate keys, apply D1 schema, push secrets, deploy dashboard
+```
+
+The wizard walks through:
+
+<ol>
+  <li>
+    <strong>Cloudflare® authentication</strong> — API token and Account ID.
+  </li>
+  <li>
+    <strong>Microservice profile</strong> — enable/disable edge workers (gateway,
+    trade, agent, pyne, web3, …).
+  </li>
+  <li>
+    <strong>Local credentials</strong> — generates <code>.dev.vars</code> (mode{" "}
+    <code>0600</code>) and initial KV structures.
+  </li>
+  <li>
+    <strong>Infrastructure provisioning</strong> — D1, KV, and related resources.
+  </li>
+  <li>
+    <strong>Setup gates</strong> — aborts if worker trees are still empty after
+    submodule clone, or if init did not produce a valid <code>wrangler.jsonc</code>.
+  </li>
+</ol>
 
 ```text
-my-trading-empire/
-├── packages/
-│   ├── cli/       # Workspace CLI management binaries
-│   ├── tui/       # 9-view Terminal UI monitoring cockpit
-│   └── shared/    # Reusable routers, rate-limiters, & errors
-├── workers/
-│   ├── hoox/      # Gateway, rate-limiter, DO idempotency lock
-│   ├── trade-worker/    # Multi-exchange execution engine
-│   └── ...        # Other analytical and web3 wallet workers
-└── package.json
+┌────────────────────────────────────────────────────────┐
+│               hoox Setup & Initialization              │
+├────────────────────────────────────────────────────────┤
+│  ✔ bun found                                           │
+│  ✔ git found                                           │
+│  ✔ Cloudflare® credentials verified                    │
+│                                                        │
+│  Enable central Gateway Worker? [Y/n]: y               │
+│  Enable Multi-Exchange trade-worker? [Y/n]: y          │
+│  Enable agent-worker AI Risk Manager? [Y/n]: y         │
+└────────────────────────────────────────────────────────┘
 ```
 
 ---
@@ -146,84 +179,29 @@ file → `~/.hoox/repo` (managed global clone via `hoox doctor --fix-runtime`).
 
 ---
 
-## 🪄 Running the Onboarding Wizard
-
-With your folder structured, run the one-shot bootstrap wizard **from the monorepo**
-(or from anywhere after the path has been remembered):
-
-```bash
-# Recommended: chains config + infrastructure in one command
-hoox onboard
-```
-
-For fine-grained control, run the two steps separately:
-
-```bash
-hoox init    # Step 1: write wrangler.jsonc, collect integration secrets
-hoox setup   # Step 2: generate keys, apply D1 schema, push secrets, deploy dashboard
-```
-
-The `hoox onboard` wizard chains both steps and will guide you through the critical setup phases:
-
-<ol>
-  <li>
-    <strong>Cloudflare Authentication</strong>: Prompts for your Cloudflare API
-    token (with <code>Account.D1</code>, <code>Account.KV</code>,{" "}
-    <code>Account.Workers</code> permissions) and Account ID.
-  </li>
-  <li>
-    <strong>Microservice Profile Selection</strong>: Lets you declaratively
-    toggle which edge workers to enable (e.g., enable Gateway and Trade Worker,
-    disable Web3 Wallet if you only trade centralized exchanges).
-  </li>
-  <li>
-    <strong>Local Credentials Encryption</strong>: Generates safe local{" "}
-    <code>.dev.vars</code> matrices and sets up initial KV configuration
-    structures.
-  </li>
-  <li>
-    <strong>Infrastructure Provisioning</strong>: Creates D1 databases, KV
-    namespaces, and other resources on your Cloudflare account.
-  </li>
-</ol>
-
-```text
-┌────────────────────────────────────────────────────────┐
-│               hoox Setup & Initialization              │
-├────────────────────────────────────────────────────────┤
-│  ✔ bun (v1.2.1) found                                  │
-│  ✔ wrangler (v3.50.0) found                            │
-│  ✔ git found                                           │
-│  ✔ Cloudflare Credentials Verified                      │
-│                                                        │
-│  Enable central Gateway Worker? [Y/n]: y               │
-│  Enable Multi-Exchange trade-worker? [Y/n]: y          │
-│  Enable agent-worker AI Risk Manager? [Y/n]: y         │
-└────────────────────────────────────────────────────────┘
-```
-
----
-
 ## 🔍 Verifying Local Prerequisites
 
-Verify that all dependencies and Cloudflare edge routes are accessible:
-
 ```bash
-# Perform detailed pre-flight diagnostic checklist
+# Pre-flight tools on the machine
 hoox check prerequisites
+
+# Full bootstrap validation (config, infra, secrets presence, db)
+hoox check setup
+
+# Live worker /health probes
+hoox check health
 ```
 
-If all diagnostic checks pass, you are ready to proceed with configuration!
+`hoox check setup` only fails secrets when declared names are **missing on Cloudflare®** (with `hoox secrets sync` hints). Healthy local `.dev.vars` and complete remote name lists stay quiet.
 
 ---
 
 <Tip>
-  Got installation issues? Run `hoox repair check` to automatically analyze
-  common path resolution issues, missing environment variables, or node-gyp
-  build failures, and recover your local workspace seamlessly.
+  Got installation issues? Run `hoox repair check` to analyze path resolution,
+  missing env vars, or empty worker submodules, and recover the workspace.
 </Tip>
 
 ### 🔗 Next Steps
 
-- [**Configuration Matrix**](/docs/enduser/getting-started/configuration) — Map out your 31-key environment variables and 16-key KV registries.
-- [**5-Minute Quick Start Guide**](/docs/enduser/getting-started/quick-start) — Execute your first simulated edge trade in under 5 minutes.
+- [**Configuration Matrix**](/docs/enduser/getting-started/configuration) — Environment variables and KV registries.
+- [**5-Minute Quick Start Guide**](/docs/enduser/getting-started/quick-start) — Deploy and fire a simulated trade webhook.

@@ -8,7 +8,7 @@ title: "AI Risk Manager & AI Gateway"
 description: "How the agent-worker runs configurable cron checks (1–1440 minutes) to calculate trailing stops, evaluate max daily drawdowns, and govern a multi-provider fallback AI gateway."
 ---
 
-The **`agent-worker`** is the autonomous central nervous system of the Hoox trading platform. Operating on a **configurable Cloudflare Cron trigger (1–1440 minutes; default every 15 minutes)**, it acts as an intelligent sentinel: it monitors open exchange positions, mathematically scales trailing stop-losses, and deploys a multi-provider fallback AI engine to analyze market conditions, audit risk, and send real-time summaries to your phone.
+The **`agent-worker`** is the autonomous central nervous system of the Hoox trading platform. Operating on a **configurable Cloudflare® Cron trigger (1–1440 minutes; default every 15 minutes)**, it acts as an intelligent sentinel: it monitors open exchange positions, mathematically scales trailing stop-losses, and deploys a multi-provider fallback AI engine to analyze market conditions, audit risk, and send real-time summaries to your phone.
 
 ---
 
@@ -83,7 +83,7 @@ Behind the scenes, `agent-worker` governs a **Multi-Provider AI Gateway** (suppo
 [User Chat Query]
        │
        ▼
-[1. Cloudflare Workers AI] (Zero cost, native LLaMA 3) ──► Fail? ──┐
+[1. Cloudflare® Workers AI] (Zero cost, native LLaMA 3) ──► Fail? ──┐
                                                                    │
                                                                    ▼
 [2. Anthropic API] (Claude 3.5 Sonnet) ◄───────────────────────────┘

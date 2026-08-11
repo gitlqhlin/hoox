@@ -18,15 +18,15 @@ How Hoox utilizes Cloudflare Durable Objects to guarantee exactly-once execution
 Without idempotency, a typical signal failure sequence looks like this:
 
 ```text
-[TradingView Webhook] ─── (Signal Post) ───> [Gateway Node] ─── (Submit Order) ───> [Exchange API]
+[TradingView® Webhook] ─── (Signal Post) ───> [Gateway Node] ─── (Submit Order) ───> [Exchange API]
                                                                                             │
                                                                                     (Order Filled!)
                                                                                             │
-[TradingView Webhook] <── (TLS/TCP Dropout) ── [Gateway Node] <── (Send Success) ─── (Connection drops)
+[TradingView® Webhook] <── (TLS/TCP Dropout) ── [Gateway Node] <── (Send Success) ─── (Connection drops)
          │
 (No response: Retries!)
          │
-[TradingView Webhook] ─── (Signal Post) ───> [Gateway Node] ─── (Submit Order) ───> [Exchange API]
+[TradingView® Webhook] ─── (Signal Post) ───> [Gateway Node] ─── (Submit Order) ───> [Exchange API]
                                                                                             │
                                                                                    (DOUBLE-FILLED! ❌)
 ```
@@ -85,7 +85,7 @@ A Durable Object is a unique, single-threaded compute isolate managed by Cloudfl
 
 When a trade signal is fired, it must include a unique transaction signature.
 
-- For TradingView webhooks, this is automatically generated as a combination of alert parameters and timestamps.
+- For TradingView® webhooks, this is automatically generated as a combination of alert parameters and timestamps.
 - If a client does not supply a transaction ID, the Hoox Gateway dynamically hashes the symbol, exchange, action, and timestamp to create a unique **Idempotency Key**.
 
 ### 2. Atomic Evaluation
@@ -158,5 +158,5 @@ This means idempotency protection **survives worker restarts, cold starts, and i
 
 ### 🔗 Next Steps
 
-- [**Signals & Trade Specifications**](/docs/enduser/concepts/signals-and-trades) — Learn how to configure your Pine Script webhook payloads to transmit unique idempotency keys.
+- [**Signals & Trade Specifications**](/docs/enduser/concepts/signals-and-trades) — Learn how to configure your Pine Script™ webhook payloads to transmit unique idempotency keys.
 - [**Platform Security Guides**](/docs/enduser/guides/secrets-security) — Deepen your understanding of Zero Trust headers and edge firewall configurations.

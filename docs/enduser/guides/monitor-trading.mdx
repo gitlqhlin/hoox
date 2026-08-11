@@ -9,7 +9,7 @@ title: "monitor-trading"
 
 # 📈 Monitoring Operations
 
-Algorithmic trading demands high-integrity, real-time observability. Because Hoox microservices are distributed across Cloudflare's global edge network, tracking health, logs, and message queues requires a consolidated management plane.
+Algorithmic trading demands high-integrity, real-time observability. Because Hoox microservices are distributed across Cloudflare®'s global edge network, tracking health, logs, and message queues requires a consolidated management plane.
 
 This guide outlines how to use the Hoox CLI to audit system status, monitor queue backlogs, stream live edge logs, and manage the emergency kill switch.
 
@@ -25,7 +25,7 @@ To probe and audit all active endpoints simultaneously:
 hoox check health
 ```
 
-> `hoox monitor status` was removed in v0.8.0. The single source of truth for health checks is now `hoox check health`.
+> Use `hoox check health` as the single source of truth for worker health probes (not a monitor subcommand).
 
 ### Expected Output
 
@@ -98,7 +98,7 @@ When activated, the following sequence occurs automatically:
 
 <Warning>
   When the Kill Switch is turned `ON`, the `hoox` gateway router immediately
-  rejects all incoming TradingView alerts and API webhook requests with a `503
+  rejects all incoming TradingView® alerts and API webhook requests with a `503
   Service Unavailable` error and logs a `KILL_SWITCH_ACTIVE` warning. Active
   positions must be flattened manually or via `hoox monitor trades close-all`.
 </Warning>
@@ -135,7 +135,7 @@ This aggregates entries from your production D1 database and prints a formatted 
 | `Partial`       | Only portion filled; remainder queued                                   |
 | `Rejected`      | Exchange returned a business logic error                                |
 | `Failed`        | Max queue retries exhausted; logged for review                          |
-| `Enqueued`      | Submitted to Cloudflare Queues for async retry                          |
+| `Enqueued`      | Submitted to Cloudflare® Queues for async retry                         |
 
 Sandbox fills use position ids like `bybit-testnet-BTCUSDT-LONG`. Filter them in the Dashboard Positions **mode** control (Live only / Testnet / Live + Test). See [Test Trading](/docs/enduser/guides/test-trading).
 
@@ -143,7 +143,7 @@ Sandbox fills use position ids like `bybit-testnet-BTCUSDT-LONG`. Filter them in
 
 ## 📨 4. Inspecting Queue Depth (Guaranteed Delivery Backlog)
 
-If network volatility causes exchange API dropouts, Hoox offloads trade execution payloads to Cloudflare Queues. To check if there is an active execution backlog:
+If network volatility causes exchange API dropouts, Hoox offloads trade execution payloads to Cloudflare® Queues. To check if there is an active execution backlog:
 
 ```bash
 hoox monitor queue-depth
@@ -167,7 +167,7 @@ This displays the number of pending messages in the queue:
 
 ## 📝 5. Real-Time Log Streaming & Telemetry
 
-When debugging custom strategies, you can stream verbose console logs directly from Cloudflare's global edge nodes to your local terminal using Wrangler bindings:
+When debugging custom strategies, you can stream verbose console logs directly from Cloudflare®'s global edge nodes to your local terminal (`hoox logs worker`):
 
 ```bash
 # A. Stream live console logs for a specific worker
@@ -198,7 +198,7 @@ hoox logs worker trade-worker --output logs/trade-execution.log --since 24h
 
 ## 📊 6. System Metrics Overview
 
-Hoox tracks key performance indicators via Cloudflare Analytics Engine. Access summary metrics via:
+Hoox tracks key performance indicators via Cloudflare® Analytics Engine. Access summary metrics via:
 
 ```bash
 # View current system metrics snapshot
@@ -215,7 +215,7 @@ hoox dashboard
 | Orders/Min       | analytics-worker  | Trade execution throughput       |
 | Avg Latency (ms) | analytics-worker  | Signal-to-fill round-trip time   |
 | Error Rate (%)   | analytics-worker  | Failed orders / total attempts   |
-| Queue Depth      | Cloudflare Queues | Pending execution backlog        |
+| Queue Depth      | Cloudflare® Queues | Pending execution backlog       |
 | Daily P&L        | D1 Database       | Realized profit/loss calculation |
 | Drawdown %       | agent-worker      | Current daily asset drawdown     |
 

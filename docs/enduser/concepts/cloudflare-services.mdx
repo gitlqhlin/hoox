@@ -4,11 +4,11 @@
 -->
 
 ---
-title: "Cloudflare Services Map"
+title: "Cloudflare® Services Map"
 description: "How D1 edge-SQLite, KV, R2, Queues, Durable Objects, Vectorize, and Browser Rendering power our distributed edge monorepo."
 ---
 
-Hoox is built natively on a **serverless microservice architecture** powered by a suite of fully integrated Cloudflare® services. By offloading database scaling, messaging retry loops, file storage, and AI inference to Cloudflare's global infrastructure, Hoox runs with **zero server maintenance, ultra-low latency, and $0 monthly costs** on the free tier.
+Hoox is built natively on a **serverless microservice architecture** powered by a suite of fully integrated Cloudflare® services. By offloading database scaling, messaging retry loops, file storage, and AI inference to Cloudflare®'s global infrastructure, Hoox runs with **zero server maintenance, ultra-low latency, and $0 monthly costs** on the free tier.
 
 Here is an architectural map of how each service functions in the Hoox monorepo.
 
@@ -16,7 +16,7 @@ Here is an architectural map of how each service functions in the Hoox monorepo.
 
 ## 🗄️ 1. D1 Database (Edge SQL Engine)
 
-- **Concept**: A serverless, globally distributed SQLite database engine natively hosted at Cloudflare's edge locations.
+- **Concept**: A serverless, globally distributed SQLite database engine natively hosted at Cloudflare®'s edge locations.
 - **Hoox Implementation**: Used to store critical transactional data, including executed trades ledger, historical win rates, daily asset balances, and position tracking tables.
 - **Why it Matters**:
   - Writes are atomic and ACID-compliant.
@@ -30,12 +30,12 @@ Here is an architectural map of how each service functions in the Hoox monorepo.
 - **Concept**: A highly available, globally distributed key-value store optimized for high-read/low-write operations.
 - **Hoox Implementation**: Houses the global 16-key runtime manifest, including the **Global Kill Switch** (`trade:kill_switch`), exchange routing paths, rate-limiter profiles, and authorized client IP ranges.
 - **Why it Matters**:
-  - Read operations are cached directly at Cloudflare's edge nodes, delivering sub-millisecond lookups.
+  - Read operations are cached directly at Cloudflare®'s edge nodes, delivering sub-millisecond lookups.
   - Updates propagate worldwide in under 10 seconds. You can toggle settings in your terminal, and the change affects every worker globally in seconds, without code redeployment.
 
 ---
 
-## 📨 3. Cloudflare Queues (Asynchronous Messaging Guard)
+## 📨 3. Cloudflare® Queues (Asynchronous Messaging Guard)
 
 - **Concept**: A high-integrity, serverless message broker guaranteeing at-least-once delivery with built-in retry schedules.
 - **Hoox Implementation**: Acts as an asynchronous buffer and retry buffer for signal executions (`queue_failover` mode).
@@ -50,7 +50,7 @@ Here is an architectural map of how each service functions in the Hoox monorepo.
 - **Concept**: Single-threaded, in-memory compute isolates containing persistent local storage, ensuring that exactly one instance of an object runs globally.
 - **Hoox Implementation**: Drives the Gateway's **Idempotency Engine** inside `workers/hoox-worker`.
 - **Why it Matters**:
-  - When TradingView fires multiple retries for the same alert (due to a transient network timeout), Durable Objects intercept the request, acquire an atomic mutex lock, and evaluate the trade's unique hash.
+  - When TradingView® fires multiple retries for the same alert (due to a transient network timeout), Durable Objects intercept the request, acquire an atomic mutex lock, and evaluate the trade's unique hash.
   - Prevents disastrous duplicate trades (e.g. accidentally buying the same spot position twice) during moments of high market congestion.
 
 ---
@@ -77,7 +77,7 @@ Here is an architectural map of how each service functions in the Hoox monorepo.
 
 ## 🌐 7. Browser Rendering (Edge Puppeteer Renderer)
 
-- **Concept**: Serverless Chrome instances running at Cloudflare's edge, allowing developers to automate browser actions, interact with websites, and convert web elements to documents.
+- **Concept**: Serverless Chrome instances running at Cloudflare®'s edge, allowing developers to automate browser actions, interact with websites, and convert web elements to documents.
 - **Hoox Implementation**: Deployed in `report-worker` to generate twice-daily, styled PDF portfolio reports.
 - **Why it Matters**:
   - Reads D1 database P&L records, renders a beautiful, secure HTML5 dashboard report, captures it via Puppeteer, converts it to PDF, saves the file to R2, and links it directly in your Telegram alert.

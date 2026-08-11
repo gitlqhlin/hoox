@@ -8,7 +8,7 @@ title: "Local Development"
 description: "How to run, hot-reload, and test Hoox workers locally using native wrangler runtimes or Docker Compose containers."
 ---
 
-Hoox provides a comprehensive local development workspace designed to match your production Cloudflare edge environment. You can run all microservices with hot-reload enabled, monitor them visually via the Terminal UI (TUI), and execute the full test suite using native Bun tools or isolated Docker containers.
+Hoox provides a comprehensive local development workspace designed to match your production Cloudflare® edge environment. You can run all microservices with hot-reload enabled, monitor them visually via the Terminal UI (TUI), and execute the full test suite using native Bun tools or isolated Docker containers. Prefer `hoox dev` / `hx dev` over calling Wrangler by hand.
 
 ---
 
@@ -29,7 +29,7 @@ On execution, the CLI automatically detects your environment and prompts you to 
 
 ### Option A: Native Runtime (Recommended for speed)
 
-- Runs each worker in a separate background thread using `wrangler dev` (the official Cloudflare local server).
+- Runs each worker in a separate background thread using `wrangler dev` (the official Cloudflare® local server; invoked by the Hoox CLI).
 - **Speed**: Instant startup and sub-millisecond hot-reloading.
 - **Requirements**: Local node/bun installation.
 
@@ -69,13 +69,13 @@ docker compose --profile workers up
 #           for executing risk-approved trades.
 docker compose --profile dashboard up
 
-# Profile 3: Full Stack (all 10 services)
+# Profile 3: Full Stack (all workers including pyne-worker + dashboard)
 docker compose --profile full up
 ```
 
 Only `hoox` (8787) and `dashboard` (8794) are published to the host. The other
 workers are reachable only via service bindings on the `hoox-net` bridge
-network — the same topology as production Cloudflare Workers Service Bindings.
+network — the same topology as production Cloudflare® Workers Service Bindings.
 
 ---
 
@@ -95,6 +95,13 @@ During local development, all enabled workers are assigned dedicated local ports
 || **`email-worker`** | `8796` | `http://localhost:8796` | Email Signal Parsing |
 || **`report-worker`** | `8797` | `http://localhost:8797` | PDF Portfolio Report Generator |
 || **`analytics-worker`** | `8798` | `http://localhost:8798` | Analytics & Reporting Engine |
+|| **`pyne-worker`** | `8799` | `http://localhost:8799` | Pine Script™ edge evaluate (PYNE) |
+
+```bash
+# Probe / evaluate via CLI (when pyne-worker is enabled)
+hoox pyne health
+hoox pyne run path/to/script.pine
+```
 
 ---
 

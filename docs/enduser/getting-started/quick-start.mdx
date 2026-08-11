@@ -5,16 +5,28 @@
 
 ---
 title: "5-Minute Quick Start"
-description: "Deploy your first edge-native trading infrastructure on the Cloudflare Edge and fire a simulated trade webhook in under 5 minutes."
+description: "Install the CLI, run hoox onboard, deploy the edge mesh, and fire a simulated trade webhook in under 5 minutes."
 ---
 
-This guide gets you from a blank console to a **fully active, edge-deployed algorithmic trading ecosystem** on the Cloudflare network, processing simulated signals in under 5 minutes.
+This guide gets you from a blank console to a **fully active, edge-deployed algorithmic trading ecosystem** on the Cloudflare® network, processing simulated signals in under 5 minutes.
 
-> **v0.8.0:** The recommended entry point is now `hoox onboard` (one-shot bootstrap) instead of running `hoox init` and `hoox setup` separately.
+The recommended path is **`bun add -g @hoox-sh/hoox-cli`** → clone → **`hoox onboard`** → **`hoox deploy all --auto`**. Prefer the CLI over manual Wrangler for provision, secrets, and deploy.
 
 ---
 
 ## 🏁 Step-by-Step Deployment Path
+
+### Step 0: Install CLI & Clone
+
+```bash
+# Bun ≥ 1.2 required (CLI is Bun-only)
+curl -fsSL https://bun.sh/install | bash
+
+bun add -g @hoox-sh/hoox-cli
+
+git clone --recursive https://github.com/hoox-sh/hoox.git
+cd hoox
+```
 
 ### Step 1: Onboard Your Workspace
 
@@ -22,11 +34,11 @@ Run the one-shot bootstrap from the monorepo root (or after the CLI has remember
 that path — see [Installation → Run from any directory](/docs/enduser/getting-started/installation#run-from-any-directory-monorepo-remember)):
 
 ```bash
-cd /path/to/hoox   # first run discovers & remembers the monorepo
 hoox onboard
+# alias: hx onboard
 ```
 
-_Interactive prompts will ask for your Cloudflare Account ID, API Token, and your unique `SUBDOMAIN_PREFIX` (e.g., `alpha-trading`). For non-interactive use, pass `--token` and `--account` flags._
+_Interactive prompts will ask for your Cloudflare® Account ID, API Token, and your unique `SUBDOMAIN_PREFIX` (e.g., `alpha-trading`). For non-interactive use, pass `--token` and `--account` flags._
 
 After the first successful discovery, `hx check setup` and other commands work from any cwd.
 
@@ -37,11 +49,13 @@ hoox init    # 1. Write wrangler.jsonc and collect integration secrets
 hoox setup   # 2. Generate keys, apply D1 schema, push secrets, deploy dashboard
 ```
 
+Setup **gates** stop the flow when init is incomplete (no `wrangler.jsonc`) or worker submodule trees are still empty — fix with `git submodule update --init --recursive` (or `hoox clone --all`) and re-run.
+
 ---
 
 ### Step 2: Inject Encrypted Exchange API Keys
 
-For your safety, exchange credentials (API keys and private signatures) are never stored in plain text. Inject them as encrypted **Cloudflare Workers Secrets** bound securely to your compute instances:
+For your safety, exchange credentials (API keys and private signatures) are never stored in plain text. Inject them as encrypted **Cloudflare® Workers Secrets** bound securely to your compute instances:
 
 ```bash
 # Inject Bybit Credentials (worker name is the first argument)
@@ -54,7 +68,7 @@ hoox secrets set trade-worker BINANCE_SECRET_BINDING "your_binance_secret_here"
 ```
 
 <Warning>
-  Cloudflare Secrets are encrypted at rest using hardware-level keys and are
+  Cloudflare® Secrets are encrypted at rest using hardware-level keys and are
   injected straight into your V8 execution isolates at runtime. They can never
   be decrypted or read back via the API, ensuring top-tier security for your
   capital.
@@ -67,7 +81,7 @@ hoox secrets set trade-worker BINANCE_SECRET_BINDING "your_binance_secret_here"
 Hoox microservices communicate internally via Service Bindings. The CLI automatically manages the deployment sequence, ensuring databases, queues, and configuration stores compile first, followed by gateway routers and background compute tasks:
 
 ```bash
-# Compile and deploy all enabled workers
+# Compile and deploy all enabled workers (includes pyne-worker when enabled)
 hoox deploy all --auto
 ```
 
@@ -75,14 +89,15 @@ _This command automatically provisions:_
 
 <ol>
   <li>
-    <strong>D1 Edge Database</strong> (<code>hoox-db</code>)
+    <strong>D1 Edge Database</strong> (<code>hoox-db</code> / trade-data-db)
   </li>
   <li>
     <strong>CONFIG_KV</strong> configuration namespace
   </li>
   <li>
     <strong>Internal Workers</strong> (<code>trade-worker</code>,{" "}
-    <code>d1-worker</code>, <code>telegram-worker</code>)
+    <code>d1-worker</code>, <code>telegram-worker</code>,{" "}
+    <code>pyne-worker</code>, …)
   </li>
   <li>
     <strong>Public Gateway</strong> (<code>hoox</code> gateway router)
@@ -109,6 +124,12 @@ You should see all enabled workers reporting `healthy` status. To fix any issues
 
 ```bash
 hoox check health --fix
+```
+
+Also useful after onboard:
+
+```bash
+hoox check setup   # config / infra / secrets presence (quiet when healthy)
 ```
 
 ---
@@ -206,7 +227,7 @@ You will receive an instantaneous, low-latency JSON response:
 <Tip>
   If the exchange is temporarily undergoing system maintenance or experiences
   high network congestion, Hoox will automatically intercept the failure,
-  enqueue the trade in **Cloudflare Queues** with exponential backoff retry
+  enqueue the trade in **Cloudflare® Queues** with exponential backoff retry
   policies, and return a `"status": "Enqueued"` response to guarantee delivery!
 </Tip>
 

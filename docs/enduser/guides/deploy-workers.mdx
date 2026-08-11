@@ -9,9 +9,9 @@ title: "deploy-workers"
 
 # 🚀 Deploying to Production
 
-Deploying your algorithmic trading ecosystem to Cloudflare's production edge requires careful orchestration. Because workers communicate internally using fast-path **Service Bindings**, they have strict compile-time and deploy-time dependencies.
+Deploying your algorithmic trading ecosystem to Cloudflare®'s production edge requires careful orchestration. Because workers communicate internally using fast-path **Service Bindings**, they have strict compile-time and deploy-time dependencies.
 
-This guide outlines our automated deployment sequence, Next.js OpenNext compilation steps, post-deployment URL bindings, and troubleshooting runbooks.
+Prefer **`hoox deploy all --auto`** over manual Wrangler deploys. This guide outlines the automated deployment sequence (including **pyne-worker** when enabled), Next.js OpenNext compilation steps, post-deployment URL bindings, and troubleshooting runbooks.
 
 ---
 
@@ -40,7 +40,7 @@ The Hoox CLI automates this dependency hierarchy:
 |  2   | d1-worker                       | SQL hub must be available for other workers' DB operations  |
 |  3   | trade-worker                    | Core execution engine — other workers depend on it          |
 |  4   | hoox Gateway                    | Public-facing router — needs all internal workers live      |
-|  5   | agent-worker \+ telegram-worker | Background services — can deploy independently              |
+|  5   | agent-worker, telegram-worker, pyne-worker | Background / tooling isolates — deploy after core path |
 |  6   | Dashboard (OpenNext)            | Frontend — depends on gateway and all APIs                  |
 
 ---
@@ -107,7 +107,7 @@ hoox deploy kv-config
 
 ## 🖥️ Next.js Dashboard Deployment (OpenNext)
 
-The Hoox Command Center is a modern Next.js 16 web application that runs directly on Cloudflare Workers using the **OpenNext adapter**.
+The Hoox Command Center is a modern Next.js 16 web application that runs directly on Cloudflare® Workers using the **OpenNext adapter**.
 
 When you run `hoox deploy dashboard`:
 
@@ -126,13 +126,13 @@ When you run `hoox deploy dashboard`:
   </li>
   <li>
     The CLI uses <code>wrangler</code> to deploy the worker and binds the static
-    assets to Cloudflare's <strong>ASSETS binding</strong>, serving pages at
+    assets to Cloudflare®'s <strong>ASSETS binding</strong>, serving pages at
     sub-millisecond speeds.
   </li>
 </ol>
 
 ```bash
-# Build and deploy the Next.js Dashboard to Cloudflare Workers
+# Build and deploy the Next.js Dashboard to Cloudflare® Workers
 hoox deploy dashboard
 
 # Rebuild dashboard only (after UI changes)
@@ -168,7 +168,7 @@ hoox test
 # 4. Run pre-deploy health check
 hoox repair check
 
-# 5. Roll out updates globally to the Cloudflare Edge
+# 5. Roll out updates globally to the Cloudflare® Edge
 hoox deploy all --auto
 ```
 
@@ -200,7 +200,7 @@ hoox deploy all --auto
 ---
 
 <Tip>
-  By utilizing **Smart Placement** in your production builds, Cloudflare will
+  By utilizing **Smart Placement** in your production builds, Cloudflare® will
   automatically route execution to the edge nodes located geographically closest
   to your exchanges (Frankfurt, Tokyo), ensuring high-speed fills!
 </Tip>

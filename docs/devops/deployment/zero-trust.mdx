@@ -5,7 +5,7 @@
 
 ---
 title: "Zero Trust & Security Hardening"
-description: "How to configure Cloudflare Access (Zero Trust), enforce Multi-Factor Authentication (MFA), and configure WAF firewall allow-lists for TradingView webhook IPs."
+description: "How to configure Cloudflare® Access (Zero Trust), enforce Multi-Factor Authentication (MFA), and configure WAF firewall allow-lists for TradingView® webhook IPs."
 ---
 
 While the Hoox dashboard features a highly secure, custom cookie-based authentication middleware, wrapping your dashboard and **operator management APIs** inside **Cloudflare® Zero Trust (Access)** provides an enterprise-grade security perimeter.
@@ -37,11 +37,11 @@ Management routes (all require Bearer):
 | `GET` | `/v1/trades/stream` | SSE trades (polls trade-worker) |
 | `GET` | `/v1/logs/stream` | SSE logs (polls trade-worker) |
 
-`GET /health` stays public for liveness. Do **not** put operator Bearer on TradingView `/webhook`.
+`GET /health` stays public for liveness. Do **not** put operator Bearer on TradingView® `/webhook`.
 
 Recommended layout:
 
-1. **Separate hostnames** — `gateway.example.com` for TradingView `/webhook` (IP allowlist + body apiKey); `mgmt.example.com` for `/v1/*` only.
+1. **Separate hostnames** — `gateway.example.com` for TradingView® `/webhook` (IP allowlist + body apiKey); `mgmt.example.com` for `/v1/*` only.
 2. **Access application** on `mgmt.example.com` (SSO for browsers; **service token** for CLI/TUI).
 3. **Application Bearer** (`HOOX_API_TOKEN` ↔ `OPERATOR_API_KEY`) enforced by `requireOperatorAuth`.
 4. **Optional** — Cloudflare Tunnel so the origin is not on the public internet; **Enterprise** — API Shield mTLS client certificates for device-bound identity.
@@ -111,13 +111,13 @@ graph TD
 
 ## 🧱 2. Strict WAF Webhook IP Allow-listing
 
-To ensure that **only** TradingView's official servers can fire signals to your `/webhook` entryway:
+To ensure that **only** TradingView® official servers can fire signals to your `/webhook` entryway:
 
 1. Under your Cloudflare DNS zone dashboard, navigate to **Security > WAF > Custom Rules**.
 2. Click **Create Rule**.
-3. **Rule Name**: `Restrict /webhook to TradingView IPs`.
+3. **Rule Name**: `Restrict /webhook to TradingView® IPs`.
 4. **Field**: `URI Path` | **Operator**: `equals` | **Value**: `/webhook`.
-5. **And**: `IP Source Address` | **Operator**: `is not in` | **Value**: (Paste TradingView's official IP ranges here, which are automatically synced by running the `hoox waf configure --TradingView-only` command).
+5. **And**: `IP Source Address` | **Operator**: `is not in` | **Value**: (Paste TradingView® official IP ranges here, which are automatically synced by running the `hoox waf configure --TradingView-only` command).
 6. **Action**: **Block** (or **Challenge**).
 7. Save. All unauthorized traffic hitting `/webhook` is dropped instantly at the DNS edge, preventing any V8 compute load.
 

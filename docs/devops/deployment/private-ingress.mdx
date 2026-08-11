@@ -10,7 +10,7 @@ description: "How to protect the Hoox operator management plane with Cloudflare 
 
 # Private ingress for operators
 
-The **operator management plane** (`/v1/*` — workers list, SSE streams, health probe) should not sit open on the public internet the way TradingView webhooks do.
+The **operator management plane** (`/v1/*` — workers list, SSE streams, health probe) should not sit open on the public internet the way TradingView® webhooks do.
 
 | Surface | Hostname (recommended) | Auth |
 | ------- | ---------------------- | ---- |
@@ -35,7 +35,7 @@ flowchart LR
   Laptop["hx tui --remote"] --> Access["CF Access edge"]
   Access --> Mgmt["mgmt Worker /v1/*"]
   Mgmt --> Internal["Service bindings"]
-  TV["TradingView"] --> Gateway["gateway /webhook"]
+  TV["TradingView®"] --> Gateway["gateway /webhook"]
 ```
 
 ## Quick setup (Access only)

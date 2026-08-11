@@ -15,7 +15,7 @@ Traditional trading bots are deployed on a single virtual private server (VPS) i
 
 ### The VPS Bottleneck (200ms+ slippage)
 
-1. **Signal Generation**: A TradingView alert fires in London.
+1. **Signal Generation**: A TradingView® alert fires in London.
 2. **Network Transit**: The alert travels across the Atlantic to your Virginia VPS (~85ms).
 3. **Execution Delay**: The VPS boots a heavy Node/Docker runtime to process the signal (~10ms).
 4. **Exchange Transit**: The order travels from Virginia to Bybit's API servers in Tokyo or Frankfurt (~110ms).
@@ -27,7 +27,7 @@ Traditional trading bots are deployed on a single virtual private server (VPS) i
 
 ### The Hoox Edge Path (Under 15ms latency)
 
-1. **Signal Generation**: A TradingView alert fires in London.
+1. **Signal Generation**: A TradingView® alert fires in London.
 2. **Edge Ingestion**: The alert hits Cloudflare's nearest London Point of Presence (PoP) in **1.8ms**.
 3. **V8 Isolate Processing**: A sandboxed V8 isolate processes and validates the order instantly (**\&lt;3ms**).
 4. **Smart Placement Routing**: The internal service binding transfers compute to the edge node geographically closest to Bybit's servers (Frankfurt) within **8ms**.

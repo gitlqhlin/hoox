@@ -8,7 +8,7 @@ title: "hoox Gateway Isolate Profile"
 description: "Comprehensive engineering specification for the Hoox public gateway, covering ingress WAF rules, Durable Object idempotency stores, and Service Binding configurations."
 ---
 
-The **`hoox`** gateway is the public-facing entry point of the trading ecosystem. Running as an ultra-low-latency Cloudflare Worker, the gateway is responsible for authorizing incoming trade signals (TradingView alerts, email routing, manual commands), executing rate-limiting checks, locking transaction trace IDs via Durable Objects to prevent duplicate fills, and routing validated events privately to background compute nodes.
+The **`hoox`** gateway is the public-facing entry point of the trading ecosystem. Running as an ultra-low-latency Cloudflare® Worker, the gateway is responsible for authorizing incoming trade signals (TradingView® alerts, email routing, manual commands), executing rate-limiting checks, locking transaction trace IDs via Durable Objects to prevent duplicate fills, and routing validated events privately to background compute nodes.
 
 ---
 
@@ -113,7 +113,7 @@ Applied on the webhook critical path **before** dispatch:
 | Control | Behavior |
 | ------- | -------- |
 | **Kill switch** | Reads `trade:kill_switch` **or** `global:kill_switch` from `CONFIG_KV`. Either set to a truthy value (`true` / `1` / `yes` / `on`) returns **`503`** with `code: "KILL_SWITCH"`. Agent / CLI write `trade:kill_switch`; gateway dashboard section uses `global:kill_switch`. |
-| **IP allowlist** | When `webhook:tradingview:ip_check_enabled` is true (default), `CF-Connecting-IP` must be in the built-in TradingView set or `webhook:tradingview:allowed_ips` JSON array. Missing IP → `403`. |
+| **IP allowlist** | When `webhook:tradingview:ip_check_enabled` is true (default), `CF-Connecting-IP` must be in the built-in TradingView® set or `webhook:tradingview:allowed_ips` JSON array. Missing IP → `403`. |
 | **Body size** | Hard cap **64 KiB** (Content-Length early reject + stream read). Oversized → `413`. |
 | **Auth** | Body `apiKey` compared with `timingSafeEqual` against `WEBHOOK_API_KEY_BINDING`. Missing/invalid → `403` (no key material in responses). |
 | **Rate limit** | KV-backed counter keyed by stable session (apiKey), default **10 req / 60s**. Exceeded → `429` `code: "RATE_LIMITED"`. |
@@ -215,7 +215,7 @@ Bearer `OPERATOR_API_KEY` (or legacy `INTERNAL_API_KEY`). Prefer Cloudflare Acce
   If exchange APIs experience high latency or go offline, the gateway intercepts
   the failure, serializes the payload, and pushes it to the `TRADE_QUEUE`
   producer (queue_failover mode), returning a `"status": "Enqueued"`
-  (**202 Accepted**) response to TradingView.
+  (**202 Accepted**) response to TradingView®.
 </Tip>
 
 ### 🔗 Next Steps

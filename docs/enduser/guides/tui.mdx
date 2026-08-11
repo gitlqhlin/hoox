@@ -8,24 +8,32 @@ title: "Terminal UI (TUI)"
 description: "Master reference for the full-screen terminal operations cockpit, keyboard shortcuts, view registries, and resilience engines."
 ---
 
-The **Hoox Terminal User Interface (TUI)** is a full-screen, keyboard-driven operations cockpit built with **OpenTUI**, React 19, and Zustand. It provides real-time visibility into the edge trading mesh—workers, logs, trades, config, queues, KV, secrets, D1, and AI chat—without leaving the terminal.
+The **Hoox Terminal User Interface (TUI)** (`@hoox-sh/hoox-tui` **0.3.x**) is a full-screen, keyboard-driven operations cockpit built with **OpenTUI**, React 19, and Zustand. It provides real-time visibility into the edge trading mesh—workers, logs, trades, config, queues, KV, secrets, D1, and AI chat—without leaving the terminal.
+
+Recent quality pass: **reconnect controller** (status bar `connected` → `reconnecting` → `offline`), **overlay-safe keyboard** handling, Service Manager / Dashboard key ops, fail-closed prefs path, and auth / Cloudflare® Access parity for remote mode.
 
 ---
 
 ## 🏁 Launching the TUI
 
 ```bash
-# 1. Recommended: via the hoox CLI
+# 1. Recommended: via the hoox CLI (install TUI if missing)
+bun add -g @hoox-sh/hoox-cli @hoox-sh/hoox-tui
 hoox tui
+# alias: hx tui
 
 # 2. Optional flags (forwarded as env to the renderer)
 hoox tui --fps 60
 hoox tui --no-mouse
 
-# 3. Development: package entry
+# 3. Remote management plane (fail-closed auth)
+export HOOX_API_TOKEN=…   # or Access service-token env
+hoox tui --remote --api-url https://mgmt.example.com
+
+# 4. Development: package entry
 cd packages/tui && bun run dev
 
-# 4. Built bundle
+# 5. Built bundle
 cd packages/tui && bun run build && bun run start
 ```
 
@@ -56,13 +64,31 @@ Persistent UI state lives under `$HOME/.hoox/.tui-state/` (session, crash log, c
 | `Ctrl+Alt+E`   | **Edge Topology** — graph-metadata mesh map |
 | `Ctrl+P`       | Command palette (fuzzy) |
 | `Ctrl+B`       | Toggle sidebar |
-| `Ctrl+R`       | Refresh worker data |
+| `Ctrl+R`       | Refresh worker data (**force reconnect** if offline) |
 | `Ctrl+Q`       | Quit (confirmation dialog) |
-| `Esc`          | Close palette / dismiss modal |
+| `Ctrl+Shift+D` | Toggle status-bar error diagnostics |
+| `Esc`          | Close palette / dismiss modal / go back |
 | `Tab` / `Shift+Tab` | Cycle focus |
 | `Enter`        | Select / confirm |
 | `Space`        | Toggle (e.g. pause trade feed) |
 | `/`            | Search (searchable views) |
+
+### Service Manager keys (`Ctrl+6`)
+
+| Key | Action |
+| --- | ------ |
+| `↑` `↓` | Select worker |
+| `d` / `r` | Deploy / restart selected |
+| `D` / `R` (Shift) | Deploy all / restart all |
+| `k` / `e` / `u` | Kill-switch refresh / engage / release |
+
+### Dashboard keys (`Ctrl+1`)
+
+| Key | Action |
+| --- | ------ |
+| `←` `→` | Focus worker health card |
+| `Enter` | Open focused worker detail |
+| `↑` `↓` / `x` | Alerts: navigate / dismiss |
 
 If `Ctrl+Q` is swallowed by XON/XOFF flow control: `stty -ixon`, or use **Ctrl+P → QUIT HOOX**.
 
@@ -100,7 +126,7 @@ File tree + TOML/JSON syntax highlighting, live validate (`hoox config validate`
 
 ### 8. Setup Wizard (`Ctrl+8`)
 
-Guided onboarding (Cloudflare, exchanges, AI, strategies, Telegram) ending in deploy.
+Guided onboarding (Cloudflare®, exchanges, AI, strategies, Telegram) ending in deploy.
 
 ### 9. Settings (`Ctrl+9`)
 
@@ -140,7 +166,7 @@ Interactive map from monorepo `graph-metadata.json` (workers, infrastructure, co
 | **CLI bridge** | Spawns `hoox …` for deploy, logs, config, queues, KV, secrets, D1, health |
 | **SSE** | Trade + log streams (`streamTrades` / `streamLogs`) started after session restore when the API is available |
 
-Connection state machine: `connected` → `reconnecting` → `offline` (status bar pills + expandable CLI error panel).
+Connection state machine: `connected` → `reconnecting` → `offline` (status bar pills + expandable CLI error panel). The reconnect controller retries automatically; use **`Ctrl+R`** or the command palette **reconnect** action to force a cycle.
 
 ---
 

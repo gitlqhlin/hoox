@@ -5,14 +5,16 @@
 
 ---
 title: "📚 Hoox Developer Hub"
-description: "Edge-Native Algorithmic Trading on the Cloudflare Edge"
+description: "Edge-Native Algorithmic Trading on the Cloudflare® Edge"
 ---
 
 > **Hoox** is a free, open-source, edge-native algorithmic trading framework and automation engine deployed natively to the **Cloudflare® Edge Network**. By utilizing a distributed microservice architecture, Hoox processes trade signals, evaluates risk parameters, executes order routing, and fires Telegram notifications—all within milliseconds and directly from the edge nodes closest to exchange servers.
 
+Install with `bun add -g @hoox-sh/hoox-cli`, then `hoox onboard` (alias `hx`).
+
 ```mermaid
 graph TD
-    TV[TradingView Alerts] -->|HTTPS Webhook| GW[hoox Gateway]
+    TV[TradingView® Alerts] -->|HTTPS Webhook| GW[hoox Gateway]
     GW -->|Service Binding| TW[trade-worker]
     GW -->|Service Binding| TGW[telegram-worker]
     TW -->|Signed API Request| CentralizedEx[Centralized Exchanges: Binance / Bybit / MEXC]
@@ -24,7 +26,7 @@ graph TD
 
 ## 🗺️ Choose Your Path
 
-Whether you are a retail algorithmic trader setting up your first automated TradingView strategies or a quantitative analyst wiring webhooks, this **End User** tab covers trader-facing setup and operations.
+Whether you are a retail algorithmic trader setting up your first automated TradingView® strategies or a quantitative analyst wiring webhooks, this **End User** tab covers trader-facing setup and operations.
 
 Platform design lives under **Architecture** and **Workers**; install/deploy under **DevOps**; HTTP contracts under **API**.
 
@@ -32,7 +34,7 @@ Platform design lives under **Architecture** and **Workers**; install/deploy und
 
 If you are brand new to the Hoox ecosystem, start here to prepare your machine, provision resources, and deploy your first live microservice in under 5 minutes:
 
-- **[Core Installation](/docs/enduser/getting-started/installation)** — Provision prerequisites (Bun runtime, Cloudflare credentials) and bootstrap a project.
+- **[Core Installation](/docs/enduser/getting-started/installation)** — Install `@hoox-sh/hoox-cli`, clone the monorepo, and run `hoox onboard`.
 - **[Platform Configuration](/docs/enduser/getting-started/configuration)** — Declaratively define environment variables, JSON profile templates, and KV keys.
 - **[5-Minute Quick Start](/docs/enduser/getting-started/quick-start)** — Launch local worker runners and execute a simulated webhook trade signal.
 
@@ -41,8 +43,8 @@ If you are brand new to the Hoox ecosystem, start here to prepare your machine, 
 Understand the underlying technology, low-latency edge architecture, and security layers that protect your api keys:
 
 - **[How Hoox Works](/docs/enduser/concepts/how-hoox-works)** — The end-to-end lifecycle of a trade signal from webhook alert to order confirmation.
-- **[Edge-First Architecture](/docs/enduser/concepts/edge-architecture)** — Why V8 isolates and Cloudflare Workers outperform traditional VPS architectures by 30-60%.
-- **[Cloudflare Services Map](/docs/enduser/concepts/cloudflare-services)** — How D1, KV, R2, Queues, Vectorize, and Browser Rendering are integrated.
+- **[Edge-First Architecture](/docs/enduser/concepts/edge-architecture)** — Why V8 isolates and Cloudflare® Workers outperform traditional VPS architectures by 30-60%.
+- **[Cloudflare® Services Map](/docs/enduser/concepts/cloudflare-services)** — How D1, KV, R2, Queues, Vectorize, and Browser Rendering are integrated.
 - **[Idempotency & Durable Objects](/docs/enduser/concepts/idempotency)** — Preventing catastrophic double-execution and race conditions during high-frequency events.
 - **[Signals & Trade Routing](/docs/enduser/concepts/signals-and-trades)** — How parameters map from webhook JSON schemas to live exchange payloads.
 - **[AI Risk Manager](/docs/enduser/concepts/ai-risk-manager)** — The configurable-cron autonomous risk scanner (1–1440 min), trailing-stop mathematician, and account kill-switch.
@@ -52,9 +54,9 @@ Understand the underlying technology, low-latency edge architecture, and securit
 Practical runbooks and blueprints for daily operations, local development, and system health maintenance:
 
 - **[Local Dev & Workspaces](/docs/enduser/guides/local-development)** — Run, hot-reload, and test workers locally via Bun or Docker container stacks.
-- **[Terminal UI Operations](/docs/enduser/guides/tui)** — Launch and navigate the full-screen 9-view operations cockpit (`./hoox-tui`).
+- **[Terminal UI Operations](/docs/enduser/guides/tui)** — Launch and navigate the full-screen operations cockpit (`hoox tui` / `@hoox-sh/hoox-tui`).
 - **[Edge Database Operations](/docs/enduser/guides/database-ops)** — Manage global SQLite schemas, track drizzle migrations, and run D1 queries.
-- **[Secrets & Network Security](/docs/enduser/guides/secrets-security)** — Secure Cloudflare Zero Trust corridors and encrypt sensitive API credentials.
+- **[Secrets & Network Security](/docs/enduser/guides/secrets-security)** — Secure Cloudflare® Zero Trust corridors and encrypt sensitive API credentials.
 - **[Test Trading](/docs/enduser/guides/test-trading)** — Sandbox orders with `"test": true`, dedicated testnet secrets, and D1/dashboard isolation.
 - **[Infrastructure Management](/docs/enduser/guides/manage-infra)** — Spin up and inspect KV, Queues, R2, and Vectorize indexes in one command.
 - **[Deploying to Production](/docs/enduser/guides/deploy-workers)** — Roll out code, bind V8 isolates, and deploy Next.js dashboard consoles.
@@ -64,7 +66,7 @@ Practical runbooks and blueprints for daily operations, local development, and s
 
 Follow guided, end-to-end tutorials to integrate your trade sources and notification handlers:
 
-- **[TradingView Webhook Integration](/docs/enduser/tutorials/tradingview-webhook)** — Write customized Pine Script v5 indicators that ping the Hoox webhook receiver.
+- **[TradingView® Webhook Integration](/docs/enduser/tutorials/tradingview-webhook)** — Write customized Pine Script™ v6 indicators that ping the Hoox webhook receiver.
 - **[Telegram Bot Setup](/docs/enduser/tutorials/telegram-bot)** — Configure real-time order alerts, P&L reports, and secure chat commands.
 - **[Email Signal Routing](/docs/enduser/tutorials/email-signals)** — Configure email parsing services to convert raw inbox alerts into edge trade executions.
 

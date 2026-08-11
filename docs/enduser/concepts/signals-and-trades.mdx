@@ -5,7 +5,7 @@
 
 # 📊 Signals & Trade Spec
 
-This document details the exact specifications, JSON validation schemas, and internal translation logic that occurs when an external trade signal (such as a TradingView alert or Email parser) is ingested by the Hoox Gateway and mapped to an active exchange order.
+This document details the exact specifications, JSON validation schemas, and internal translation logic that occurs when an external trade signal (such as a TradingView® alert or Email parser) is ingested by the Hoox Gateway and mapped to an active exchange order.
 
 ---
 
@@ -176,7 +176,7 @@ hoox db query "SELECT symbol, side, quantity, entry_price FROM positions WHERE q
 
 ## 5. Queue Failover & Guaranteed Delivery
 
-When the exchange API returns an error (timeout, rate limit, HTTP 5xx), the gateway automatically enqueues the trade payload into **Cloudflare Queues** for guaranteed delivery:
+When the exchange API returns an error (timeout, rate limit, HTTP 5xx), the gateway automatically enqueues the trade payload into **Cloudflare® Queues** for guaranteed delivery:
 
 | Retry Attempt |   Delay    |          Trigger Condition           |
 | :-----------: | :--------: | :----------------------------------: |
@@ -192,7 +192,7 @@ After max retries, the trade is logged to D1 with `status = 'Failed'` — not lo
 ---
 
 <Tip>
-  By utilizing time-series logging via Cloudflare Analytics Engine, Hoox tracks
+  By utilizing time-series logging via Cloudflare® Analytics Engine, Hoox tracks
   the exact execution duration of each pipeline step. You can audit the latency
   breakdown (e.g., Gateway auth took `1.2ms`, Trade-worker signing took `0.8ms`,
   Bybit API roundtrip took `18.5ms`) directly in your Next.js dashboard!

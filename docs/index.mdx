@@ -5,14 +5,16 @@
 
 ---
 title: "Hoox Documentation"
-description: "Edge-Native Algorithmic Trading on the Cloudflare Edge"
+description: "Edge-Native Algorithmic Trading on the Cloudflare® Edge"
 ---
 
-Hoox is a free, open-source, edge-native algorithmic trading framework and automation engine deployed natively to the Cloudflare Edge Network. By utilizing a distributed microservice architecture, Hoox processes trade signals, evaluates risk parameters, executes order routing, and fires Telegram notifications—all within milliseconds and directly from the edge nodes closest to exchange servers.
+Hoox is a free, open-source, edge-native algorithmic trading framework and automation engine deployed natively to the Cloudflare® Edge Network. By utilizing a distributed microservice architecture, Hoox processes trade signals, evaluates risk parameters, executes order routing, and fires Telegram notifications—all within milliseconds and directly from the edge nodes closest to exchange servers.
+
+Install: `bun add -g @hoox-sh/hoox-cli` → `hoox onboard` (alias `hx`).
 
 ```mermaid
 graph TB
-    TV[TradingView Alerts] -->|HTTPS Webhook| GW[hoox Gateway]
+    TV[TradingView® Alerts] -->|HTTPS Webhook| GW[hoox Gateway]
     GW -->|Service Binding| TW[trade-worker]
     GW -->|Service Binding| TGW[telegram-worker]
     TW -->|Signed API Request| CentralizedEx[Centralized Exchanges: Binance / Bybit / MEXC]
@@ -57,7 +59,7 @@ graph TB
 
 | Goal | Start here |
 | ---- | ---------- |
-| First deploy in minutes | [Quick Start](/docs/enduser/getting-started/quick-start) |
+| Install CLI + first deploy | [Installation](/docs/enduser/getting-started/installation) · [Quick Start](/docs/enduser/getting-started/quick-start) |
 | Sandbox / testnet orders | [Test Trading](/docs/enduser/guides/test-trading) |
 | How a signal becomes a fill | [How Hoox Works](/docs/enduser/concepts/how-hoox-works) |
 | Exchange execution isolate | [trade-worker](/docs/devops/workers/trade-worker) |

@@ -16,7 +16,7 @@ This runbook guides you through production prerequisites, manual and automated d
 
 ## 🏁 1. Production Rollout Pre-Flight Checklist
 
-Before rolling out updates to Cloudflare’s live edge networks:
+Before rolling out updates to Cloudflare® live edge networks:
 
 - **API Token Scoping**: Confirm your active Cloudflare API Token inherits the strict minimal permission sets (`Account.D1: Edit`, `Account.KV: Edit`, `Account.Queues: Edit`, `Account.Workers: Edit`, and `Zone.DNS: Edit` if mapping custom routing paths).
 - **Workspace Diagnostic Sweep**: Run the automated pre-flight check to verify that all git submodules, local dependencies, and TypeScript variables compile without warnings:
@@ -33,11 +33,17 @@ Before rolling out updates to Cloudflare’s live edge networks:
 The Hoox CLI automates the entire deployment sequence, compiling the shared libraries, deploying database schemas, synchronizing configuration manifests, and uploading workers in the correct dependency sequence:
 
 ```bash
-# 1. Execute full sequenced deployment
+# 1. Execute full sequenced deployment (includes pyne-worker when enabled)
 hoox deploy all --auto
 
 # 2. Deploy a single specific worker (e.g. after a trade execution update)
 hoox deploy worker trade-worker
+
+# 3. PYNE tooling isolate (vendor + deploy)
+hoox pyne deploy
+
+# 4. Post-deploy health
+hoox check health
 ```
 
 ### Dashboard OpenNext Compilation

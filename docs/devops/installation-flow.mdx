@@ -20,7 +20,9 @@ This document details the step-by-step installation, bootstrapping, and validati
 
 ## 🏗️ Onboarding Wizard (`hoox onboard`)
 
-> **v0.8.0 update:** The recommended entry point is now `hoox onboard`, which chains `init` (configuration) and `setup` (infrastructure) into a single command. Running `hoox` with no arguments on an uninitialized workspace will auto-launch `onboard`.
+The recommended entry point is **`hoox onboard`** (alias: `hx onboard`). It chains `init` (configuration) and `setup` (infrastructure) into a single command. Running `hoox` / `hx` with no arguments on an uninitialized workspace auto-launches `onboard` (or `onboard --resume` when `.wizard-state.json` exists).
+
+**Setup gates (0.11.x):** onboard will **not** run setup if `init` was cancelled or never wrote `wrangler.jsonc`. Setup also aborts when worker trees are still missing after the submodule clone attempt, and requires Cloudflare® auth (`wrangler login` or `CLOUDFLARE_API_TOKEN` + `CLOUDFLARE_ACCOUNT_ID`).
 
 To start the system bootstrap, run the one-shot wizard from the monorepo root
 (the CLI remembers that path so later `hx` calls work from any directory):
@@ -28,6 +30,9 @@ To start the system bootstrap, run the one-shot wizard from the monorepo root
 ```bash
 cd /path/to/hoox   # first discovery writes ~/.hoox/config/monorepo.json
 hoox onboard
+# later, from any directory:
+hx doctor          # shows Remembered + Runtime root
+hx check health
 ```
 
 For fine-grained control, run the two steps separately:
@@ -39,9 +44,9 @@ hoox setup   # 2. Generate keys, apply D1 schema, push secrets, deploy dashboard
 
 The setup wizard guides you through these critical onboarding phases:
 
-### Phase 1: Cloudflare Authentication
+### Phase 1: Cloudflare® Authentication
 
-Prompts for your Cloudflare API token (with `Account.D1`, `Account.KV`, `Account.Workers` permissions) and Account ID.
+Prompts for your Cloudflare® API token (with `Account.D1`, `Account.KV`, `Account.Workers` permissions) and Account ID.
 
 ### Phase 2: Worker Preset Selection
 
@@ -51,7 +56,7 @@ Chooses a **preset** rather than free-form per-worker toggles in the wizard:
 | :--------- | :-------------------------------------------------------------------- |
 | `minimal`  | Gateway + D1 + analytics — webhook processing only                    |
 | `standard` | Trading + analytics + Telegram notifications                          |
-| `full`     | All workers (AI agent, DeFi wallet, email, PYNE, …) + integrations    |
+| `full`     | All workers (AI agent, DeFi wallet, email, pyne-worker / Pine Script™, …) + integrations |
 
 Pass `--preset minimal|standard|full` for non-interactive runs (`hoox onboard` / `hoox init`). You can still edit `wrangler.jsonc` afterward to refine enabled workers.
 
@@ -65,7 +70,7 @@ Consolidates all chosen parameters and writes your central `wrangler.jsonc` file
 
 ### Phase 5: Infrastructure Provisioning
 
-Generates internal auth keys, creates D1 databases, applies the schema, and pushes secrets to Cloudflare. Builds and deploys the Next.js dashboard (via `hoox setup` / onboard chain).
+Generates internal auth keys, creates D1 databases, applies the schema, and pushes secrets to Cloudflare®. Builds and deploys the Next.js dashboard (via `hoox setup` / onboard chain).
 
 ### Phase 6: Verification (suggested next step)
 
@@ -115,7 +120,7 @@ During the interactive setup, the CLI caches your current step and intermediate 
 
 ## 🔒 Secret Bindings Architecture
 
-Hoox utilizes Cloudflare's hardware-secured **Secret Store** to bind environment credentials to V8 isolates without exposing them in git history.
+Hoox utilizes Cloudflare® hardware-secured **Secret Store** to bind environment credentials to V8 isolates without exposing them in git history.
 
 ### Local Mocking (`.dev.vars`)
 
@@ -160,5 +165,6 @@ This guarantees that secrets are never logged, never cached in plain text on dis
 
 ### 🔗 Next Steps
 
-- **[DevOps Setup & Operations Manual](/docs/devops/setup_and_operations)** — Dive into complete operations, variable matrices, and troubleshooting.
+- **[DevOps Setup & Operations Manual](/docs/devops/setup-and-operations)** — Dive into complete operations, variable matrices, and troubleshooting.
 - **[Terminal UI Cockpit](/docs/devops/tui)** — Run, hot-reload, and monitor your local workers via TUI.
+- **[CLI features](/docs/devops/cli-features)** — Monorepo remember path, secrets modes, Linear Rail banner.

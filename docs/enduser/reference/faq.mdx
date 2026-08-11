@@ -25,15 +25,25 @@ git submodule update --init --recursive
 
 ### Q: What are the minimum system requirements?
 
-- **Bun** ≥ 1.2
+- **Bun** ≥ 1.2 (required — CLI is Bun-only)
 - **Git** ≥ 2.40
-- **Wrangler CLI** (latest)
+- **`@hoox-sh/hoox-cli`** via `bun add -g @hoox-sh/hoox-cli` (ships Wrangler as a dependency; prefer `hoox` / `hx` over a separate global Wrangler install)
 - Optionally **Docker Desktop** for containerized local development
-- A free **Cloudflare account** with API token (Worker Edit, D1 Edit, KV Edit, R2 Edit, Queues Edit, AI Read)
+- A free **Cloudflare® account** with API token (Worker Edit, D1 Edit, KV Edit, R2 Edit, Queues Edit, AI Read)
+
+### Q: How do I install and bootstrap?
+
+```bash
+bun add -g @hoox-sh/hoox-cli
+git clone --recursive https://github.com/hoox-sh/hoox.git && cd hoox
+hoox onboard
+```
+
+After the first run inside the monorepo, `hx` works from any directory (path remembered in `~/.hoox/config/monorepo.json`).
 
 ### Q: Can I use Hoox for free?
 
-Yes! All components — Workers, D1, KV, R2, Queues, Vectorize, Workers AI, Browser Rendering, WAF, and Smart Placement — are within the **Cloudflare Free Plan** limits. The only potential cost is if you exceed free tier resource limits (100k requests/day, 5M D1 reads/day, etc.).
+Yes! All components — Workers, D1, KV, R2, Queues, Vectorize, Workers AI, Browser Rendering, WAF, and Smart Placement — are within the **Cloudflare® Free Plan** limits. The only potential cost is if you exceed free tier resource limits (100k requests/day, 5M D1 reads/day, etc.).
 
 ### Q: Do I need to know Solidity or blockchain development?
 
@@ -43,7 +53,7 @@ No. Hoox is designed for **algorithmic traders**, not blockchain developers. On-
 
 ## 🔑 Credentials & Secrets
 
-### Q: Where do I get my Cloudflare API token?
+### Q: Where do I get my Cloudflare® API token?
 
 1. Go to [dash.cloudflare.com](https://dash.cloudflare.com) → **My Profile** → **API Tokens**
 2. Click **Create Token**
@@ -58,7 +68,7 @@ No. Hoox is designed for **algorithmic traders**, not blockchain developers. On-
 
 ### Q: Are my API keys safe?
 
-Yes. API keys are stored as **Cloudflare Workers Secrets** — encrypted at rest with hardware-level key management. They are injected directly into the V8 execution isolate at runtime and can never be read back via any API. They are never stored in plaintext on disk or in Git.
+Yes. API keys are stored as **Cloudflare® Workers Secrets** — encrypted at rest with hardware-level key management. They are injected directly into the V8 execution isolate at runtime and can never be read back via any API. Prefer `hoox secrets set` / `hoox secrets sync --system` for mesh keys.
 
 ### Q: How do I paper-trade / use exchange testnets?
 

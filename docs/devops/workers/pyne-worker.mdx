@@ -71,10 +71,16 @@ hoox secrets set dashboard PYNE_API_KEY            # optional, match API_KEY
 ## Setup in HOOX
 
 1. Clone with submodules (or `hoox clone pyne-worker` / `git submodule update --init workers/pyne-worker`).
-2. Run the dashboard **Setup** wizard Secrets step — `API_KEY` is listed under Integrations.
-3. Deploy: `cd workers/pyne-worker && ./scripts/sync_vendor.sh && npx wrangler deploy`.
+2. Secrets: `hoox secrets set pyne-worker API_KEY` (and mesh key for live trade forward). Dashboard Setup wizard lists `API_KEY` under Integrations; set `PYNE_API_KEY` on the dashboard to the same value.
+3. Deploy (CLI-first):
+   ```bash
+   hoox pyne deploy                 # sync-vendor + wrangler deploy
+   # or: hoox deploy worker pyne-worker
+   # manual: cd workers/pyne-worker && ./scripts/sync_vendor.sh && npx wrangler deploy
+   ```
+4. Health: `hoox pyne health` (or `hoox check health` when the worker is enabled).
 
-> **Deploy gotcha:** Wrangler packages `python_modules/pynescript`, not an editable install. After updating PYNE, re-run `./scripts/sync_vendor.sh`.
+> **Deploy gotcha:** Wrangler packages `python_modules/pynescript`, not an editable install. After updating PYNE, re-run `./scripts/sync_vendor.sh` (or `hoox pyne sync-vendor`).
 
 ---
 

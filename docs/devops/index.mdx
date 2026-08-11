@@ -13,7 +13,8 @@ description: "Infrastructure provisioning, deployment sequences, secret manageme
   administrators, security engineers, and platform operators responsible for
   provisioning edge databases, orchestrating secure V8 service bindings,
   deploying multi-exchange execution workers, auditing secrets, and monitoring
-  system health.
+  system health. Day-to-day ops are **CLI-first**: `hoox` / `hx` for
+  `onboard`, `setup`, `deploy`, `secrets`, `check health`, and `doctor`.
 </Tip>
 
 ```mermaid
@@ -65,8 +66,8 @@ HOOX docs use the same **multi-tab** layout as AXIS / PYNE. This **DevOps** tab 
 
 ### 1. Setup runbooks
 
-- **[Operations & Troubleshooting](/docs/devops/setup-and-operations)** — Env variable matrices and diagnostic codes.
-- **[Core Installation Flow](/docs/devops/installation-flow)** — Local machine and edge provision setup.
+- **[Operations & Troubleshooting](/docs/devops/setup-and-operations)** — Deploy order, secrets modes, health probes, repair.
+- **[Core Installation Flow](/docs/devops/installation-flow)** — `hoox onboard` / monorepo remember path / setup gates.
 - **[Bindings registry](/docs/devops/bindings)** — Cross-worker binding inventory.
 
 ### 2. Development
@@ -83,7 +84,7 @@ HOOX docs use the same **multi-tab** layout as AXIS / PYNE. This **DevOps** tab 
 ### 4. Security & tooling
 
 - **[Security overview](/docs/devops/security/overview)**
-- **[CLI features](/docs/devops/cli-features)** · **[TUI](/docs/devops/tui)** · **[Pattern consolidation](/docs/devops/refactoring/workers-pattern-consolidation)**
+- **[CLI features](/docs/devops/cli-features)** (0.11.x: monorepo remember, secrets modes, Linear Rail banner, setup gates) · **[TUI](/docs/devops/tui)** · **[Pattern consolidation](/docs/devops/refactoring/workers-pattern-consolidation)**
 
 ### 5. Related tracks (other tabs)
 

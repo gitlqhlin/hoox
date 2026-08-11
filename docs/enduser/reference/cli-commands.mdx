@@ -8,16 +8,11 @@ title: "CLI Commands Reference"
 description: "Comprehensive CLI directory detailing ~30 command groups, 60+ subcommands, global flags, and positional options for the hoox binary."
 ---
 
-The `@hoox-sh/hoox-cli` tool manages the entire monorepo development, provisioning, deployment, monitoring, and self-healing pipelines. This reference provides the complete command tree, positional arguments, optional flags, and concrete examples for all command groups. The binary is also available as **`hx`**.
+The `@hoox-sh/hoox-cli` tool (**0.11.x**) manages the entire monorepo development, provisioning, deployment, monitoring, and self-healing pipelines. This reference provides the complete command tree, positional arguments, optional flags, and concrete examples for all command groups. The binary is also available as **`hx`**.
 
-> **Heads up (v0.9.0):** The output framework was polished. New global flag
-> `--no-color` (alongside `NO_COLOR` env var and `TERM=dumb` honored); every
-> successful command prints a `✓ Done in 1.2s` footer with an optional
-> `→ next: hoox …` suggestion; typos like `hoox deplpy` produce
-> `did you mean 'hoox deploy' ?`; `hoox --help` uses a new sectioned layout
-> (Usage / Options / Examples / See also). See the
-> [changelog](#v090-output-polish) below. Also see the v0.8.0 refactor notes
-> further down for the command-tree changes.
+Install: `bun add -g @hoox-sh/hoox-cli`. Recommended bootstrap: `hoox onboard`. Prefer CLI commands over raw Wrangler for day-to-day ops.
+
+**Current defaults (0.11.x):** monorepo auto-detect + remember (run `hx` from any cwd), Linear Rail banner (`◆ H · O · O · X`), quieter `check setup` secrets UX, setup gates on incomplete init/empty workers, secret sync modes (`--system` / `--required`), `hoox pyne` for **pyne-worker**, operator security plane (`doctor --security`, `tunnel check`). Global UX: `--no-color` / `NO_COLOR` / `TERM=dumb`, completion footers, “did you mean …”, sectioned help. Historical release notes: [v0.9.0](#historical-v090-output-polish) · [v0.8.0](#historical-v080-refactor).
 
 ---
 
@@ -171,7 +166,7 @@ hoox                                 Startup: resolve monorepo + chdir. No args:
 ├── tui                              Launch the OpenTUI terminal dashboard
 ├── agent                            AI agent operations and health checks
 │   └── health [--probe]             Provider config check; optional live probes
-├── pyne                             PYNE edge evaluate (Pine Script worker)
+├── pyne                             PYNE edge evaluate (pyne-worker / Pine Script™)
 │   ├── health                       Probe pyne-worker GET /health
 │   ├── run <script>                 POST /run with a .pine file
 │   ├── scripts [list|get|deploy|delete]  Managed scripts
@@ -239,7 +234,7 @@ hoox dashboard dev
 ### C. Edge Provisioning & Deployment
 
 ```bash
-# Provision all databases, buckets, and queues on your Cloudflare account
+# Provision all databases, buckets, and queues on your Cloudflare® account
 hoox infra provision
 
 # Deploy the entire microservices stack in sequence, automatically updating URLs
@@ -273,7 +268,7 @@ hoox monitor kill-switch on
 ### E. Secrets & Keys Management
 
 ```bash
-# Set a Cloudflare Worker secret (live exchange keys)
+# Set a Cloudflare® Worker secret (live exchange keys)
 hoox secrets set trade-worker BINANCE_KEY_BINDING "your_key_here"
 hoox secrets set trade-worker BINANCE_SECRET_BINDING "your_secret_here"
 
@@ -333,7 +328,9 @@ hoox check health
 
 ---
 
-## 🆕 v0.9.0 Output Polish
+## Historical: v0.9.0 Output Polish
+
+> **Historical notes** from the v0.9.0 release (retained for upgrade context). Current CLI is **0.11.x** — Linear Rail is the default banner style; monorepo remember and quieter secrets checks landed later.
 
 The v0.9.0 release polished the output framework. **No new commands and no breaking changes** — every command picks up the improvements automatically through the shared formatters. The new primitives are also available to plugin authors via the package's public exports.
 
@@ -353,17 +350,19 @@ The v0.9.0 release polished the output framework. **No new commands and no break
 - **Spinner** — uses braille dots (`⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏`) instead of plain ASCII (`-\|/`).
 - **`formatTable` options** — supports `zebra`, `alignNumbers`, `colorizeStatus`, `compact` (all default to on, except `compact` which defaults to off). Backward compatible.
 - **`formatError`** — card layout with `[code]` badge and `suggestions` support. JSON output now includes a new `suggestions` field.
-- **Banner default** — `minimal` (was `legacy`). The banner's version is read dynamically from `package.json` (v0.9.0 also fixed a real version-drift bug where the banner was hardcoded to `v0.3.0` while the package was at `v0.8.0`).
+- **Banner default** — later superseded by **Linear Rail** (`◆ H · O · O · X`) as the default compact banner in 0.11.x; version is read dynamically from `package.json`.
 
 See [`packages/cli/CHANGELOG.md`](https://github.com/hoox-sh/hoox/blob/main/packages/cli/CHANGELOG.md) for the full release notes.
 
 ---
 
-## 🆕 v0.8.0 Refactor
+## Historical: v0.8.0 Refactor
+
+> **Historical notes** from the v0.8.0 release. Commands listed here remain current; this section documents when they were introduced.
 
 The v0.8.0 release consolidated and cleaned up the CLI surface. **Pre-1.0 breaking changes were made without deprecation warnings** since this is still active development.
 
-### New commands (added in v0.8.0)
+### New commands (introduced in v0.8.0; still current)
 
 - **`hoox onboard`** (aliases: `bootstrap`, `quickstart`) — One-shot full bootstrap that chains `init` + `setup`. The recommended entry point for new users. When you run `hoox` with no arguments and no `wrangler.jsonc` exists, the CLI now auto-launches this.
 - **`hoox secrets`** (top-level) — Promoted from `hoox config secrets` for discoverability.

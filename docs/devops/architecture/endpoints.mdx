@@ -21,7 +21,7 @@ All external webhooks flow through the public `hoox` gateway, which authenticate
 ```mermaid
 graph TD
     %% Ingress
-    Client[TradingView / User] -->|1. Public HTTPS Ingress| GW[hoox Gateway]
+    Client[TradingView® / User] -->|1. Public HTTPS Ingress| GW[hoox Gateway]
 
     %% Gateway Service Bindings
     GW -->|2. Service Binding| TW[trade-worker]

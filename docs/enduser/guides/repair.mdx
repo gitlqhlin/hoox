@@ -26,7 +26,7 @@ The diagnostics engine runs a strict, sequential analysis of your entire monorep
 - Submodule Integrity (verify all 9 workers are cloned)
 - Dependency Resolution (verify bun workspaces)
 - TypeScript Type Safety (run tsc --noEmit)
-- Cloudflare Edge Bindings (verify D1, KV, R2, Queues)
+- Cloudflare® Edge Bindings (verify D1, KV, R2, Queues)
 - Hardware Secrets Validation (verify API keys are bound)
 
 ---
@@ -81,7 +81,7 @@ When triggered, the CLI walks you through a structured recovery protocol:
 
 - **Phase 1** — D1 Database Backup: Exports current ledger to `backups/recovery-pre-rebuild.sql`.
 - **Phase 2** — Infrastructure Tear-Down: Deletes corrupted D1, KV, and Queue instances.
-- **Phase 3** — Fresh Provisioning: Recreates all database tables and config buckets on Cloudflare.
+- **Phase 3** — Fresh Provisioning: Recreates all database tables and config buckets on Cloudflare®.
 - **Phase 4** — Sequenced Redeployment: Re-compiles and deploys all 9 edge workers in correct dependency order.
 - **Phase 5** — Database Seeding: Restores backup SQL data and re-applies schema migrations.
 - **Phase 6** — KV Sync: Applies the 16-key configuration manifest defaults.
@@ -106,7 +106,7 @@ When triggered, the CLI walks you through a structured recovery protocol:
 | Telegram Bot is mute (2)                                  | Or webhook is unregistered                               | `hoox deploy telegram-webhook`                                                             |
 | Queue depth growing                                       | Exchange API returning errors                            | Check API key validity; `hoox monitor queue-depth`                                         |
 | Dashboard at 500 errors                                   | Next.js build failed or D1 schema outdated               | `hoox repair db` then `hoox dashboard deploy`                                              |
-| All trades returning 409                                  | Idempotency keys colliding from rapid duplicate webhooks | Verify TradingView setting; wait 24h for DO TTL cleanup                                    |
+| All trades returning 409                                  | Idempotency keys colliding from rapid duplicate webhooks | Verify TradingView® alert frequency; wait 24h for DO TTL cleanup                           |
 | Workers unreachable / unhealthy                           | One or more workers not responding                       | `hoox check health` (single source of truth)                                               |
 | Interrupted `setup` / `deploy` (Ctrl+C, network drop)     | Workers in partially-deployed state                      | `hoox check health` → `hoox repair worker <name>` → `hoox deploy all --auto` (idempotent)  |
 | CLI crashes with "Bun is not defined"                     | Ran under Node instead of Bun                            | Re-run with `bunx hoox` or install Bun (`curl -fsSL https://bun.sh \| bash`)               |

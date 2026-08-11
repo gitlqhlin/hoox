@@ -5,10 +5,10 @@
 
 ---
 title: "Platform Configuration"
-description: "Master reference for environment variables, Cloudflare secrets, wrangler V8 profiles, and dynamic KV runtime manifests."
+description: "Master reference for environment variables, Cloudflare® secrets, wrangler V8 profiles, and dynamic KV runtime manifests."
 ---
 
-Hoox uses a dual-layer configuration topology: a **declarative build-time environment layer** (managed via local files and Cloudflare Secrets) and an **instantaneous runtime configuration layer** (managed via Cloudflare KV key-value databases). This ensures maximum agility: deploy secure code once, and adjust trading parameters or flip kill switches in real-time without redeploying code.
+Hoox uses a dual-layer configuration topology: a **declarative build-time environment layer** (managed via local files and Cloudflare® Secrets) and an **instantaneous runtime configuration layer** (managed via Cloudflare® KV key-value databases). This ensures maximum agility: deploy secure code once, and adjust trading parameters or flip kill switches in real-time without redeploying code. Prefer `hoox config` / `hoox secrets` over manual Wrangler edits for day-to-day ops.
 
 ---
 
@@ -24,17 +24,17 @@ cp .env.example .env.local
 
 The Hoox environment is split into 5 core logical sections. Below is the comprehensive dictionary of key configuration parameters:
 
-### A. ⚡ Cloudflare Core Infrastructure
+### A. ⚡ Cloudflare® Core Infrastructure
 
 | Parameter               | Required | Description                                                          | Example                            |
 | :---------------------- | :------: | :------------------------------------------------------------------- | :--------------------------------- |
 | `CLOUDFLARE_API_TOKEN`  | **Yes**  | API token with `D1`, `KV`, `Queue`, and `Workers` write permissions. | `cf_pat_abc123...`                 |
-| `CLOUDFLARE_ACCOUNT_ID` | **Yes**  | Your unique 32-character Cloudflare dashboard account hash.          | `debc6545e63bea36be059cbc82d80ec8` |
+| `CLOUDFLARE_ACCOUNT_ID` | **Yes**  | Your unique 32-character Cloudflare® dashboard account hash.         | `debc6545e63bea36be059cbc82d80ec8` |
 | `SUBDOMAIN_PREFIX`      | **Yes**  | Subdomain prefix under which your public gateway routes compile.     | `hoox-edge`                        |
 
 ### B. 💱 Exchange API Keys (Securely Redacted)
 
-These credentials must be injected as secure encrypted environment variables into your Cloudflare Worker isolates. The Hoox CLI automates this injection.
+These credentials must be injected as secure encrypted environment variables into your Cloudflare® Worker isolates. The Hoox CLI automates this injection (`hoox secrets set`).
 
 - **Binance**:
   - `BINANCE_API_KEY` — Your read/write exchange account trade permission key.
@@ -112,7 +112,7 @@ hoox config set workers.web3-wallet-worker.enabled false
 
 ## 4. Runtime KV Configuration (Sub-millisecond Settings)
 
-One of Hoox's core architectural features is **instant runtime parameter updates**. By using Cloudflare KV, certain settings can be modified globally in sub-milliseconds and take effect on the very next signal execution—without rebuilding or redeploying any worker.
+One of Hoox's core architectural features is **instant runtime parameter updates**. By using Cloudflare® KV, certain settings can be modified globally in sub-milliseconds and take effect on the very next signal execution—without rebuilding or redeploying any worker.
 
 Hoox manages a standard **16-key runtime manifest** inside the `CONFIG_KV` namespace. Below are the most critical runtime parameters:
 
@@ -135,7 +135,7 @@ hoox config kv set trade:kill_switch true
 # Restore trading by flipping the switch back
 hoox config kv set trade:kill_switch false
 
-# Declaratively apply default manifest variables to Cloudflare KV
+# Declaratively apply default manifest variables to Cloudflare® KV
 hoox config kv apply-manifest
 ```
 
@@ -143,7 +143,7 @@ hoox config kv apply-manifest
 
 <Tip>
   Changed exchange configurations or toggled the kill switch? There is **no
-  need** to redeploy. The changes are distributed across Cloudflare's 330+
+  need** to redeploy. The changes are distributed across Cloudflare®'s 330+
   global edge locations near-instantaneously!
 </Tip>
 

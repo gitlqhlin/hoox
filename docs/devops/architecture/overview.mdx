@@ -8,9 +8,9 @@ title: "System Topology & Overview"
 description: "High-level architectural blueprint of the Hoox trading ecosystem, detailing edge microservice layouts, and multi-layered security models."
 ---
 
-Hoox is an enterprise-grade, serverless algorithmic trading platform built entirely on **Cloudflare's Edge V8 isolates** and globally distributed resources. By using a modular, service-oriented architecture, Hoox decomposes complex trading processes into **11 compute surfaces**: gateway, trade, agent, dashboard (Next.js), telegram, d1, web3, email, analytics, report, and **pyne** (Python Pine edge evaluate).
+Hoox is an enterprise-grade, serverless algorithmic trading platform built entirely on **Cloudflare® Edge V8 isolates** and globally distributed resources. By using a modular, service-oriented architecture, Hoox decomposes complex trading processes into **11 compute surfaces**: gateway, trade, agent, dashboard (Next.js), telegram, d1, web3, email, analytics, report, and **pyne** (Python Pine Script™ edge evaluate).
 
-Most workers communicate privately via Service Bindings in microseconds, auto-scale globally near exchange servers, and store transaction logs in localized databases—all while running within Cloudflare's $0 free tiers. **pyne-worker** is a tooling isolate: public evaluate/management routes use `API_KEY` auth (not mesh `INTERNAL_KEY_BINDING`); live strategy forwards to `trade-worker` use mesh internal auth.
+Most workers communicate privately via Service Bindings in microseconds, auto-scale globally near exchange servers, and store transaction logs in localized databases—all while running within Cloudflare® free tiers. **pyne-worker** is a tooling isolate: public evaluate/management routes use `API_KEY` auth (not mesh `INTERNAL_KEY_BINDING`); live strategy forwards to `trade-worker` use mesh internal auth.
 
 ---
 
@@ -30,10 +30,10 @@ graph TB
 
     %% ── Ingress Layer ────────────────────────────────────────────────
     subgraph Ingress["🌐 Public Ingress Layer"]
-        TV["📊 TradingView Webhooks"]:::external
+        TV["📊 TradingView® Webhooks"]:::external
         TG["💬 Telegram Bot Commands"]:::external
         EM["📧 Email Signal Senders"]:::external
-        WAF["🧱 Cloudflare WAF / Firewall"]:::waf
+        WAF["🧱 Cloudflare® WAF / Firewall"]:::waf
         GW["🔐 hoox Gateway Isolate"]:::worker
     end
 
@@ -47,7 +47,7 @@ graph TB
         W3W["🌐 web3-wallet (DeFi Swaps)"]:::worker
         ANW["📊 analytics-worker (observability)"]:::worker
         RPW["📄 report-worker (PDF Generator)"]:::worker
-        PYNE["🐍 pyne-worker (Pine edge eval — tooling)"]:::worker
+        PYNE["🐍 pyne-worker (Pine Script™ edge eval — tooling)"]:::worker
     end
 
     %% ── Storage & Resource Layer ─────────────────────────────────────
@@ -128,9 +128,9 @@ Security is designed as concentric protective corridors:
 
 ### Layer 1: Edge-Level Firewall & WAF
 
-Cloudflare’s global WAF drop connections immediately at the edge if:
+Cloudflare® global WAF drops connections immediately at the edge if:
 
-- The payload does not originate from verified TradingView webhook IP ranges.
+- The payload does not originate from verified TradingView® webhook IP ranges.
 - The request rate exceeds threshold ceilings (10 requests/minute).
 
 ---
@@ -158,7 +158,7 @@ To prevent internal bypass or privilege escalation, all internal microservice bo
 
 ### Layer 5: Durable Object Idempotency Locks
 
-If the network drops after an order fill, TradingView will resend the webhook. The gateway uses a single-threaded **Durable Object** to lock the request trace ID. If the transaction ID has already been logged, the duplicate is dropped before hitting exchange APIs, preventing double-ordering.
+If the network drops after an order fill, TradingView® will resend the webhook. The gateway uses a single-threaded **Durable Object** to lock the request trace ID. If the transaction ID has already been logged, the duplicate is dropped before hitting exchange APIs, preventing double-ordering.
 
 ---
 
