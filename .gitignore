@@ -187,3 +187,8 @@ papers/hoox-arxiv-paper-core*.pdf
 .reddit/
 
 TAGLINES.md
+
+# Multi-agent coordination notes (local only — do not commit)
+.agent-sync-notice.md
+.agent_sync*.md
+.agent-sync/
