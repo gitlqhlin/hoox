@@ -45,6 +45,28 @@ Translates command intentions (like `hoox infra d1 create`) into wrangler subpro
 
 Workspace configuration (`wrangler.jsonc`), path layout (`$HOME/.hoox`, monorepo detection), and operator transport live in the shared package rather than a CLI-local `src/core/`.
 
+### D. Workspace context (startup)
+
+Before commands run, `ensureWorkspaceContext()` (`packages/cli/src/services/workspace/`) resolves the monorepo and switches the process into it:
+
+| Priority | Source | Notes |
+| -------- | ------ | ----- |
+| 1 | `HOOX_REPO` | Explicit override |
+| 2 | Walk up from `cwd` | Local clone markers |
+| 3 | `~/.hoox/config/monorepo.json` | Last discovered checkout |
+| 4 | `~/.hoox/repo` | Managed global clone (`doctor --fix-runtime`) |
+
+**Markers** (`isHooxSetupRoot`): `packages/cli/package.json` **and** one of
+`wrangler.jsonc` / `wrangler.jsonc.example` / `workers/` / `.gitmodules`.
+
+On success the CLI:
+
+1. writes/refreshes `monorepo.json` when source is `cwd`, `env`, or `remembered`
+2. sets session `HOOX_REPO` for child processes
+3. `process.chdir(root)` when not already there (notice on stderr unless silent/json/quiet)
+
+This is why `hx check setup` works after you leave the monorepo directory.
+
 ---
 
 ## 🔒 2. Declarative Config Mapping & Validation

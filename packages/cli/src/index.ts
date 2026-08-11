@@ -64,6 +64,7 @@ import { registerTraceCommand } from "./commands/trace/index.js";
 import { registerPerfCommand } from "./commands/perf/index.js";
 import { registerCompletionCommand } from "./commands/completion/index.js";
 import { runInteractiveTUI } from "./ui/index.js";
+import { ensureWorkspaceContext } from "./services/workspace/index.js";
 
 // ---------------------------------------------------------------------------
 // Program setup
@@ -349,6 +350,10 @@ registerCompletionCommand(program);
  */
 export async function main(): Promise<void> {
   try {
+    // Detect monorepo (cwd / remembered / global), remember path, chdir so
+    // `hx` works from ~/Videos etc. after the monorepo was discovered once.
+    ensureWorkspaceContext();
+
     const hasArgs = process.argv.slice(2).length > 0;
 
     if (hasArgs) {
@@ -368,6 +373,8 @@ export async function main(): Promise<void> {
         // recommended one-shot bootstrap. This chains init (config) + setup
         // (infrastructure) so the user gets a fully operational system.
         // For finer control, run 'hoox init' and 'hoox setup' separately.
+        // Only auto-onboard when we are already inside a monorepo root
+        // (markers present) — otherwise user needs clone/doctor first.
         const args = hasWizardState ? ["onboard", "--resume"] : ["onboard"];
         await program.parseAsync(args, { from: "user" });
         return;

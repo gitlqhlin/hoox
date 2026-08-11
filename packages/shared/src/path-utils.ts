@@ -15,15 +15,23 @@
  *   $HOME/.hoox/              — getHooxHome() (override with HOOX_HOME)
  *   $HOME/.hoox/repo/         — managed clone of the hoox monorepo (getHooxRepoPath)
  *   $HOME/.hoox/config/       — user config
+ *   $HOME/.hoox/config/monorepo.json — remembered local monorepo path
  *   $HOME/.hoox/data/         — persistent state
  *
  * Tool/runtime resolution (resolveHooxRuntimeRoot):
  *   1. HOOX_REPO env (explicit monorepo path)
  *   2. Walk up from cwd for a local hoox monorepo checkout
- *   3. $HOME/.hoox/repo (global managed clone)
+ *   3. Remembered monorepo path (~/.hoox/config/monorepo.json)
+ *   4. $HOME/.hoox/repo (global managed clone)
  */
 
-import { existsSync } from "fs";
+import {
+  existsSync,
+  mkdirSync,
+  readFileSync,
+  writeFileSync,
+  chmodSync,
+} from "fs";
 import { homedir } from "os";
 import { dirname, join, resolve } from "path";
 
@@ -34,7 +42,12 @@ import { dirname, join, resolve } from "path";
 export type HooxPath = string & { readonly __brand: "HooxPath" };
 
 /** Where resolveHooxRuntimeRoot found (or failed to find) a setup monorepo. */
-export type RuntimeRootSource = "env" | "cwd" | "global" | "none";
+export type RuntimeRootSource =
+  | "env"
+  | "cwd"
+  | "remembered"
+  | "global"
+  | "none";
 
 /** Result of resolveHooxRuntimeRoot(). */
 export interface RuntimeRootResult {
@@ -46,8 +59,17 @@ export interface RuntimeRootResult {
   checked: {
     env?: string;
     cwd: string | null;
+    remembered?: string | null;
     global: string;
   };
+}
+
+/** Persisted monorepo pointer written when the CLI discovers a checkout. */
+export interface RememberedMonorepo {
+  /** Absolute path to monorepo root. */
+  root: string;
+  /** ISO timestamp of last successful remember. */
+  updatedAt: string;
 }
 
 /**
@@ -99,16 +121,86 @@ export function getHooxHome(): HooxPath {
 /**
  * True when `dir` looks like a hoox monorepo root.
  *
- * Markers match CLI verifyRepoRoot: root wrangler.jsonc + packages/cli package.
+ * Aligns with CLI `verifyRepoRoot`:
+ *   - Required: `packages/cli/package.json`
+ *   - Plus one of: `wrangler.jsonc`, `wrangler.jsonc.example`, `workers/`, `.gitmodules`
+ *
+ * (`wrangler.jsonc` is gitignored and created by init — fresh clones only
+ * ship `wrangler.jsonc.example`.)
  */
 export function isHooxSetupRoot(dir: string): boolean {
   if (!dir) return false;
   try {
     const root = resolve(dir);
+    if (!existsSync(join(root, "packages", "cli", "package.json"))) {
+      return false;
+    }
     return (
-      existsSync(join(root, "wrangler.jsonc")) &&
-      existsSync(join(root, "packages", "cli", "package.json"))
+      existsSync(join(root, "wrangler.jsonc")) ||
+      existsSync(join(root, "wrangler.jsonc.example")) ||
+      existsSync(join(root, "workers")) ||
+      existsSync(join(root, ".gitmodules"))
     );
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Path to the remembered monorepo pointer file.
+ * `$HOOX_HOME/config/monorepo.json` (default `~/.hoox/config/monorepo.json`).
+ */
+export function getRememberedMonorepoPath(): HooxPath {
+  return resolveHooxPath("config/monorepo.json");
+}
+
+/**
+ * Read the last monorepo path the CLI discovered (if still valid).
+ * Returns null when missing, unreadable, or no longer a setup root.
+ */
+export function getRememberedMonorepoRoot(): string | null {
+  try {
+    const path = getRememberedMonorepoPath();
+    if (!existsSync(path)) return null;
+    const raw = readFileSync(path, "utf-8");
+    const data = JSON.parse(raw) as Partial<RememberedMonorepo>;
+    if (!data.root || typeof data.root !== "string") return null;
+    const resolved = resolve(data.root);
+    return isHooxSetupRoot(resolved) ? resolved : null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Persist a monorepo root for future CLI invocations from any cwd.
+ * No-op when path is not a valid setup root.
+ */
+export function rememberMonorepoRoot(root: string): boolean {
+  try {
+    const resolved = resolve(root);
+    if (!isHooxSetupRoot(resolved)) return false;
+    const configDir = getHooxConfigDir();
+    mkdirSync(configDir, { recursive: true, mode: 0o700 });
+    try {
+      chmodSync(configDir, 0o700);
+    } catch {
+      /* ignore */
+    }
+    const payload: RememberedMonorepo = {
+      root: resolved,
+      updatedAt: new Date().toISOString(),
+    };
+    const path = getRememberedMonorepoPath();
+    writeFileSync(path, JSON.stringify(payload, null, 2) + "\n", {
+      mode: 0o600,
+    });
+    try {
+      chmodSync(path, 0o600);
+    } catch {
+      /* ignore */
+    }
+    return true;
   } catch {
     return false;
   }
@@ -137,18 +229,24 @@ export function findHooxSetupRoot(
  * Order:
  *   1. HOOX_REPO — must pass isHooxSetupRoot or result is source "env" with root null
  *   2. Walk up from cwd
- *   3. getHooxRepoPath() ($HOME/.hoox/repo or $HOOX_HOME/repo)
+ *   3. Remembered monorepo (~/.hoox/config/monorepo.json) — last discovered checkout
+ *   4. getHooxRepoPath() ($HOME/.hoox/repo or $HOOX_HOME/repo)
  *
  * Project cwd and tool root are intentionally separate: a random project
- * directory can still use the global runtime for TUI / templates.
+ * directory can still use a remembered or global monorepo for CLI ops.
  */
 export function resolveHooxRuntimeRoot(options?: {
   cwd?: string;
   env?: NodeJS.ProcessEnv;
+  /** Skip reading remembered path (tests). Default false. */
+  skipRemembered?: boolean;
 }): RuntimeRootResult {
   const env = options?.env ?? process.env;
   const cwd = resolve(options?.cwd ?? process.cwd());
   const globalRepo = getHooxRepoPath();
+  const remembered = options?.skipRemembered
+    ? null
+    : getRememberedMonorepoRoot();
 
   const envRepo = env.HOOX_REPO?.trim();
   if (envRepo) {
@@ -160,6 +258,7 @@ export function resolveHooxRuntimeRoot(options?: {
         checked: {
           env: resolved,
           cwd: findHooxSetupRoot(cwd),
+          remembered,
           global: globalRepo,
         },
       };
@@ -170,6 +269,7 @@ export function resolveHooxRuntimeRoot(options?: {
       checked: {
         env: resolved,
         cwd: findHooxSetupRoot(cwd),
+        remembered,
         global: globalRepo,
       },
     };
@@ -180,7 +280,15 @@ export function resolveHooxRuntimeRoot(options?: {
     return {
       root: local,
       source: "cwd",
-      checked: { cwd: local, global: globalRepo },
+      checked: { cwd: local, remembered, global: globalRepo },
+    };
+  }
+
+  if (remembered) {
+    return {
+      root: remembered,
+      source: "remembered",
+      checked: { cwd: null, remembered, global: globalRepo },
     };
   }
 
@@ -188,14 +296,14 @@ export function resolveHooxRuntimeRoot(options?: {
     return {
       root: globalRepo,
       source: "global",
-      checked: { cwd: null, global: globalRepo },
+      checked: { cwd: null, remembered: null, global: globalRepo },
     };
   }
 
   return {
     root: null,
     source: "none",
-    checked: { cwd: null, global: globalRepo },
+    checked: { cwd: null, remembered: null, global: globalRepo },
   };
 }
 

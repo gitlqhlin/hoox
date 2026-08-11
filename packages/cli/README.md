@@ -6,10 +6,11 @@
 
 > **Runtime requirement:** Bun ≥ 1.2. The bin shebang and bundle target are Bun-only; `npm install -g` will install the package but the CLI will not run under Node.js.
 
-**v0.11.x** — operator security plane (`doctor --security`, `tunnel check`, transport profile Bearer + Access), PYNE edge ops (`hoox pyne`), schema validate/generate, and wrangler **4.x**. **v0.10.x** hardened fail-closed remote TUI / management `/v1/*`. **v0.9.x** shipped hop-level `perf fastpath` observability.
+**v0.11.x** — monorepo auto-detect + remember (run `hx` from any directory), Linear Rail banner, quieter secrets check, operator security plane (`doctor --security`, `tunnel check`), PYNE (`hoox pyne`), schema validate/generate, wrangler **4.x**.
 
 ## Features
 
+- **Monorepo auto-detect & remember**: On every start the CLI finds the hoox monorepo (`HOOX_REPO` → walk up from cwd → `~/.hoox/config/monorepo.json` → `~/.hoox/repo`), saves the path, and `chdir`s into it so `hx` / `hoox` work from `~/Videos` or any other folder after you have run once from the monorepo.
 - **One-shot Onboarding** (`hoox onboard`): Full bootstrap from a fresh clone — collects credentials, configures workers, provisions D1/KV, generates keys, pushes secrets, deploys dashboard. The recommended entry point for new users.
 - **Config & Setup Wizards** (`hoox init`, `hoox setup`): Split into two steps — `init` writes `wrangler.jsonc` and collects integration secrets; `setup` generates keys, applies D1 schema, and pushes secrets to Cloudflare. Run separately when you need fine-grained control.
 - **Infrastructure as Code**: Manage D1, KV, R2, Queues, Vectorize, and Analytics via `hoox infra`.
@@ -56,6 +57,10 @@ bun run build   # produces dist/index.js — required for `hoox` after global in
 ## Quick Start
 
 ```bash
+# From the monorepo root (first time — path is remembered)
+cd /path/to/hoox
+hoox doctor                    # shows Remembered + Runtime root
+
 # One-shot onboarding (collects credentials, provisions, deploys)
 hoox onboard
 
@@ -70,8 +75,42 @@ hoox check health
 # Deploy to Cloudflare
 hoox deploy all --auto
 
-# Measure fast-path latency
-hoox perf fastpath run --n 50
+# Later: works from any directory (uses remembered monorepo)
+cd ~/Videos
+hx check health
+hx doctor                      # Source: remembered
+```
+
+## Monorepo resolution (any cwd)
+
+Resolution order at CLI startup:
+
+1. **`HOOX_REPO`** — absolute path override (highest priority)
+2. **Walk up from cwd** — discovers a local checkout (`packages/cli` + repo markers)
+3. **Remembered path** — `~/.hoox/config/monorepo.json` (written when discovered via cwd/env)
+4. **Global clone** — `~/.hoox/repo` (create with `hoox doctor --fix-runtime`)
+
+When a root is found, the CLI:
+
+- refreshes the remembered path (when source is `cwd` / `env` / `remembered`)
+- sets session `HOOX_REPO` for child processes
+- `chdir`s into the monorepo so relative paths (`wrangler.jsonc`, `workers/`, …) work
+
+Markers for a valid monorepo: `packages/cli/package.json` **plus** one of `wrangler.jsonc`, `wrangler.jsonc.example`, `workers/`, or `.gitmodules`.
+
+| Env / path                     | Purpose                                                |
+| ------------------------------ | ------------------------------------------------------ |
+| `HOOX_REPO`                    | Force monorepo root                                    |
+| `HOOX_HOME`                    | Override `~/.hoox` (default home for config/data/repo) |
+| `HOOX_CLI_SILENT=1`            | Suppress “using monorepo at …” notice                  |
+| `~/.hoox/config/monorepo.json` | Persisted root `{ "root", "updatedAt" }`               |
+
+```bash
+# Inspect layout
+hoox doctor
+# Remembered   /home/you/Git/hoox
+# Runtime root /home/you/Git/hoox
+# Source       remembered
 ```
 
 ## Available Commands
@@ -358,8 +397,9 @@ hoox perf fastpath report --from 1h
 ### Operator Security & Private Ingress
 
 ```bash
-# Paths, TUI entry, and runtime layout
+# Paths, TUI entry, remembered monorepo, runtime layout
 hoox doctor
+hoox doctor --fix-runtime   # clone monorepo into ~/.hoox/repo if needed
 
 # Hygiene + optional management /v1/health probes
 hoox doctor --security
@@ -504,8 +544,9 @@ packages/cli/
 │   │   ├── perf/             # Percentile, probe-sender, observability-reader
 │   │   ├── prerequisites/    # Tool version checks
 │   │   ├── runtime/          # Global ~/.hoox layout
+│   │   ├── workspace/        # Monorepo detect, remember, chdir
 │   │   └── secrets/          # Secret management
-│   ├── ui/                   # Interactive menu (clack)
+│   ├── ui/                   # Interactive menu + Linear Rail banner
 │   └── utils/                # Errors, formatters, theme
 ├── bin/
 │   └── hoox.js              # CLI binary entry point

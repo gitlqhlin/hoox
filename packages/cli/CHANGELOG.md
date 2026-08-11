@@ -5,6 +5,18 @@ This project adheres loosely to [Semantic Versioning](https://semver.org/).
 
 ## Unreleased
 
+## [0.11.6] — 2026-08-11
+
+### Added
+
+- **Monorepo auto-detect & remember**: on startup resolve root via `HOOX_REPO` → walk-up from cwd → `~/.hoox/config/monorepo.json` → `~/.hoox/repo`, persist the path, set session `HOOX_REPO`, and `chdir` so `hx` works from any directory (e.g. `~/Videos`).
+- **Doctor**: shows **Remembered** monorepo path and accurate resolution **Source**.
+- **Docs**: installation, quick-start, CLI reference, glossary, cli-features, monorepo README updated for any-cwd usage.
+
+### Fixed
+
+- **`isHooxSetupRoot`**: accept fresh-clone markers (`wrangler.jsonc.example`, `workers/`, `.gitmodules`) without requiring gitignored `wrangler.jsonc`.
+
 ## [0.11.5] — 2026-08-10
 
 ### Added

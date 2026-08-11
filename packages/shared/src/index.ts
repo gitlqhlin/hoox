@@ -249,11 +249,15 @@ export {
   findHooxSetupRoot,
   resolveHooxRuntimeRoot,
   getTuiEntryCandidates,
+  getRememberedMonorepoPath,
+  getRememberedMonorepoRoot,
+  rememberMonorepoRoot,
 } from "./path-utils";
 export type {
   HooxPath,
   RuntimeRootSource,
   RuntimeRootResult,
+  RememberedMonorepo,
 } from "./path-utils";
 
 // ── Dashboard settings manifests (workers/*/dashboard.jsonc) ───────────

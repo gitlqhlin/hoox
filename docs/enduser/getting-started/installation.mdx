@@ -60,6 +60,8 @@ Once installed, verify that the `hoox` command is registered globally in your sy
 
 ```bash
 hoox --version
+# alias also works:
+hx --version
 ```
 
 ---
@@ -116,9 +118,38 @@ my-trading-empire/
 
 ---
 
+## 📍 Run from any directory (monorepo remember)
+
+After you have used the CLI **once inside the monorepo**, the path is saved to
+`~/.hoox/config/monorepo.json`. Later you can call `hoox` / `hx` from any folder
+(e.g. `~/Videos`) and the CLI will `chdir` into the monorepo automatically.
+
+```bash
+# First time: inside the clone (remembers the path)
+cd ~/Git/hoox
+hoox doctor
+
+# Later: any working directory
+cd ~/Videos
+hx check setup
+hx doctor          # Source: remembered · Runtime root: /…/hoox
+```
+
+**Resolution order:** `HOOX_REPO` env → walk up from cwd → remembered monorepo
+file → `~/.hoox/repo` (managed global clone via `hoox doctor --fix-runtime`).
+
+| Override | Purpose |
+| -------- | ------- |
+| `HOOX_REPO=/path/to/hoox` | Force monorepo root |
+| `HOOX_HOME=~/.hoox` | Home for config / data / global repo (default) |
+| `HOOX_CLI_SILENT=1` | Hide the one-line “using monorepo at …” notice |
+
+---
+
 ## 🪄 Running the Onboarding Wizard
 
-With your folder structured, run the one-shot bootstrap wizard:
+With your folder structured, run the one-shot bootstrap wizard **from the monorepo**
+(or from anywhere after the path has been remembered):
 
 ```bash
 # Recommended: chains config + infrastructure in one command

@@ -22,6 +22,8 @@ import {
   ensureGlobalRuntime,
   getRuntimeStatus,
 } from "../../services/runtime/index.js";
+import { getRememberedMonorepoRoot } from "@hoox-sh/hoox-shared";
+import { getLastWorkspaceContext } from "../../services/workspace/index.js";
 import {
   collectSecurityHygiene,
   formatProbeSecurityLines,
@@ -57,12 +59,19 @@ function printStatus(): number {
   const status = getRuntimeStatus();
   const { runtime } = status;
 
+  const remembered = getRememberedMonorepoRoot();
+  // Prefer startup resolution source (before session HOOX_REPO is injected).
+  const session = getLastWorkspaceContext();
+  const sourceLabel = session?.source ?? runtime.source;
+  const rootLabel = session?.root ?? runtime.root;
+
   process.stdout.write(theme.heading("\nHoox doctor\n\n"));
   process.stdout.write(
     `${theme.dim("HOOX_HOME")}     ${status.hooxHome}\n` +
       `${theme.dim("Global repo")}  ${status.repoPath}\n` +
-      `${theme.dim("Runtime root")} ${runtime.root ?? theme.warning("(none)")}\n` +
-      `${theme.dim("Source")}       ${runtime.source}\n` +
+      `${theme.dim("Remembered")}   ${remembered ?? theme.dim("(none — run hx once from the monorepo)")}\n` +
+      `${theme.dim("Runtime root")} ${rootLabel ?? theme.warning("(none)")}\n` +
+      `${theme.dim("Source")}       ${sourceLabel}\n` +
       `${theme.dim("TUI entry")}    ${status.tuiEntry ?? theme.warning("(not found)")}\n\n`
   );
 
@@ -93,13 +102,13 @@ function printStatus(): number {
             : "missing — run: hoox doctor --fix-runtime",
     },
     {
-      ok: runtime.root !== null,
+      ok: rootLabel !== null,
       required: true,
       label: "Resolved runtime root",
       detail:
-        runtime.root === null
-          ? "set HOOX_REPO, cd into the hoox monorepo, or fix-runtime"
-          : `${runtime.source}: ${runtime.root}`,
+        rootLabel === null
+          ? "set HOOX_REPO, run hx once inside the monorepo (remembers path), or: hoox doctor --fix-runtime"
+          : `${sourceLabel}: ${rootLabel}`,
     },
     {
       ok: status.tuiEntry !== null,

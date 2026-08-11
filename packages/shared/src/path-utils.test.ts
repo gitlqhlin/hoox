@@ -27,12 +27,18 @@ import {
   findHooxSetupRoot,
   resolveHooxRuntimeRoot,
   getTuiEntryCandidates,
+  getRememberedMonorepoRoot,
+  rememberMonorepoRoot,
   type HooxPath,
 } from "./path-utils";
 
-function makeFakeSetupRoot(): string {
+function makeFakeSetupRoot(opts?: { exampleOnly?: boolean }): string {
   const root = mkdtempSync(join(tmpdir(), "hoox-setup-"));
-  writeFileSync(join(root, "wrangler.jsonc"), "{}\n");
+  if (opts?.exampleOnly) {
+    writeFileSync(join(root, "wrangler.jsonc.example"), "{}\n");
+  } else {
+    writeFileSync(join(root, "wrangler.jsonc"), "{}\n");
+  }
   mkdirSync(join(root, "packages", "cli"), { recursive: true });
   writeFileSync(
     join(root, "packages", "cli", "package.json"),
@@ -124,10 +130,43 @@ describe("path-utils - Path Resolution Service", () => {
       expect(findHooxSetupRoot(nested)).toBe(root);
     });
 
+    it("detects fresh clone markers (example only, no wrangler.jsonc)", () => {
+      const root = makeFakeSetupRoot({ exampleOnly: true });
+      temps.push(root);
+      expect(isHooxSetupRoot(root)).toBe(true);
+    });
+
     it("returns null when walking from a non-repo path", () => {
       const d = mkdtempSync(join(tmpdir(), "outside-"));
       temps.push(d);
       expect(findHooxSetupRoot(d)).toBeNull();
+    });
+  });
+
+  describe("rememberMonorepoRoot", () => {
+    const temps: string[] = [];
+    const origHome = process.env.HOOX_HOME;
+    afterEach(() => {
+      if (origHome !== undefined) process.env.HOOX_HOME = origHome;
+      else delete process.env.HOOX_HOME;
+      for (const t of temps) {
+        try {
+          rmSync(t, { recursive: true, force: true });
+        } catch {
+          /* ignore */
+        }
+      }
+      temps.length = 0;
+    });
+
+    it("persists and reloads a valid monorepo path", () => {
+      const home = mkdtempSync(join(tmpdir(), "hoox-home-"));
+      temps.push(home);
+      process.env.HOOX_HOME = home;
+      const root = makeFakeSetupRoot();
+      temps.push(root);
+      expect(rememberMonorepoRoot(root)).toBe(true);
+      expect(getRememberedMonorepoRoot()).toBe(root);
     });
   });
 
@@ -182,8 +221,24 @@ describe("path-utils - Path Resolution Service", () => {
       const result = resolveHooxRuntimeRoot({
         cwd: join(root, "packages"),
         env: {},
+        skipRemembered: true,
       });
       expect(result.source).toBe("cwd");
+      expect(result.root).toBe(root);
+    });
+
+    it("uses remembered monorepo when cwd is outside", () => {
+      const home = mkdtempSync(join(tmpdir(), "hoox-home-"));
+      temps.push(home);
+      process.env.HOOX_HOME = home;
+      delete process.env.HOOX_REPO;
+      const root = makeFakeSetupRoot();
+      temps.push(root);
+      expect(rememberMonorepoRoot(root)).toBe(true);
+      const outside = mkdtempSync(join(tmpdir(), "videos-"));
+      temps.push(outside);
+      const result = resolveHooxRuntimeRoot({ cwd: outside, env: {} });
+      expect(result.source).toBe("remembered");
       expect(result.root).toBe(root);
     });
 
@@ -204,7 +259,11 @@ describe("path-utils - Path Resolution Service", () => {
       process.env.HOOX_HOME = base;
       delete process.env.HOOX_REPO;
 
-      const result = resolveHooxRuntimeRoot({ cwd: outside, env: {} });
+      const result = resolveHooxRuntimeRoot({
+        cwd: outside,
+        env: {},
+        skipRemembered: true,
+      });
       // env arg empty doesn't include HOOX_HOME — getHooxRepoPath reads process.env
       expect(result.source).toBe("global");
       expect(result.root).toBe(repo);
@@ -217,7 +276,11 @@ describe("path-utils - Path Resolution Service", () => {
       temps.push(outside);
       process.env.HOOX_HOME = base;
       delete process.env.HOOX_REPO;
-      const result = resolveHooxRuntimeRoot({ cwd: outside, env: {} });
+      const result = resolveHooxRuntimeRoot({
+        cwd: outside,
+        env: {},
+        skipRemembered: true,
+      });
       expect(result.source).toBe("none");
       expect(result.root).toBeNull();
       expect(result.checked.global).toBe(join(base, "repo"));

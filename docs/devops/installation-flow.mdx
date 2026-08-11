@@ -22,9 +22,11 @@ This document details the step-by-step installation, bootstrapping, and validati
 
 > **v0.8.0 update:** The recommended entry point is now `hoox onboard`, which chains `init` (configuration) and `setup` (infrastructure) into a single command. Running `hoox` with no arguments on an uninitialized workspace will auto-launch `onboard`.
 
-To start the system bootstrap, run the one-shot wizard from the monorepo root:
+To start the system bootstrap, run the one-shot wizard from the monorepo root
+(the CLI remembers that path so later `hx` calls work from any directory):
 
 ```bash
+cd /path/to/hoox   # first discovery writes ~/.hoox/config/monorepo.json
 hoox onboard
 ```
 

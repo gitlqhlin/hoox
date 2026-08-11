@@ -72,6 +72,8 @@ A curated vocabulary of terms used throughout the Hoox documentation. Understand
 | --------------------------------- | ------------------------------------------------------------------------------------------------------------------------------ |
 | **Bun**                           | A fast JavaScript runtime, package manager, and test runner used as Hoox's primary development toolchain.                      |
 | **monorepo**                      | A repository structure containing multiple packages/workers managed together with shared dependencies and tooling.             |
+| **Remembered monorepo**           | Path stored in `~/.hoox/config/monorepo.json` after the CLI discovers a local checkout, so `hx` works from any working directory. |
+| **`HOOX_REPO`**                   | Environment variable forcing the monorepo root; highest priority in CLI workspace resolution.                                  |
 | **Bun Workspace**                 | A Bun feature enabling multiple packages within a monorepo to share dependencies and reference each other locally.             |
 | **Wrangler**                      | Cloudflare's official CLI tool for developing, deploying, and managing Cloudflare Workers and associated resources.            |
 | **Docker Compose**                | A container orchestration tool used by Hoox for running isolated local development environments with all services.             |

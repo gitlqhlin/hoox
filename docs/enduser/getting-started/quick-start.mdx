@@ -18,13 +18,17 @@ This guide gets you from a blank console to a **fully active, edge-deployed algo
 
 ### Step 1: Onboard Your Workspace
 
-Run the one-shot bootstrap to collect your Cloudflare credentials, write `wrangler.jsonc`, and provision all infrastructure end-to-end:
+Run the one-shot bootstrap from the monorepo root (or after the CLI has remembered
+that path — see [Installation → Run from any directory](/docs/enduser/getting-started/installation#run-from-any-directory-monorepo-remember)):
 
 ```bash
+cd /path/to/hoox   # first run discovers & remembers the monorepo
 hoox onboard
 ```
 
 _Interactive prompts will ask for your Cloudflare Account ID, API Token, and your unique `SUBDOMAIN_PREFIX` (e.g., `alpha-trading`). For non-interactive use, pass `--token` and `--account` flags._
+
+After the first successful discovery, `hx check setup` and other commands work from any cwd.
 
 If you want fine-grained control over each step, run them separately:
 

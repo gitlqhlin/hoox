@@ -65,9 +65,15 @@ cd hoox
 
 # 4. Bootstrap: provisions D1, KV, secrets, and deploys in dependency order
 hoox onboard
+
+# 5. Later: CLI works from any directory (path is remembered after first use)
+cd ~/Videos
+hx doctor          # Source: remembered · Runtime root: …/hoox
 ```
 
 `hoox onboard` is the recommended path. It writes `wrangler.jsonc`, collects secrets, generates keys, applies the D1 schema, pushes secrets, and deploys the dashboard. Alias: `hx`.
+
+The CLI auto-detects the monorepo (`HOOX_REPO` → walk up from cwd → `~/.hoox/config/monorepo.json` → `~/.hoox/repo`), saves the path, and `chdir`s so you can run `hx` from any folder.
 
 ### Prerequisites
 
