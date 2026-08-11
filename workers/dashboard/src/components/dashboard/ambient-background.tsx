@@ -13,6 +13,11 @@ export interface AmbientBackgroundProps {
   className?: string;
 }
 
+/**
+ * Shared ambient background used across the authenticated dashboard shell.
+ * Matches the login page treatment: soft accent glows + fine noise dot overlay
+ * (hoox.sh data-texture=dot via `.texture-overlay`).
+ */
 export function AmbientBackground({
   children,
   className,
@@ -28,58 +33,28 @@ export function AmbientBackground({
   }, []);
 
   return (
-    <div className={cn("relative min-h-svh", className)}>
-      {/* Subtle grid — static, decorative */}
-      <div
-        aria-hidden="true"
-        className="pointer-events-none fixed inset-0 grid-bg opacity-40"
-      />
-
-      {/* Soft accent glows — disabled when reduced motion is preferred */}
+    <div
+      className={cn(
+        "bg-background text-foreground relative min-h-svh",
+        className
+      )}
+    >
+      {/* Ambient glows — same soft accent wash as the login / landing page */}
       {!reduceMotion && (
         <>
           <div
             aria-hidden="true"
-            className="pointer-events-none fixed -left-32 top-0 size-[28rem] rounded-full bg-accent/5 blur-[100px]"
+            className="pointer-events-none fixed top-1/2 left-1/2 h-[min(600px,90vw)] w-[min(600px,90vw)] -translate-x-1/2 -translate-y-1/2 rounded-full bg-accent/10 blur-[120px]"
           />
           <div
             aria-hidden="true"
-            className="pointer-events-none fixed -right-24 bottom-0 size-[24rem] rounded-full bg-accent/[0.04] blur-[90px]"
+            className="pointer-events-none fixed top-0 right-0 h-[400px] w-[400px] rounded-full bg-accent/5 blur-[100px]"
           />
         </>
       )}
 
-      {/* Film grain — static SVG filter, very low opacity */}
-      <div
-        aria-hidden="true"
-        className={cn(
-          "pointer-events-none fixed inset-0 z-[1] opacity-[0.025]",
-          reduceMotion && "hidden"
-        )}
-        style={{ mixBlendMode: "overlay" }}
-      >
-        <svg
-          className="h-full w-full"
-          xmlns="http://www.w3.org/2000/svg"
-          width="100%"
-          height="100%"
-        >
-          <filter id="noise-dash">
-            <feTurbulence
-              type="fractalNoise"
-              baseFrequency="0.65"
-              numOctaves="3"
-              stitchTiles="stitch"
-            />
-          </filter>
-          <rect
-            width="100%"
-            height="100%"
-            filter="url(#noise-dash)"
-            opacity="1"
-          />
-        </svg>
-      </div>
+      {/* Fine noise dot overlay — matches hoox.sh data-texture=dot */}
+      <div className="texture-overlay" aria-hidden="true" />
 
       <div className="relative z-10 flex min-h-svh flex-col">{children}</div>
     </div>
