@@ -5,6 +5,12 @@ This project adheres loosely to [Semantic Versioning](https://semver.org/).
 
 ## Unreleased
 
+## [0.11.8] — 2026-08-11
+
+### Fixed
+
+- **TUI startup crash** (`@hoox-sh/hoox-tui@0.3.1`): remove dual-OpenTUI toast mount that re-registered `OPENTUI_FORCE_WCWIDTH` and crashed global `hoox-tui` installs. Toast helpers are fail-closed; status bar + alerts remain.
+
 ## [0.11.7] — 2026-08-11
 
 ### Added

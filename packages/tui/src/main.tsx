@@ -13,7 +13,6 @@
  */
 import { createCliRenderer } from "@opentui/core";
 import { createRoot } from "@opentui/react";
-import { ToasterRenderable } from "@opentui-ui/toast";
 import { CrashRecoveryApp } from "./app";
 import {
   Colors,
@@ -103,19 +102,11 @@ async function main() {
   // Set renderer ref so hooks + components can access it via getRendererRef()
   setRendererRef(renderer);
 
-  // Mount toast host so connection/auth toasts actually render
-  try {
-    const root = (
-      renderer as unknown as {
-        root: { add: (node: unknown) => void };
-      }
-    ).root;
-    root.add(new ToasterRenderable(renderer));
-  } catch (err) {
-    await tuiDevLog.warn("startup", "Toaster mount failed — toasts may no-op", {
-      error: err instanceof Error ? err.message : String(err),
-    });
-  }
+  // Note: @opentui-ui/toast ToasterRenderable is intentionally NOT mounted.
+  // toast@0.0.5 peers on ancient @opentui and nests a second core that
+  // re-registers OPENTUI_FORCE_WCWIDTH (crash on global install). Connection
+  // feedback still surfaces via the status bar + service-store alerts.
+  // Toast helpers in components/ui/toast.tsx are fail-closed no-ops.
 
   // Mouse drag-select → clipboard (OSC 52 + system tools)
   enableAutoCopyOnSelection(

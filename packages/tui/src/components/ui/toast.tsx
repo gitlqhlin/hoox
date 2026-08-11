@@ -4,15 +4,16 @@
  */
 
 /**
- * Thin wrappers around @opentui-ui/toast with Hoox color token defaults.
- * Provides toast helper functions (success, error, warning, info, loading)
- * pre-configured with Hoox design system colors and durations.
+ * Fail-closed toast helpers.
  *
- * All helpers use the global toast singleton from @opentui-ui/toast.
- * A ToasterRenderable must be initialized in the app root before calling
- * these functions (see app.tsx).
+ * `@opentui-ui/toast@0.0.5` peers on old OpenTUI and often installs a nested
+ * `@opentui/core` that re-registers env vars (e.g. OPENTUI_FORCE_WCWIDTH)
+ * with a conflicting schema — that hard-crashes `hoox-tui` on global install.
+ *
+ * We therefore never import `@opentui-ui/toast` at module load. Helpers are
+ * pure no-ops (return a stub id). Connection/auth UX uses the status bar
+ * and service-store alerts instead.
  */
-import { toast, TOAST_DURATION } from "@opentui-ui/toast";
 import { Colors } from "@hoox-sh/hoox-shared";
 
 // ── Types ──────────────────────────────────────────────────────────────────
@@ -29,128 +30,79 @@ export interface ToastOptions {
   action?: { label: string; onClick: () => void };
   /** Show a close button on the toast (default: false) */
   closeButton?: boolean;
+  /** Optional id when updating an existing toast */
+  id?: ToastId;
 }
 
 /** Returned toast ID for programmatic control */
 export type ToastId = string | number;
 
-// ── Hoox-styled toast style overrides ──────────────────────────────────────
+// Keep style tokens referenced so callers/tests can still import Colors path
+// and so future re-enable of a compatible toast lib has defaults ready.
+void Colors;
 
-/** Base style shared across all toast types */
-const baseStyle = {
-  backgroundColor: Colors.card,
-  foregroundColor: Colors.foreground,
-  borderColor: Colors.border,
-  paddingX: 1,
-  paddingY: 0,
-};
+let toastSeq = 0;
+function nextId(): ToastId {
+  toastSeq += 1;
+  return `toast-noop-${toastSeq}`;
+}
 
-/** Per-type border color overrides using Hoox design tokens */
-const hooxTypeStyles = {
-  success: { borderColor: Colors.success },
-  error: { borderColor: Colors.error },
-  warning: { borderColor: Colors.warning },
-  info: { borderColor: Colors.highlight },
-  loading: { borderColor: Colors.dim },
-};
-
-// ── Toast helper functions ─────────────────────────────────────────────────
+// ── Toast helper functions (no-op, fail-closed) ────────────────────────────
 
 /**
  * Show a success toast notification.
- * Uses green border (Colors.success) and 3s auto-dismiss.
- *
- * @example
- * toastSuccess("Worker deployed successfully")
+ * Currently a no-op (see module doc) — status bar / alerts carry feedback.
  */
-export function toastSuccess(message: string, options?: ToastOptions): ToastId {
-  return toast.success(message, {
-    ...options,
-    style: { ...baseStyle, ...hooxTypeStyles.success },
-    duration: options?.duration ?? TOAST_DURATION.SHORT,
-  });
+export function toastSuccess(
+  _message: string,
+  _options?: ToastOptions
+): ToastId {
+  return nextId();
 }
 
 /**
  * Show an error toast notification.
- * Uses red border (Colors.error) and 6s auto-dismiss.
- *
- * @example
- * toastError("Failed to connect to API", { description: "Check your network" })
+ * Currently a no-op (see module doc).
  */
-export function toastError(message: string, options?: ToastOptions): ToastId {
-  return toast.error(message, {
-    ...options,
-    style: { ...baseStyle, ...hooxTypeStyles.error },
-    duration: options?.duration ?? TOAST_DURATION.LONG,
-  });
+export function toastError(_message: string, _options?: ToastOptions): ToastId {
+  return nextId();
 }
 
 /**
  * Show a warning toast notification.
- * Uses amber border (Colors.warning) and 6s auto-dismiss.
- *
- * @example
- * toastWarning("Rate limit approaching", { description: "Slow down requests" })
+ * Currently a no-op (see module doc).
  */
-export function toastWarning(message: string, options?: ToastOptions): ToastId {
-  return toast.warning(message, {
-    ...options,
-    style: { ...baseStyle, ...hooxTypeStyles.warning },
-    duration: options?.duration ?? TOAST_DURATION.LONG,
-  });
+export function toastWarning(
+  _message: string,
+  _options?: ToastOptions
+): ToastId {
+  return nextId();
 }
 
 /**
  * Show an info toast notification.
- * Uses accent border (Colors.accent, orange) and 4s auto-dismiss.
- *
- * @example
- * toastInfo("New version available", { action: { label: "Update", onClick: () => {} } })
+ * Currently a no-op (see module doc).
  */
-export function toastInfo(message: string, options?: ToastOptions): ToastId {
-  return toast.info(message, {
-    ...options,
-    style: { ...baseStyle, ...hooxTypeStyles.info },
-    duration: options?.duration ?? TOAST_DURATION.DEFAULT,
-  });
+export function toastInfo(_message: string, _options?: ToastOptions): ToastId {
+  return nextId();
 }
 
 /**
  * Show a persistent loading toast notification.
- * Uses muted border (Colors.muted) and does NOT auto-dismiss.
- * Returns the toast ID so it can be updated to success/error later.
- *
- * @example
- * const id = toastLoading("Deploying worker...")
- * try {
- *   await deploy()
- *   toastSuccess("Deployed!", { id })
- * } catch {
- *   toastError("Deploy failed", { id })
- * }
+ * Currently a no-op (see module doc).
  */
 export function toastLoading(
-  message: string,
-  options?: Omit<ToastOptions, "duration">
+  _message: string,
+  _options?: Omit<ToastOptions, "duration">
 ): ToastId {
-  return toast.loading(message, {
-    ...options,
-    style: { ...baseStyle, ...hooxTypeStyles.loading },
-    duration: TOAST_DURATION.PERSISTENT,
-  } as ToastOptions);
+  return nextId();
 }
 
 /**
- * Dismiss a specific toast or all toasts.
- * Thin wrapper around toast.dismiss().
- *
- * @example
- * dismissToast(id)   // dismiss specific
- * dismissToast()     // dismiss all
+ * Dismiss a specific toast or all toasts (no-op).
  */
-export function dismissToast(id?: ToastId): void {
-  toast.dismiss(id as string | number | undefined);
+export function dismissToast(_id?: ToastId): void {
+  // no-op
 }
 
 // ── Clipboard copy feedback ────────────────────────────────────────────────
