@@ -5,6 +5,12 @@ This project adheres loosely to [Semantic Versioning](https://semver.org/).
 
 ## Unreleased
 
+## [0.11.9] — 2026-08-11
+
+### Fixed
+
+- **TUI global install crash** (`@hoox-sh/hoox-tui@0.3.2`): remove `@opentui-ui/dialog` (nested second OpenTUI core → `OPENTUI_FORCE_WCWIDTH` dual-register). In-house `DialogProvider` / `showConfirm` only.
+
 ## [0.11.8] — 2026-08-11
 
 ### Fixed

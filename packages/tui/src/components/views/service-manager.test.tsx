@@ -60,35 +60,16 @@ function makeWorker(overrides: Partial<WorkerInfo> = {}): WorkerInfo {
 /** Create a mock DialogHandle that records calls */
 function mockDialog(shouldConfirm: boolean = true): DialogHandle {
   return {
-    confirm: mock(
-      async (options: { content: unknown; closeOnClickOutside?: boolean }) => {
-        // Execute content to validate it renders
-        if (
-          typeof (options.content as (ctx: unknown) => unknown) === "function"
-        ) {
-          (
-            options.content as (ctx: {
-              resolve: (v: boolean) => void;
-            }) => unknown
-          )({
-            resolve: () => {},
-          });
-        }
-        return shouldConfirm;
-      }
-    ),
+    confirm: mock(async () => shouldConfirm),
     choice: async <K extends string>(options: {
-      content: unknown;
       fallback?: K;
-      closeOnClickOutside?: boolean;
-    }): Promise<K | undefined> => {
-      return options.fallback;
-    },
-    show: mock(
-      (_options: { content: () => unknown; id?: string | number }) =>
-        "loading-1"
-    ),
-    close: mock((_id?: string | number) => {}),
+    }): Promise<K | undefined> => options.fallback,
+    show: mock(() => "loading-1"),
+    close: mock(() => {}),
+    confirmSimple: mock(async () => shouldConfirm),
+    choiceSimple: async <K extends string>(options: {
+      fallback?: K;
+    }): Promise<K | undefined> => options.fallback,
   };
 }
 

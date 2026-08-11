@@ -20,7 +20,6 @@
  */
 import { useState, useEffect, useCallback } from "react";
 import { useKeyboard } from "@opentui/react";
-import { DialogProvider, useDialog } from "@opentui-ui/dialog/react";
 import { useServiceStore, useUIStore, Colors } from "@hoox-sh/hoox-shared";
 import { restoreSession, saveSession } from "@hoox-sh/hoox-shared";
 import type { ViewId } from "@hoox-sh/hoox-shared";
@@ -42,7 +41,11 @@ import {
   toastReconnectedMode,
 } from "./components/ui/connection-toasts";
 import { getRendererRef } from "./hooks";
-import type { DialogHandle } from "./components/ui/dialog";
+import {
+  DialogProvider,
+  useDialog,
+  type DialogHandle,
+} from "./components/ui/dialog";
 import {
   getViewFactory,
   getViewShortcutMap,
@@ -95,19 +98,14 @@ function quitApp(): void {
  */
 export function AppRoot({ safeMode = false }: { safeMode?: boolean }) {
   return (
-    <DialogProvider
-      size="medium"
-      backdropColor={Colors.backdrop}
-      backdropOpacity={0.35}
-    >
+    <DialogProvider>
       <AppRootInner safeMode={safeMode} />
     </DialogProvider>
   );
 }
 
 function AppRootInner({ safeMode = false }: { safeMode?: boolean }) {
-  // DialogProvider is required for useDialog; cast to our thin DialogHandle.
-  const dialog = useDialog() as unknown as DialogHandle;
+  const dialog = useDialog();
   const [restoring, setRestoring] = useState(true);
   const activeView = useUIStore((s) => s.activeView);
   const commandPaletteOpen = useUIStore((s) => s.commandPaletteOpen);

@@ -10,11 +10,12 @@
  */
 import { useKeyboard } from "@opentui/react";
 import { useUIStore } from "@hoox-sh/hoox-shared";
+import { isHooxDialogOpen } from "../components/ui/dialog-state";
 
-/** True when palette or a UI-store modal owns the keyboard. */
+/** True when palette, UI modal, or in-house DialogProvider owns the keyboard. */
 export function isShellOverlayOpen(): boolean {
   const s = useUIStore.getState();
-  return Boolean(s.commandPaletteOpen || s.modal);
+  return Boolean(s.commandPaletteOpen || s.modal || isHooxDialogOpen());
 }
 
 /** Key shape from OpenTUI; fields optional at the type boundary. */
