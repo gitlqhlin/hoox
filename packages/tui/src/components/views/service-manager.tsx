@@ -26,7 +26,11 @@
  */
 import { useState, useCallback, useEffect, useMemo, useRef } from "react";
 import { useServiceStore } from "@hoox-sh/hoox-shared/stores/service-store";
-import { Colors, ConnectionStatusColor } from "@hoox-sh/hoox-shared";
+import {
+  Colors,
+  ConnectionStatusColor,
+  useUIStore,
+} from "@hoox-sh/hoox-shared";
 import { StatusDot } from "../shared/status-dot";
 import { ErrorBoundary } from "../shared/error-boundary";
 import { EmptyState } from "../shared/spinner";
@@ -39,6 +43,7 @@ import { cliBridge } from "../../services/cli-bridge";
 import type { KillSwitchStatus } from "../../services/cli-bridge";
 import type { CliResult } from "../../types";
 import { redactSecretsInText } from "../../services/dev-log";
+import { useViewKeyboard } from "../../hooks/shell-overlay";
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 
@@ -262,6 +267,9 @@ interface WorkerControlListProps {
   onDeploy: (worker: WorkerInfo) => void;
   onRestart: (worker: WorkerInfo) => void;
   deployingWorker?: string | null;
+  /** Controlled selection (keyboard nav from parent). */
+  selectedIndex: number;
+  onSelect: (index: number) => void;
 }
 
 function WorkerControlList({
@@ -269,9 +277,9 @@ function WorkerControlList({
   onDeploy,
   onRestart,
   deployingWorker,
+  selectedIndex,
+  onSelect,
 }: WorkerControlListProps) {
-  const [selectedIndex, setSelectedIndex] = useState(0);
-
   return (
     <box flexDirection="column" flexGrow={1} gap={0}>
       {/* List header */}
@@ -317,7 +325,7 @@ function WorkerControlList({
               worker={worker}
               index={i}
               selectedIndex={selectedIndex}
-              onSelect={setSelectedIndex}
+              onSelect={onSelect}
               onDeploy={onDeploy}
               onRestart={onRestart}
               deployingWorker={deployingWorker}
@@ -325,6 +333,11 @@ function WorkerControlList({
           ))
         )}
       </scrollbox>
+      <box paddingLeft={1}>
+        <text fg={Colors.dim} dim>
+          ↑↓ · d/r deploy/restart · D/R all · Enter detail · k/e/u kill-switch
+        </text>
+      </box>
     </box>
   );
 }
@@ -427,6 +440,8 @@ function KillSwitchSection({ dialog, onAlert }: KillSwitchSectionProps) {
   const [error, setError] = useState<string | null>(null);
   const mountedRef = useRef(true);
   const loadingRef = useRef(false);
+  const activeView = useUIStore((s) => s.activeView);
+  const isActive = activeView === "service-manager";
 
   useEffect(() => {
     mountedRef.current = true;
@@ -555,64 +570,90 @@ function KillSwitchSection({ dialog, onAlert }: KillSwitchSectionProps) {
   const engageDisabled = loading || engaged;
   const releaseDisabled = loading || !engaged;
 
+  // Keyboard: k refresh · e engage · u release (confirm still required)
+  useViewKeyboard((key) => {
+    if (!isActive) return;
+    const name = String(key.name ?? "").toLowerCase();
+    if (name === "k") {
+      void refresh();
+      return;
+    }
+    if (name === "e" && !engageDisabled) {
+      void setEngaged(true);
+      return;
+    }
+    if (name === "u" && !releaseDisabled) {
+      void setEngaged(false);
+    }
+  });
+
   return (
     <Panel
       elevated={false}
       compact
       borderColor={engaged ? Colors.error : undefined}
     >
-      <box
-        flexDirection="row"
-        justifyContent="space-between"
-        alignItems="center"
-      >
-        {/* Status side — label, dot, state, timestamp */}
-        <box flexDirection="row" gap={1} alignItems="center">
-          <text fg={Colors.accent} bold>
-            KILL SWITCH
-          </text>
-          <StatusDot status={dotStatus} pulse={!engaged} />
-          <text fg={stateColor} bold>
-            {stateLabel}
-          </text>
-          {status && (
-            <text fg={Colors.muted} dim>
-              @ {formatKillSwitchTime(status.timestamp)}
+      <box flexDirection="column" gap={0}>
+        <box
+          flexDirection="row"
+          justifyContent="space-between"
+          alignItems="center"
+        >
+          {/* Status side — label, dot, state, timestamp */}
+          <box flexDirection="row" gap={1} alignItems="center">
+            <text fg={Colors.accent} bold>
+              KILL SWITCH
             </text>
-          )}
-          {error && (
-            <text fg={Colors.error} dim>
-              ! {error.length > 40 ? error.slice(0, 37) + "…" : error}
+            <StatusDot status={dotStatus} pulse={!engaged} />
+            <text fg={stateColor} bold>
+              {stateLabel}
             </text>
-          )}
-        </box>
+            {status && (
+              <text fg={Colors.muted} dim>
+                @ {formatKillSwitchTime(status.timestamp)}
+              </text>
+            )}
+            {error && (
+              <text fg={Colors.error} dim>
+                ! {error.length > 40 ? error.slice(0, 37) + "…" : error}
+              </text>
+            )}
+          </box>
 
-        {/* Action side — engage / release buttons + refresh */}
-        <box flexDirection="row" gap={2}>
-          <text
-            fg={Colors.muted}
-            bg={Colors.card}
-            onMouseUp={loading ? undefined : () => void refresh()}
-          >
-            {loading ? " ..." : " [REFRESH] "}
-          </text>
-          <text
-            fg={engageDisabled ? Colors.muted : Colors.error}
-            bg={engageDisabled ? undefined : Colors.card}
-            dim={engageDisabled}
-            onMouseUp={engageDisabled ? undefined : () => void setEngaged(true)}
-          >
-            {"  ENGAGE  "}
-          </text>
-          <text
-            fg={releaseDisabled ? Colors.muted : Colors.success}
-            bg={releaseDisabled ? undefined : Colors.card}
-            dim={releaseDisabled}
-            onMouseUp={
-              releaseDisabled ? undefined : () => void setEngaged(false)
-            }
-          >
-            {"  RELEASE  "}
+          {/* Action side — engage / release buttons + refresh */}
+          <box flexDirection="row" gap={2}>
+            <text
+              fg={Colors.muted}
+              bg={Colors.card}
+              onMouseUp={loading ? undefined : () => void refresh()}
+            >
+              {loading ? " ..." : " [REFRESH] "}
+            </text>
+            <text
+              fg={engageDisabled ? Colors.muted : Colors.error}
+              bg={engageDisabled ? undefined : Colors.card}
+              dim={engageDisabled}
+              onMouseUp={
+                engageDisabled ? undefined : () => void setEngaged(true)
+              }
+            >
+              {"  ENGAGE  "}
+            </text>
+            <text
+              fg={releaseDisabled ? Colors.muted : Colors.success}
+              bg={releaseDisabled ? undefined : Colors.card}
+              dim={releaseDisabled}
+              onMouseUp={
+                releaseDisabled ? undefined : () => void setEngaged(false)
+              }
+            >
+              {"  RELEASE  "}
+            </text>
+          </box>
+        </box>
+        <box paddingLeft={1}>
+          <text fg={Colors.dim} dim>
+            k refresh · e engage · u release
           </text>
         </box>
       </box>
@@ -626,10 +667,13 @@ export function ServiceManager({ dialog }: ServiceManagerProps) {
   // Subscribe to workers from the service store
   const workers = useServiceStore((s) => s.workers);
   const connectionStatus = useServiceStore((s) => s.connectionStatus);
+  const activeView = useUIStore((s) => s.activeView);
+  const isActive = activeView === "service-manager";
 
   // Deploy/restart tracking state
   const [deployingWorker, setDeployingWorker] = useState<string | null>(null);
   const [deployProgress, setDeployProgress] = useState("");
+  const [selectedIndex, setSelectedIndex] = useState(0);
   const mountedRef = useRef(true);
   const deployingRef = useRef(false);
 
@@ -639,6 +683,13 @@ export function ServiceManager({ dialog }: ServiceManagerProps) {
       mountedRef.current = false;
     };
   }, []);
+
+  // Keep selection in range when worker list changes
+  useEffect(() => {
+    setSelectedIndex((i) =>
+      workers.length === 0 ? 0 : Math.min(i, workers.length - 1)
+    );
+  }, [workers.length]);
 
   // Edge count from worker telemetry only — never invent a marketing "275+".
   const totalEdgeCount = useMemo(
@@ -866,6 +917,47 @@ export function ServiceManager({ dialog }: ServiceManagerProps) {
     }
   }, [dialog, workers.length, onProgress, addResultAlert, blockWithoutDialog]);
 
+  // ── Keyboard: list nav + deploy/restart (overlay-safe) ─────────────────
+  useViewKeyboard((key) => {
+    if (!isActive) return;
+    const name = String(key.name ?? "").toLowerCase();
+    const selected = workers[selectedIndex];
+
+    if (name === "up") {
+      setSelectedIndex((i) => Math.max(0, i - 1));
+      return;
+    }
+    if (name === "down") {
+      setSelectedIndex((i) => Math.min(Math.max(0, workers.length - 1), i + 1));
+      return;
+    }
+    // Enter → worker detail
+    if (name === "return" || name === "enter") {
+      if (selected) {
+        useServiceStore.getState().selectWorker(selected.id);
+        useUIStore.getState().setView("worker-detail");
+      }
+      return;
+    }
+    // d → deploy selected · r → restart selected (lowercase)
+    if (name === "d" && !key.shift) {
+      if (selected) void handleDeploy(selected);
+      return;
+    }
+    if (name === "r" && !key.shift) {
+      if (selected) void handleRestart(selected);
+      return;
+    }
+    // Shift+D / Shift+R → bulk (OpenTUI may report name "d" with shift)
+    if (name === "d" && key.shift) {
+      void handleDeployAll();
+      return;
+    }
+    if (name === "r" && key.shift) {
+      void handleRestartAll();
+    }
+  });
+
   // ── Render ──────────────────────────────────────────────────────────────
   return (
     <ErrorBoundary viewName="Service Manager">
@@ -909,6 +1001,8 @@ export function ServiceManager({ dialog }: ServiceManagerProps) {
               onDeploy={handleDeploy}
               onRestart={handleRestart}
               deployingWorker={deployingWorker}
+              selectedIndex={selectedIndex}
+              onSelect={setSelectedIndex}
             />
           </Panel>
 

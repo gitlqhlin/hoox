@@ -42,27 +42,43 @@ export function Sidebar() {
       </CoolBrackets>
       <text fg={Colors.dim}>─────────────────</text>
 
-      {/* Navigation items (registry order) */}
+      {/* Navigation items (registry order) — shortcut from registry */}
       {SIDEBAR_ITEMS.map((item) => {
         const isActive = item.id === activeView;
+        // Pad label so shortcut sits right-aligned in the fixed-width rail
+        const shortcutHint = item.shortcut;
         return (
-          <box flexDirection="row" gap={1} key={item.id}>
-            {isActive ? <CoolGlyph char="▸" /> : <text fg={Colors.dim}> </text>}
-            <text
-              fg={isActive ? Colors.accent : Colors.muted}
-              bold={isActive}
-              onMouseUp={() => setView(item.id)}
-            >
-              {item.label}
+          <box
+            flexDirection="row"
+            gap={1}
+            key={item.id}
+            justifyContent="space-between"
+          >
+            <box flexDirection="row" gap={1} flexGrow={1}>
+              {isActive ? (
+                <CoolGlyph char="▸" />
+              ) : (
+                <text fg={Colors.dim}> </text>
+              )}
+              <text
+                fg={isActive ? Colors.accent : Colors.muted}
+                bold={isActive}
+                onMouseUp={() => setView(item.id)}
+              >
+                {item.label}
+              </text>
+            </box>
+            <text fg={Colors.dim} dim>
+              {shortcutHint}
             </text>
           </box>
         );
       })}
 
-      {/* Shortcut hints — digits are Ctrl; letter chords are Ctrl+Alt */}
+      {/* Shortcut legend — digits are Ctrl; ^X chords are Ctrl+Alt */}
       <box flexGrow={1} />
       <text fg={Colors.dim} dim>
-        Ctrl+0-9 · Ctrl+Alt+…
+        1-9 Ctrl · ^X Ctrl+Alt
       </text>
     </box>
   );

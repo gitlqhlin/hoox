@@ -14,7 +14,7 @@
  * status indicators matching the landing page's HUD-style status display.
  */
 import { useState, useEffect, useCallback, useRef } from "react";
-import { useKeyboard } from "@opentui/react";
+
 import { Colors, useServiceStore } from "@hoox-sh/hoox-shared";
 import { useConfigStore } from "@hoox-sh/hoox-shared";
 import { useUIStore } from "@hoox-sh/hoox-shared";
@@ -24,6 +24,7 @@ import { showConfirm } from "../ui/dialog";
 import type { DialogHandle } from "../ui/dialog";
 import { cliBridge } from "../../services/cli-bridge";
 import { resolveTuiStatePath } from "../../services/hoox-path-service";
+import { useViewKeyboard } from "../../hooks/shell-overlay";
 
 // ─── Prerequisite Check Types ───────────────────────────────────────────────
 
@@ -660,7 +661,10 @@ export function SetupWizard({ dialog }: SetupWizardProps) {
     }
   };
 
-  /** Deploy: write config, run hoox deploy all, navigate on success */
+  /**
+   * Deploy: persist exchange flags + run `hoox deploy all`.
+   * Secrets/API keys are NOT collected here — operators set them via CLI first.
+   */
   const handleDeploy = async () => {
     try {
       const activeExchanges = Object.entries(data.exchanges)
@@ -684,7 +688,8 @@ export function SetupWizard({ dialog }: SetupWizardProps) {
       }
       const confirmed = await showConfirm(dialog, {
         title: "Deploy Configuration",
-        message: "Save setup and apply configuration to Cloudflare?",
+        message:
+          "Deploy with current exchange flags? Secrets must already be set via CLI (hoox config secrets set …).",
         confirmLabel: "Deploy",
         cancelLabel: "Cancel",
       });
@@ -725,10 +730,14 @@ export function SetupWizard({ dialog }: SetupWizardProps) {
   };
 
   // ── Keyboard navigation (only when Setup Wizard is active) ──────────────
-  useKeyboard((key) => {
+  // Note: Ctrl+P is reserved for the global command palette — do not steal it.
+  useViewKeyboard((key) => {
     if (!isActive) return;
+    if (useUIStore.getState().commandPaletteOpen || useUIStore.getState().modal)
+      return;
     if (key.name === "right" || (key.ctrl && key.name === "n")) handleNext();
-    if (key.name === "left" || (key.ctrl && key.name === "p")) handleBack();
+    // Back: ← only (Ctrl+P opens the palette globally)
+    if (key.name === "left") handleBack();
     if (key.name === "escape") handleBack();
     if (key.name === "tab" && key.shift) handleBack();
     if (key.name === "r" && step === 0) runChecks();
@@ -745,26 +754,35 @@ export function SetupWizard({ dialog }: SetupWizardProps) {
     );
   };
 
-  // ── Masked input for secrets ────────────────────────────────────────────
+  // ── Secret fields — CLI-only (TUI does not collect secrets interactively)
   const SecretField = ({
     label,
     value,
-    path,
+    path: _path,
+    cliHint,
     width,
   }: {
     label: string;
     value: string;
     path: string;
+    /** Shown when empty so operators know how to set the secret. */
+    cliHint?: string;
     width?: number;
   }) => (
-    <box flexDirection="row" gap={1}>
-      <text fg={Colors.muted} width={16}>
-        {label}
-      </text>
-      <text fg={value ? Colors.muted : Colors.dim} width={width ?? 24}>
-        {value ? maskSecret(value) : "(not set)"}
-      </text>
-      <ValidationIcon fieldPath={path} />
+    <box flexDirection="column" gap={0}>
+      <box flexDirection="row" gap={1}>
+        <text fg={Colors.muted} width={16}>
+          {label}
+        </text>
+        <text fg={value ? Colors.muted : Colors.dim} width={width ?? 24}>
+          {value ? maskSecret(value) : "(set via CLI)"}
+        </text>
+      </box>
+      {!value && cliHint ? (
+        <text fg={Colors.dim} dim>
+          {`  → ${cliHint}`}
+        </text>
+      ) : null}
     </box>
   );
 
@@ -891,14 +909,17 @@ export function SetupWizard({ dialog }: SetupWizardProps) {
 
   // ── Step Content Renderers (shifted: old step N is now step N+1) ────────
 
-  /** Step 1: API Keys */
+  /** Step 1: API Keys — CLI-only; TUI never prompts for secret material */
   const StepApiKeys = () => (
     <box flexDirection="column" gap={0}>
       <text bold fg={Colors.accent}>
         Exchange API Keys
       </text>
       <text dim fg={Colors.muted}>
-        Enter your exchange API credentials. Secrets are stored encrypted.
+        Secrets are not entered in the TUI. Set them via CLI, then continue.
+      </text>
+      <text dim fg={Colors.dim}>
+        hoox config secrets set BINANCE_API_KEY · etc.
       </text>
       <box flexDirection="column" gap={1} paddingTop={1}>
         {EXCHANGES.map((name) => {
@@ -912,11 +933,13 @@ export function SetupWizard({ dialog }: SetupWizardProps) {
                 label="  API Key"
                 value={data.apiKeys[e].key}
                 path={`apiKeys.${e}.key`}
+                cliHint={`hoox config secrets set ${name.toUpperCase()}_API_KEY`}
               />
               <SecretField
                 label="  API Secret"
                 value={data.apiKeys[e].secret}
                 path={`apiKeys.${e}.secret`}
+                cliHint={`hoox config secrets set ${name.toUpperCase()}_API_SECRET`}
               />
             </box>
           );
@@ -946,14 +969,17 @@ export function SetupWizard({ dialog }: SetupWizardProps) {
     </box>
   );
 
-  /** Step 3: AI Providers */
+  /** Step 3: AI Providers — URL/key via CLI/env; deploy only applies exchange flags */
   const StepAiProviders = () => (
     <box flexDirection="column" gap={0}>
       <text bold fg={Colors.accent}>
         AI Provider
       </text>
       <text dim fg={Colors.muted}>
-        Configure the AI endpoint for strategy generation.
+        Configure AI credentials via CLI/env (not typed in this wizard).
+      </text>
+      <text dim fg={Colors.dim}>
+        HOOX_API_TOKEN · hoox config secrets set OPENAI_API_KEY
       </text>
       <box flexDirection="column" gap={1} paddingTop={1}>
         <box flexDirection="row" gap={1}>
@@ -961,15 +987,20 @@ export function SetupWizard({ dialog }: SetupWizardProps) {
             Provider URL
           </text>
           <text fg={data.ai.providerUrl ? Colors.foreground : Colors.dim}>
-            {data.ai.providerUrl || "(not set)"}
+            {data.ai.providerUrl || "(set via CLI/env)"}
           </text>
         </box>
-        <SecretField label="API Key" value={data.ai.apiKey} path="ai.apiKey" />
+        <SecretField
+          label="API Key"
+          value={data.ai.apiKey}
+          path="ai.apiKey"
+          cliHint="hoox config secrets set OPENAI_API_KEY"
+        />
         <box flexDirection="row" gap={1}>
           <text fg={Colors.muted} width={12}>
             Model
           </text>
-          <text fg={Colors.foreground}>{data.ai.model}</text>
+          <text fg={Colors.foreground}>{data.ai.model || "default"}</text>
         </box>
       </box>
     </box>

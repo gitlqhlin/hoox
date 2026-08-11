@@ -227,23 +227,32 @@ async function installNetworkDoubles(): Promise<void> {
     subscribeSSE: subscribeSSEMock,
   });
 
-  // From packages/tui/src → ../../shared/src (sibling package)
+  // From packages/tui/src → ../../shared (sibling package). Cover both source
+  // and dist (package exports point at dist/stores/* for store imports).
   const apiPaths = [
     new URL("../../shared/src/api-client.ts", import.meta.url).href,
     new URL("../../shared/src/api-client.ts", import.meta.url).pathname,
+    new URL("../../shared/dist/api-client.js", import.meta.url).href,
+    new URL("../../shared/dist/api-client.js", import.meta.url).pathname,
     "@hoox-sh/hoox-shared/api-client",
-    // Relative as resolved from packages/shared/src/stores/service-store.ts
+    // Relative as resolved from packages/shared/src|dist/stores/service-store
     "../api-client",
     "../api-client.ts",
+    "../api-client.js",
     "../../../../packages/shared/src/api-client",
+    "../../../../packages/shared/dist/api-client.js",
   ];
   const ssePaths = [
     new URL("../../shared/src/sse.ts", import.meta.url).href,
     new URL("../../shared/src/sse.ts", import.meta.url).pathname,
+    new URL("../../shared/dist/sse.js", import.meta.url).href,
+    new URL("../../shared/dist/sse.js", import.meta.url).pathname,
     "@hoox-sh/hoox-shared/sse",
     "../sse",
     "../sse.ts",
+    "../sse.js",
     "../../../../packages/shared/src/sse",
+    "../../../../packages/shared/dist/sse.js",
   ];
 
   for (const p of apiPaths) {

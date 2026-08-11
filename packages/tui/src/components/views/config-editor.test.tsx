@@ -105,9 +105,11 @@ describe("ConfigEditor", () => {
       expect(CONFIG_TREE_BLUEPRINT[0].type).toBe("directory");
     });
 
-    it("contains all 5 top-level entries in config/", async () => {
+    it("contains config files without secret-like .env entries", async () => {
       const children = CONFIG_TREE_BLUEPRINT[0].children!;
-      expect(children.length).toBe(5); // wrangler.toml, trade.config.json, risk.config.json, strategies, .env
+      // wrangler.toml, trade.config.json, risk.config.json, strategies (no .env)
+      expect(children.length).toBe(4);
+      expect(children.some((c) => c.name === ".env")).toBe(false);
     });
 
     it("strategies directory has 3 config files", async () => {

@@ -33,7 +33,7 @@
 import { existsSync } from "node:fs";
 import { isAbsolute, relative, resolve as pathResolve } from "node:path";
 import { useState, useCallback, useMemo, useRef, useEffect } from "react";
-import { useKeyboard } from "@opentui/react";
+
 import {
   Colors,
   getHooxRepoPath,
@@ -60,6 +60,7 @@ import {
   formatContent,
 } from "./config-editor/code-editor";
 import { ActionBar } from "./config-editor/action-bar";
+import { useViewKeyboard } from "../../hooks/shell-overlay";
 
 // Re-export extracted types and functions for backward compatibility
 export type {
@@ -134,7 +135,8 @@ export const CONFIG_TREE_BLUEPRINT: FileNode[] = [
           },
         ],
       },
-      { name: ".env", path: "config/.env", type: "file" },
+      // .env intentionally omitted — secret material must not be shown in-pane.
+      // Operators edit env files externally (or via `hoox config secrets …`).
     ],
   },
 ];
@@ -272,7 +274,28 @@ export function resolveConfigFilePath(relativePath: string): string {
  * Read a config file from disk.
  * Enforces path safety + max size. Returns empty string if missing.
  */
+/** True for secret-like paths that must never be rendered in the TUI. */
+export function isSecretConfigPath(relativePath: string): boolean {
+  const base = relativePath.replace(/\\/g, "/").split("/").pop() ?? "";
+  const lower = base.toLowerCase();
+  return (
+    lower === ".env" ||
+    lower.startsWith(".env.") ||
+    lower.endsWith(".pem") ||
+    lower.endsWith(".key") ||
+    lower.includes("secret") ||
+    lower.includes("credentials")
+  );
+}
+
 async function loadFileContent(relativePath: string): Promise<string> {
+  if (isSecretConfigPath(relativePath)) {
+    return (
+      `# ${relativePath}\n` +
+      `# BLOCKED: secret-like files are not displayed in the TUI.\n` +
+      `# Edit externally or use: hoox config secrets set <NAME>\n`
+    );
+  }
   let fullPath: string;
   try {
     fullPath = resolveConfigFilePath(relativePath);
@@ -311,6 +334,11 @@ async function saveFileContent(
   relativePath: string,
   content: string
 ): Promise<void> {
+  if (isSecretConfigPath(relativePath)) {
+    throw new Error(
+      `Refuse to write secret-like path from TUI: ${relativePath}`
+    );
+  }
   if (content.length > MAX_CONFIG_FILE_BYTES) {
     throw new Error(
       `Content exceeds max size (${MAX_CONFIG_FILE_BYTES} bytes); refuse to write`
@@ -548,7 +576,7 @@ export function ConfigEditor() {
 
   // ── Keyboard (only when this view is active) ───────────────────────────
 
-  useKeyboard((key) => {
+  useViewKeyboard((key) => {
     if (!isActive) return;
     if (key.ctrl && key.name === "z") {
       handleUndo();

@@ -48,13 +48,14 @@
  *     while the table shows the filtered count.
  */
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { useKeyboard } from "@opentui/react";
+
 import { Colors, useUIStore } from "@hoox-sh/hoox-shared";
 import { ErrorBoundary } from "../shared/error-boundary";
 import { Spinner, EmptyState } from "../shared/spinner";
 import { ViewHeader } from "../shared/view-header";
 import { cliBridge } from "../../services/cli-bridge";
 import type { KvKey, KvKeySnapshot } from "../../services/cli-bridge";
+import { useViewKeyboard } from "../../hooks/shell-overlay";
 
 /** Auto-refresh interval in milliseconds. */
 export const REFRESH_INTERVAL_MS = 5_000;
@@ -307,7 +308,7 @@ function SearchBox({
   onActivate,
   onDeactivate,
 }: SearchBoxProps) {
-  useKeyboard((key) => {
+  useViewKeyboard((key) => {
     if (!active) return;
     if (key.name === "escape") {
       onDeactivate();
@@ -494,7 +495,7 @@ export function KvViewer() {
   }, []);
 
   // ── Global keyboard handling (active only when this view is on top) ──
-  useKeyboard((key) => {
+  useViewKeyboard((key) => {
     if (!isActive) return;
     if (searchActive) return; // SearchBox handles its own keys.
     if (key.name === "slash" || (key.ctrl && key.name === "f")) {

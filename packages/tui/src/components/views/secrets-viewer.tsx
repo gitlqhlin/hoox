@@ -42,7 +42,7 @@
  *   - No ability to reveal or copy secret values
  */
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { useKeyboard } from "@opentui/react";
+
 import { Colors, useUIStore } from "@hoox-sh/hoox-shared";
 import { ErrorBoundary } from "../shared/error-boundary";
 import { Spinner, EmptyState } from "../shared/spinner";
@@ -52,6 +52,7 @@ import type {
   SecretMetadata,
   SecretsSnapshot,
 } from "../../services/cli-bridge";
+import { useViewKeyboard } from "../../hooks/shell-overlay";
 
 /** Auto-refresh interval in milliseconds. */
 export const REFRESH_INTERVAL_MS = 5_000;
@@ -144,7 +145,7 @@ function SearchBox({
   onDeactivate,
 }: SearchBoxProps) {
   // When active, capture printable keys for filtering (same pattern as KV Viewer).
-  useKeyboard((key) => {
+  useViewKeyboard((key) => {
     if (!active) return;
     if (key.name === "escape") {
       onDeactivate();
@@ -291,7 +292,7 @@ export function SecretsViewer() {
   }, [allSecrets, selectedSecretName]);
 
   // ── Keyboard: list nav + open search (inactive while search is active) ───
-  useKeyboard((key) => {
+  useViewKeyboard((key) => {
     if (!isActive) return;
     if (searchActive) return; // SearchBox owns keys while active
     if (key.name === "slash" || (key.ctrl && key.name === "f")) {

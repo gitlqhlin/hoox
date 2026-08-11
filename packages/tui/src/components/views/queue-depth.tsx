@@ -35,7 +35,7 @@
  *   - unknown   → Colors.muted    (gray)
  */
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { useKeyboard } from "@opentui/react";
+
 import { Colors, useUIStore } from "@hoox-sh/hoox-shared";
 import { ErrorBoundary } from "../shared/error-boundary";
 import { Spinner, EmptyState } from "../shared/spinner";
@@ -43,6 +43,7 @@ import { ViewHeader } from "../shared/view-header";
 import { Panel } from "../shared/panel";
 import { cliBridge } from "../../services/cli-bridge";
 import type { QueueDepth, QueueDepthStatus } from "../../services/cli-bridge";
+import { useViewKeyboard } from "../../hooks/shell-overlay";
 
 /** Auto-refresh interval in milliseconds. */
 export const REFRESH_INTERVAL_MS = 5_000;
@@ -265,7 +266,7 @@ export function QueueDepthView() {
   }, [isActive, refresh]);
 
   // Keyboard: r / F5 manual refresh while active
-  useKeyboard((key) => {
+  useViewKeyboard((key) => {
     if (!isActive) return;
     if (key.name === "r" || key.name === "f5") {
       void refresh({ soft: false });

@@ -145,7 +145,8 @@ describe("DashboardView", () => {
     });
     const output = await renderDashboard();
     expect(output).toContain("only-worker");
-    const dashCount = (output.match(/—/g) ?? []).length;
+    // Empty slots render single-dash placeholders
+    const dashCount = (output.match(/(?:^|\s)-\s/g) ?? []).length;
     expect(dashCount).toBeGreaterThan(0);
   });
 

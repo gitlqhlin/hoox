@@ -12,6 +12,7 @@
  * Colors use Hoox design tokens — no hardcoded hex.
  */
 import { Component, type ReactNode } from "react";
+import { useKeyboard } from "@opentui/react";
 import { Colors } from "@hoox-sh/hoox-shared";
 import { redactSecretsInText } from "../../services/dev-log";
 
@@ -37,6 +38,56 @@ export function formatBoundaryErrorMessage(error: Error, maxLen = 160): string {
     : scrubbed;
 }
 
+/** Keyboard + mouse retry chrome (hooks require a function component). */
+function ErrorRecoveryPanel({
+  viewName,
+  message,
+  onRetry,
+}: {
+  viewName: string;
+  message: string;
+  onRetry: () => void;
+}) {
+  useKeyboard((key) => {
+    const name = String(key.name ?? "").toLowerCase();
+    if (name === "return" || name === "enter" || name === "r") {
+      onRetry();
+    }
+  });
+
+  return (
+    <box
+      flexDirection="column"
+      padding={2}
+      gap={1}
+      border={true}
+      borderStyle="single"
+      borderColor={Colors.border}
+      backgroundColor={Colors.card}
+    >
+      <box flexDirection="row" gap={1}>
+        <text fg={Colors.error} bold>
+          ⚠
+        </text>
+        <text fg={Colors.error} bold>
+          Failed to load {viewName}
+        </text>
+      </box>
+
+      <text fg={Colors.muted}>{message}</text>
+
+      <box paddingTop={1} flexDirection="row" gap={2}>
+        <text fg={Colors.accent} bg={Colors.card} onMouseUp={onRetry}>
+          {"  [Retry]  "}
+        </text>
+        <text fg={Colors.dim} dim>
+          Enter / R
+        </text>
+      </box>
+    </box>
+  );
+}
+
 // ── Component ──────────────────────────────────────────────────────────────
 
 export class ErrorBoundary extends Component<
@@ -58,39 +109,11 @@ export class ErrorBoundary extends Component<
     if (this.state.error) {
       const message = formatBoundaryErrorMessage(this.state.error);
       return (
-        <box
-          flexDirection="column"
-          padding={2}
-          gap={1}
-          border={true}
-          borderStyle="single"
-          borderColor={Colors.border}
-          backgroundColor={Colors.card}
-        >
-          {/* Header: view name + error indicator */}
-          <box flexDirection="row" gap={1}>
-            <text fg={Colors.error} bold>
-              ⚠
-            </text>
-            <text fg={Colors.error} bold>
-              Failed to load {this.props.viewName}
-            </text>
-          </box>
-
-          {/* Error message (redacted, first line only) */}
-          <text fg={Colors.muted}>{message}</text>
-
-          {/* Retry action */}
-          <box paddingTop={1}>
-            <text
-              fg={Colors.accent}
-              bg={Colors.card}
-              onMouseUp={this.handleRetry}
-            >
-              {"  [Retry]  "}
-            </text>
-          </box>
-        </box>
+        <ErrorRecoveryPanel
+          viewName={this.props.viewName}
+          message={message}
+          onRetry={this.handleRetry}
+        />
       );
     }
 

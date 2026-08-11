@@ -4,8 +4,11 @@
  */
 
 /**
- * Config Store — User preferences persisted to ~/.hoox/config.json.
- * Follows TUI Pattern 2: Store Subscription with selectors.
+ * Config Store — TUI user preferences persisted under
+ * `$HOOX_HOME/.tui-state/preferences.json` (never operator `config.json`).
+ *
+ * Operator secrets (`apiToken`, transport, …) live in `~/.hoox/config.json`
+ * via `config.ts` and must not share a write path with this store.
  *
  * Middleware ordering (innermost first → outermost last):
  *   1. immer           (enables mutable-style updates)
@@ -15,52 +18,114 @@ import { create } from "zustand";
 import { immer } from "zustand/middleware/immer";
 import { persist, createJSONStorage } from "zustand/middleware";
 import type { StateStorage } from "zustand/middleware";
-import { chmodSync, mkdirSync, existsSync } from "node:fs";
-import { homedir } from "node:os";
+import { chmodSync, mkdirSync, existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import type { ViewId, LogFilter, NotificationPreferences } from "../types";
 import { HOOX_CONFIG_FILE_MODE, HOOX_DIR_MODE } from "../config";
+import { getHooxHome } from "../path-utils";
+
+// ─── Paths ───────────────────────────────────────────────────────────────────
+
+/** TUI prefs file — isolated from operator config.json (which may hold apiToken). */
+export function getTuiPreferencesPath(): string {
+  return join(getHooxHome(), ".tui-state", "preferences.json");
+}
+
+/** Legacy path that accidentally shared the operator config file. */
+function getLegacyConfigJsonPath(): string {
+  return join(getHooxHome(), "config.json");
+}
+
+/**
+ * Detect a Zustand-persist envelope written into config.json by older TUI
+ * builds. Operator HooxConfig is a flat object (apiUrl/apiToken/…); the
+ * persist envelope is `{ state: { theme, … }, version?: number }`.
+ */
+function extractZustandPrefsPayload(raw: string): string | null {
+  try {
+    const parsed = JSON.parse(raw) as {
+      state?: Record<string, unknown>;
+      version?: number;
+    };
+    if (
+      parsed &&
+      typeof parsed === "object" &&
+      parsed.state &&
+      typeof parsed.state === "object" &&
+      !Array.isArray(parsed.state) &&
+      // Heuristic: TUI prefs always have theme or refreshIntervalMs
+      ("theme" in parsed.state || "refreshIntervalMs" in parsed.state) &&
+      // Operator config has apiToken at top level — envelope does not
+      !("apiToken" in parsed)
+    ) {
+      return raw;
+    }
+  } catch {
+    // ignore
+  }
+  return null;
+}
 
 // ─── Custom Bun Filesystem Storage ───────────────────────────────────────────
 
 /**
- * StateStorage adapter that persists to ~/.hoox/config.json using Bun's
- * native filesystem APIs. The `name` key is ignored — the file path is fixed.
- * Files are tightened to owner-only mode (may contain tokens / prefs).
+ * StateStorage adapter that persists TUI prefs to
+ * `$HOOX_HOME/.tui-state/preferences.json`. The Zustand `name` key is ignored
+ * — the file path is fixed. Migrates once from a mis-written Zustand envelope
+ * in the legacy `config.json` path without overwriting operator secrets.
  */
 const bunConfigStorage: StateStorage = {
   getItem: async (_name: string): Promise<string | null> => {
     try {
-      const file = Bun.file(join(homedir(), ".hoox", "config.json"));
-      const exists = await file.exists();
-      if (!exists) return null;
-      return await file.text();
+      const prefsPath = getTuiPreferencesPath();
+      const prefsFile = Bun.file(prefsPath);
+      if (await prefsFile.exists()) {
+        return await prefsFile.text();
+      }
+
+      // One-shot migration: older builds wrote Zustand envelope into config.json
+      const legacyPath = getLegacyConfigJsonPath();
+      if (existsSync(legacyPath)) {
+        const legacyRaw = readFileSync(legacyPath, "utf-8");
+        const envelope = extractZustandPrefsPayload(legacyRaw);
+        if (envelope) {
+          // Persist to the correct location so setItem never touches config.json
+          await bunConfigStorage.setItem(_name, envelope);
+          return envelope;
+        }
+      }
+      return null;
     } catch {
       return null;
     }
   },
 
   setItem: async (_name: string, value: string): Promise<void> => {
-    const dir = join(homedir(), ".hoox");
-    if (!existsSync(dir)) {
-      mkdirSync(dir, { recursive: true, mode: HOOX_DIR_MODE });
+    const home = getHooxHome();
+    const stateDir = join(home, ".tui-state");
+    if (!existsSync(home)) {
+      mkdirSync(home, { recursive: true, mode: HOOX_DIR_MODE });
+    }
+    if (!existsSync(stateDir)) {
+      mkdirSync(stateDir, { recursive: true, mode: HOOX_DIR_MODE });
     }
     try {
-      chmodSync(dir, HOOX_DIR_MODE);
+      chmodSync(home, HOOX_DIR_MODE);
+      chmodSync(stateDir, HOOX_DIR_MODE);
     } catch {
-      // ignore
+      // ignore — platform may not support chmod
     }
-    const filePath = join(dir, "config.json");
+    const filePath = getTuiPreferencesPath();
     await Bun.write(filePath, value);
     try {
       chmodSync(filePath, HOOX_CONFIG_FILE_MODE);
     } catch {
-      // ignore — platform may not support chmod
+      // ignore
     }
   },
 
   removeItem: async (_name: string): Promise<void> => {
-    // Config is never removed — only reset to defaults
+    // Prefs are never removed — only reset to defaults
   },
 };
 
@@ -182,7 +247,7 @@ export const useConfigStore = create<ConfigState & ConfigActions>()(
         }),
     })),
     {
-      name: "hoox-config",
+      name: "hoox-tui-prefs",
       storage: createJSONStorage(() => bunConfigStorage),
       // Only persist these fields (exclude derived/computed if any added later)
       partialize: (state) => ({

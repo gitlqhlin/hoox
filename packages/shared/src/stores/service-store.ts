@@ -123,6 +123,12 @@ interface ServiceActions {
   stopStreams: () => void;
   addAlert: (alert: Alert) => void;
   addAlerts: (alerts: Alert[]) => void;
+  /** Mark a single alert as acknowledged (UI triage). */
+  acknowledgeAlert: (id: string) => void;
+  /** Remove a single alert from the ring buffer. */
+  dismissAlert: (id: string) => void;
+  /** Clear the local log ring buffer (TUI display only). */
+  clearLogs: () => void;
   setConnectionStatus: (status: ConnectionStatus) => void;
   selectWorker: (id: string | null) => void;
   setWorkers: (workers: WorkerInfo[]) => void;
@@ -166,6 +172,34 @@ interface ServiceActions {
 let tradeStreamAbort: (() => void) | null = null;
 let logStreamAbort: (() => void) | null = null;
 let fetchWorkersGeneration = 0;
+/** Active reconnect timer — drives real backoff retries (not display-only). */
+let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
+
+function clearReconnectTimer(): void {
+  if (reconnectTimer !== null) {
+    clearTimeout(reconnectTimer);
+    reconnectTimer = null;
+  }
+}
+
+/**
+ * Schedule a real `fetchWorkers` after `delayMs`. Only fires while the
+ * store is still in reconnecting/polling; success/offline clears the timer.
+ * `delayMs` may be 0 (next macrotask) for forceRetry immediate recovery.
+ */
+function scheduleReconnect(delayMs: number): void {
+  clearReconnectTimer();
+  if (delayMs < 0) return;
+  reconnectTimer = setTimeout(() => {
+    reconnectTimer = null;
+    // Lazy import of store via closure — get() is not available here, so
+    // callers must use the store singleton after create().
+    void scheduledReconnectTick();
+  }, delayMs);
+}
+
+/** Bound after store creation so the timer can call fetchWorkers. */
+let scheduledReconnectTick: () => Promise<void> = async () => {};
 
 // ─── Buffer Caps ─────────────────────────────────────────────────────────────
 
@@ -219,6 +253,7 @@ export const useServiceStore = create<ServiceState & ServiceActions>()(
         const data = await hooxFetch<WorkerInfo[]>("/v1/workers");
         // Drop stale responses when a newer fetchWorkers() started
         if (gen !== fetchWorkersGeneration) return;
+        clearReconnectTimer();
         set((state) => {
           state.workers = data;
           state.lastUpdated = Date.now();
@@ -249,6 +284,7 @@ export const useServiceStore = create<ServiceState & ServiceActions>()(
           timestamp: Date.now(),
           acknowledged: false,
         });
+        let nextDelay = 0;
         set((state) => {
           // Always surface the failure reason (incl. auth) for status bar / toasts
           state.lastError = msg;
@@ -265,22 +301,27 @@ export const useServiceStore = create<ServiceState & ServiceActions>()(
             // Check if backoff exhausted — transition to offline
             if (state.retryCount >= MAX_RETRIES) {
               state.connectionStatus = "offline";
-              state.lastError = `Connection lost after ${MAX_RETRIES} retries`;
+              // Preserve root-cause message; append retry exhaustion note
+              state.lastError = `${msg} (gave up after ${MAX_RETRIES} retries)`;
+              state.reconnectDelay = 0;
             } else {
               state.reconnectDelay = getBackoffDelay(state.retryCount);
+              nextDelay = state.reconnectDelay;
             }
           } else if (state.connectionStatus === "reconnecting") {
             state.retryCount = state.retryCount + 1;
             if (state.retryCount >= MAX_RETRIES) {
               state.connectionStatus = "offline";
-              state.lastError = `Connection lost after ${MAX_RETRIES} retries`;
+              state.lastError = `${msg} (gave up after ${MAX_RETRIES} retries)`;
               state.reconnectDelay = 0;
             } else {
               state.reconnectDelay = getBackoffDelay(state.retryCount);
+              nextDelay = state.reconnectDelay;
             }
           }
           // offline: stay offline with lastError set (startup / remote miss)
         });
+        if (nextDelay > 0) scheduleReconnect(nextDelay);
       }
     },
 
@@ -363,6 +404,25 @@ export const useServiceStore = create<ServiceState & ServiceActions>()(
             : merged;
       }),
 
+    // ── Sync: acknowledge a single alert ───────────────────────────────────
+    acknowledgeAlert: (id) =>
+      set((state) => {
+        const hit = state.alerts.find((a) => a.id === id);
+        if (hit) hit.acknowledged = true;
+      }),
+
+    // ── Sync: dismiss (remove) a single alert ──────────────────────────────
+    dismissAlert: (id) =>
+      set((state) => {
+        state.alerts = state.alerts.filter((a) => a.id !== id);
+      }),
+
+    // ── Sync: clear local log ring ─────────────────────────────────────────
+    clearLogs: () =>
+      set((state) => {
+        state.logs = [];
+      }),
+
     // ── Sync: connection state machine transition ──────────────────────────
     // Valid transitions:
     //   connected    → reconnecting (on failure)
@@ -419,7 +479,8 @@ export const useServiceStore = create<ServiceState & ServiceActions>()(
       }),
 
     // ── Connection State Machine: on success ───────────────────────────────
-    handleConnectionSuccess: () =>
+    handleConnectionSuccess: () => {
+      clearReconnectTimer();
       set((state) => {
         state.lastSuccessfulFetch = Date.now();
         state.retryCount = 0;
@@ -429,10 +490,12 @@ export const useServiceStore = create<ServiceState & ServiceActions>()(
         state.disconnectedAt = null;
         // Always mark connected (incl. offline → CLI/HTTP recovery)
         state.connectionStatus = "connected";
-      }),
+      });
+    },
 
     // ── Connection State Machine: on failure ───────────────────────────────
-    handleConnectionFailure: (errorMessage) =>
+    handleConnectionFailure: (errorMessage) => {
+      let nextDelay = 0;
       set((state) => {
         state.lastError = errorMessage;
         state.disconnectedAt = state.disconnectedAt ?? Date.now();
@@ -444,30 +507,38 @@ export const useServiceStore = create<ServiceState & ServiceActions>()(
           state.connectionStatus = "reconnecting";
           state.retryCount = 1;
           state.reconnectDelay = getBackoffDelay(1);
+          nextDelay = state.reconnectDelay;
         } else if (state.connectionStatus === "reconnecting") {
           state.retryCount = state.retryCount + 1;
           if (state.retryCount >= MAX_RETRIES) {
             state.connectionStatus = "offline";
-            state.lastError = `Connection lost after ${MAX_RETRIES} retries`;
+            state.lastError = `${errorMessage} (gave up after ${MAX_RETRIES} retries)`;
             state.reconnectDelay = 0;
           } else {
             state.reconnectDelay = getBackoffDelay(state.retryCount);
+            nextDelay = state.reconnectDelay;
           }
         }
-      }),
+      });
+      if (nextDelay > 0) scheduleReconnect(nextDelay);
+    },
 
     // ── Reset all retry/reconnect state ────────────────────────────────────
-    resetRetries: () =>
+    resetRetries: () => {
+      clearReconnectTimer();
       set((state) => {
         state.retryCount = 0;
         state.lastError = null;
         state.lastErrorDetails = null;
         state.reconnectDelay = 0;
         state.disconnectedAt = null;
-      }),
+      });
+    },
 
     // ── Force retry from offline state ─────────────────────────────────────
-    forceRetry: () =>
+    forceRetry: () => {
+      clearReconnectTimer();
+      const wasOffline = get().connectionStatus === "offline";
       set((state) => {
         if (state.connectionStatus === "offline") {
           state.connectionStatus = "polling";
@@ -476,7 +547,13 @@ export const useServiceStore = create<ServiceState & ServiceActions>()(
           state.lastErrorDetails = null;
           state.reconnectDelay = 0;
         }
-      }),
+      });
+      // Defer fetch so UI can show POLLING and callers/tests observe the
+      // intermediate state before the network round-trip completes.
+      if (wasOffline) {
+        scheduleReconnect(0);
+      }
+    },
 
     // ── Record structured CLI bridge error ────────────────────────────────
     // Accepts a fully-formed CliErrorDetails (typically from cli-bridge) and
@@ -520,3 +597,11 @@ export const useServiceStore = create<ServiceState & ServiceActions>()(
       }),
   }))
 );
+
+// Bind the reconnect timer tick now that the store exists.
+scheduledReconnectTick = async () => {
+  const status = useServiceStore.getState().connectionStatus;
+  if (status === "reconnecting" || status === "polling") {
+    await useServiceStore.getState().fetchWorkers();
+  }
+};

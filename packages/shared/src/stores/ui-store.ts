@@ -19,6 +19,11 @@ export interface UIState {
   modal: ModalState | null;
   commandPaletteOpen: boolean;
   previousView: ViewId | null;
+  /**
+   * Whether the status-bar CLI/connection diagnostics panel is expanded.
+   * Shared so palette / Ctrl+Shift+D / mouse can all toggle it.
+   */
+  statusErrorExpanded: boolean;
 }
 
 // ─── Actions ─────────────────────────────────────────────────────────────────
@@ -31,6 +36,9 @@ interface UIActions {
   showModal: (modal: ModalState) => void;
   dismissModal: () => void;
   goBack: () => void;
+  /** Toggle status-bar error diagnostics panel. */
+  toggleStatusErrorExpanded: () => void;
+  setStatusErrorExpanded: (expanded: boolean) => void;
 }
 
 // ─── Defaults ────────────────────────────────────────────────────────────────
@@ -43,6 +51,7 @@ const initialState: UIState = {
   modal: null,
   commandPaletteOpen: false,
   previousView: null,
+  statusErrorExpanded: false,
 };
 
 // ─── Store ───────────────────────────────────────────────────────────────────
@@ -93,6 +102,16 @@ export const useUIStore = create<UIState & UIActions>()(
           state.activeView = state.previousView;
           state.previousView = null;
         }
+      }),
+
+    toggleStatusErrorExpanded: () =>
+      set((state) => {
+        state.statusErrorExpanded = !state.statusErrorExpanded;
+      }),
+
+    setStatusErrorExpanded: (expanded) =>
+      set((state) => {
+        state.statusErrorExpanded = expanded;
       }),
   }))
 );

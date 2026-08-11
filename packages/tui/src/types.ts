@@ -112,6 +112,7 @@ export const DEFAULT_SHORTCUTS: ShortcutMap = {
   "Ctrl+B": "TOGGLE SIDEBAR",
   "Ctrl+R": "REFRESH DATA",
   "Ctrl+Q": "QUIT",
+  "Ctrl+Shift+D": "ERROR DIAGNOSTICS",
   Esc: "BACK / CLOSE",
   Tab: "NEXT FOCUS",
   "Shift+Tab": "PREVIOUS FOCUS",

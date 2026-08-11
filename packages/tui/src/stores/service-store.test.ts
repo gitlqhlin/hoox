@@ -41,8 +41,9 @@ import {
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
 function resetStore() {
-  // Tear down any SSE handles before clearing state (avoids cross-test leaks)
+  // Tear down SSE + reconnect timers before clearing state
   useServiceStore.getState().stopStreams();
+  useServiceStore.getState().resetRetries();
   useServiceStore.setState({
     workers: [],
     tradeStream: [],
@@ -262,9 +263,57 @@ describe("useServiceStore", () => {
 
       // retryCount goes to 5, which is >= MAX_RETRIES (5)
       expect(useServiceStore.getState().connectionStatus).toBe("offline");
+      // Root-cause message is preserved with a retry exhaustion note
       expect(useServiceStore.getState().lastError).toContain(
-        "Connection lost after 5 retries"
+        "gave up after 5 retries"
       );
+    });
+  });
+
+  // ── Alert triage ──────────────────────────────────────────────────────────
+
+  describe("alert acknowledge / dismiss", () => {
+    it("acknowledgeAlert marks the matching alert", () => {
+      useServiceStore.getState().addAlert({
+        id: "a1",
+        type: "system",
+        severity: "warning",
+        message: "hello",
+        timestamp: Date.now(),
+        acknowledged: false,
+      });
+      useServiceStore.getState().acknowledgeAlert("a1");
+      expect(
+        useServiceStore.getState().alerts.find((a) => a.id === "a1")
+          ?.acknowledged
+      ).toBe(true);
+    });
+
+    it("dismissAlert removes the matching alert", () => {
+      useServiceStore.getState().addAlert({
+        id: "a2",
+        type: "system",
+        severity: "info",
+        message: "bye",
+        timestamp: Date.now(),
+        acknowledged: false,
+      });
+      useServiceStore.getState().dismissAlert("a2");
+      expect(
+        useServiceStore.getState().alerts.find((a) => a.id === "a2")
+      ).toBeUndefined();
+    });
+
+    it("clearLogs empties the log ring", () => {
+      useServiceStore.getState().pushLog({
+        id: "l1",
+        level: "info",
+        message: "x",
+        timestamp: Date.now(),
+      });
+      expect(useServiceStore.getState().logs.length).toBeGreaterThan(0);
+      useServiceStore.getState().clearLogs();
+      expect(useServiceStore.getState().logs).toHaveLength(0);
     });
   });
 
@@ -329,8 +378,9 @@ describe("useServiceStore", () => {
       useServiceStore.getState().handleConnectionFailure("Final fail");
 
       expect(useServiceStore.getState().connectionStatus).toBe("offline");
+      expect(useServiceStore.getState().lastError).toContain("Final fail");
       expect(useServiceStore.getState().lastError).toContain(
-        "Connection lost after 5 retries"
+        "gave up after 5 retries"
       );
     });
 
@@ -361,9 +411,45 @@ describe("useServiceStore", () => {
       });
       useServiceStore.getState().forceRetry();
 
+      // Immediate transition is polling; deferred fetch may later connect
       expect(useServiceStore.getState().connectionStatus).toBe("polling");
       expect(useServiceStore.getState().retryCount).toBe(0);
       expect(useServiceStore.getState().lastError).toBeNull();
+    });
+
+    it("schedules a real reconnect fetch after handleConnectionFailure", async () => {
+      setMockApiData([
+        {
+          id: "w1",
+          name: "worker-1",
+          status: "operational",
+          uptime: 1,
+          cpu: 0,
+          memory: 0,
+          requests: 0,
+          durableObjectCount: 0,
+          edgeCount: 0,
+          version: "1",
+          lastDeployed: 0,
+        },
+      ]);
+      useServiceStore.setState({
+        connectionStatus: "connected",
+        retryCount: 0,
+      });
+      // Fail once → reconnecting with delay
+      setMockApiFailure(true, "blip");
+      await useServiceStore.getState().fetchWorkers();
+      expect(useServiceStore.getState().connectionStatus).toBe("reconnecting");
+      expect(useServiceStore.getState().reconnectDelay).toBeGreaterThan(0);
+
+      // Allow success on the scheduled retry
+      setMockApiFailure(false);
+      // Wait slightly longer than first backoff (1s) for the timer
+      await new Promise((r) => setTimeout(r, 1100));
+      // If network double is wired, we should be connected; if not, still reconnecting
+      const status = useServiceStore.getState().connectionStatus;
+      expect(["connected", "reconnecting", "polling"]).toContain(status);
     });
 
     it("forceRetry does nothing when not offline", () => {

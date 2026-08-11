@@ -197,7 +197,7 @@ describe("StatusBar", () => {
       });
       const output = await renderStatusBar();
       // The expand hint is rendered when pillInteractive is true
-      expect(output).toContain("click for details");
+      expect(output).toContain("details");
     });
 
     it("does not show the expand hint when no error details are present", async () => {
@@ -224,11 +224,12 @@ describe("StatusBar", () => {
   // ── Keyboard hints ─────────────────────────────────────────────────────
 
   describe("keyboard hints", () => {
-    it("shows ^P PALETTE · ^B SIDEBAR · ^Q QUIT hint", async () => {
+    it("shows global shortcut hints including diagnostics chord", async () => {
       const output = await renderStatusBar();
-      expect(output).toContain("PALETTE");
-      expect(output).toContain("SIDEBAR");
-      expect(output).toContain("QUIT");
+      expect(output).toContain("^P");
+      expect(output).toContain("^B");
+      expect(output).toContain("^Q");
+      expect(output).toContain("^⇧D");
     });
   });
 
@@ -278,8 +279,21 @@ describe("StatusBar", () => {
       process.env.HOOX_TUI_MODE = "remote";
       process.env.HOOX_API_URL = "https://gw.test";
       delete process.env.HOOX_API_TOKEN;
+      delete process.env.CF_ACCESS_CLIENT_ID;
+      delete process.env.CF_ACCESS_CLIENT_SECRET;
       const output = await renderStatusBar();
       expect(output).toContain("AUTH?");
+      expect(output).toContain("gw.test");
+    });
+
+    it("does not show AUTH? for Access-only remote credentials", async () => {
+      process.env.HOOX_TUI_MODE = "remote";
+      process.env.HOOX_API_URL = "https://gw.test";
+      delete process.env.HOOX_API_TOKEN;
+      process.env.CF_ACCESS_CLIENT_ID = "access-id";
+      process.env.CF_ACCESS_CLIENT_SECRET = "access-secret";
+      const output = await renderStatusBar();
+      expect(output).not.toContain("AUTH?");
       expect(output).toContain("gw.test");
     });
   });

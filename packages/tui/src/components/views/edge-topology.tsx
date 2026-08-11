@@ -11,12 +11,13 @@ import {
   resolveHooxRuntimeRoot,
   useUIStore,
 } from "@hoox-sh/hoox-shared";
-import { useKeyboard } from "@opentui/react";
+
 import * as fs from "fs";
 import * as path from "path";
 import { ErrorBoundary } from "../shared/error-boundary";
 import { ViewHeader } from "../shared/view-header";
 import { EmptyState } from "../shared/spinner";
+import { useViewKeyboard } from "../../hooks/shell-overlay";
 
 /** Cap default flow list so huge graphs stay responsive. */
 export const MAX_FLOWS_PREVIEW = 15;
@@ -201,7 +202,7 @@ function EdgeTopologyInner() {
     );
   }, [selectableItems.length]);
 
-  useKeyboard((key) => {
+  useViewKeyboard((key) => {
     if (!isActive) return;
     if (key.name === "escape") {
       setSelectedNode(null);

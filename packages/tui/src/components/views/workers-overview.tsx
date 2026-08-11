@@ -25,7 +25,7 @@
  * Follows TUI Patterns 1 (View Composition), 2 (Store Subscription), 8 (ScrollBox).
  */
 import { useState, useMemo, useCallback, useEffect, useRef } from "react";
-import { useKeyboard } from "@opentui/react";
+
 import { Colors } from "@hoox-sh/hoox-shared";
 import { useServiceStore } from "@hoox-sh/hoox-shared";
 import { useUIStore } from "@hoox-sh/hoox-shared";
@@ -39,6 +39,7 @@ import { redactSecretsInText } from "../../services/dev-log";
 import type { WorkerInfo } from "@hoox-sh/hoox-shared";
 import { showConfirm } from "../ui/dialog";
 import type { DialogHandle } from "../ui/dialog";
+import { useViewKeyboard } from "../../hooks/shell-overlay";
 
 // ── Props ─────────────────────────────────────────────────────────────────────
 
@@ -337,7 +338,7 @@ export function WorkersOverview({ dialog }: WorkersOverviewProps = {}) {
   }, [maxIndex]);
 
   // ── View-local keyboard: 2D grid navigation ─────────────────────────────
-  useKeyboard((key) => {
+  useViewKeyboard((key) => {
     switch (key.name) {
       case "up":
         setFocusedIndex((i) => Math.max(0, i - COLS));
@@ -371,25 +372,45 @@ export function WorkersOverview({ dialog }: WorkersOverviewProps = {}) {
 
   const handleLogs = useCallback(async (worker: WorkerInfo) => {
     if (deployingRef.current) return;
+    const store = useServiceStore.getState();
+    // Select worker and open Logs Viewer — primary operator path
+    store.selectWorker(worker.id);
+    useUIStore.getState().setView("logs-viewer");
+
     try {
       const result = await cliBridge.workerLogs(worker.name);
       if (!mountedRef.current) return;
+      if (result.success && result.stdout) {
+        // Seed the log ring so Logs Viewer has content immediately
+        const lines = result.stdout.split("\n").filter((l) => l.trim());
+        const now = Date.now();
+        for (const line of lines.slice(-100)) {
+          store.pushLog({
+            id: `cli-log-${now}-${Math.random().toString(36).slice(2, 8)}`,
+            timestamp: now,
+            level: "info",
+            workerId: worker.id,
+            message: redactSecretsInText(line).slice(0, 500),
+            source: worker.name,
+          });
+        }
+      }
       const failDetail = redactSecretsInText(
         result.stderr || result.stdout || "unknown error"
       );
-      useServiceStore.getState().addAlert({
+      store.addAlert({
         id: `logs-${Date.now()}-${worker.name}`,
         type: "logs",
         severity: result.success ? "info" : "warning",
         message: result.success
-          ? `${worker.name} logs retrieved (${(result.duration / 1000).toFixed(1)}s)`
-          : `${worker.name} logs failed: ${failDetail}`,
+          ? `Opened logs for ${worker.name}`
+          : `${worker.name} logs fetch failed: ${failDetail}`,
         timestamp: Date.now(),
         acknowledged: false,
       });
     } catch (err) {
       if (!mountedRef.current) return;
-      useServiceStore.getState().addAlert({
+      store.addAlert({
         id: `logs-err-${Date.now()}`,
         type: "logs",
         severity: "warning",

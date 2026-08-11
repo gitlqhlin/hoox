@@ -28,12 +28,12 @@ describe("SecretsViewer", () => {
   });
 
   it("documents keyboard search (/) and list navigation (↑↓)", async () => {
-    // Contract: SecretsViewer wires useKeyboard for / and ↑↓ (parity with KV Viewer).
+    // Contract: SecretsViewer wires useViewKeyboard for / and ↑↓ (parity with KV Viewer).
     // Regression guard against the previous dead SearchBox (onChange discarded).
     const src = await Bun.file(
       new URL("./secrets-viewer.tsx", import.meta.url)
     ).text();
-    expect(src).toContain("useKeyboard");
+    expect(src).toContain("useViewKeyboard");
     expect(src).toContain('key.name === "slash"');
     expect(src).toContain("setSearchActive(true)");
     expect(src).toContain("filteredSecrets");

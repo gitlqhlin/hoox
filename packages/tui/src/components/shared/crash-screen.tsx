@@ -11,11 +11,11 @@
  *   - "Something went wrong" banner
  *   - Error message (first line)
  *   - Three action buttons: [Restart] [Safe Mode] [Report Bug]
+ *   - Keyboard: R restart · S safe mode · B report bug
  *
- * This component is a plain function (not a class) because it's meant to be
- * rendered in a degraded state — no hooks, no stores, no external state.
  * Colors use Hoox design tokens via @hoox-sh/hoox-shared.
  */
+import { useKeyboard } from "@opentui/react";
 import { Colors } from "@hoox-sh/hoox-shared";
 import { redactSecretsInText } from "../../services/dev-log";
 
@@ -55,6 +55,22 @@ export function CrashScreen({
   const secondLine = secondRaw
     ? redactSecretsInText(secondRaw).slice(0, 80)
     : undefined;
+
+  // Keyboard recovery (mouse optional / TUI_MOUSE=0)
+  useKeyboard((key) => {
+    const name = String(key.name ?? "").toLowerCase();
+    if (name === "r" || name === "1") {
+      onAction("restart");
+      return;
+    }
+    if (!safeMode && (name === "s" || name === "2")) {
+      onAction("safe-mode");
+      return;
+    }
+    if (name === "b" || name === "3") {
+      onAction("report-bug");
+    }
+  });
 
   return (
     <box
@@ -162,6 +178,12 @@ export function CrashScreen({
           </text>
         </box>
       </box>
+
+      <text fg={Colors.dim} dim>
+        {safeMode
+          ? "Keys: R restart · B report bug"
+          : "Keys: R restart · S safe mode · B report bug"}
+      </text>
     </box>
   );
 }

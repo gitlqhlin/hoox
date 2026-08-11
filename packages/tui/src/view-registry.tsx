@@ -125,7 +125,7 @@ export const VIEW_REGISTRY: ViewRegistryEntry[] = [
     key: "7",
     keyMod: "ctrl",
     paletteShortcut: "^7",
-    aliases: ["edit", "settings"],
+    aliases: ["edit", "config", "toml", "json"],
     factory: () => <ConfigEditor />,
   },
   {
@@ -345,6 +345,19 @@ export const ACTION_COMMANDS: CommandEntry[] = [
     category: "action",
     shortcut: "^R",
     aliases: ["reload"],
+  },
+  {
+    id: "force-retry",
+    name: "FORCE RECONNECT",
+    category: "action",
+    aliases: ["retry", "reconnect", "online"],
+  },
+  {
+    id: "expand-error",
+    name: "TOGGLE ERROR DIAGNOSTICS",
+    category: "action",
+    shortcut: "^⇧D",
+    aliases: ["diagnostics", "stderr", "cli-error", "expand-error"],
   },
   {
     id: "toggle-sidebar",

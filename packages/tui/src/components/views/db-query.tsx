@@ -37,7 +37,7 @@
  *   - Renders an explicit empty/error state instead of throwing
  */
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { useKeyboard } from "@opentui/react";
+
 import { Colors, useUIStore } from "@hoox-sh/hoox-shared";
 import { ErrorBoundary } from "../shared/error-boundary";
 import { Spinner, EmptyState } from "../shared/spinner";
@@ -53,6 +53,7 @@ import {
   TuiStateFiles,
   writeJsonState,
 } from "../../services/tui-storage";
+import { useViewKeyboard } from "../../hooks/shell-overlay";
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -270,7 +271,7 @@ interface HistoryOverlayProps {
 
 function HistoryOverlay({ history, onSelect, onClose }: HistoryOverlayProps) {
   // Keyboard: Escape closes, Up/Down navigate, Enter selects
-  useKeyboard((key) => {
+  useViewKeyboard((key) => {
     if (key.name === "escape") {
       onClose();
       return;
@@ -369,7 +370,7 @@ function SqlInputRow({
   onChange,
 }: SqlInputRowProps) {
   // Capture keyboard when active.
-  useKeyboard((key) => {
+  useViewKeyboard((key) => {
     if (!inputActive) return;
     if (key.name === "escape") {
       onDeactivate();
@@ -587,7 +588,7 @@ export function DbQueryView() {
   }, [historyIdx, history]);
 
   // ── Global keyboard shortcuts (active view only) ───────────────────────────
-  useKeyboard((key) => {
+  useViewKeyboard((key) => {
     if (!isActive) return;
     if (showHistory) return; // History overlay handles its own keys
 

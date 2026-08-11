@@ -22,13 +22,14 @@
  * Colors from @hoox-sh/hoox-shared design tokens. No CSS, no DOM.
  */
 import { useState, useMemo, useRef, useEffect } from "react";
-import { useKeyboard } from "@opentui/react";
+
 import { Colors, useServiceStore, useUIStore } from "@hoox-sh/hoox-shared";
 import type { Trade, TradeSide } from "@hoox-sh/hoox-shared";
 import { ErrorBoundary } from "../shared/error-boundary";
 import { Spinner, EmptyState } from "../shared/spinner";
 import { ViewHeader } from "../shared/view-header";
 import { Panel } from "../shared/panel";
+import { useViewKeyboard } from "../../hooks/shell-overlay";
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -235,19 +236,25 @@ function LiveTradeFeed({
 
   // Snapshot frozen trades when paused; keep updating otherwise
   const frozenRef = useRef<Trade[]>([]);
-  const wasPausedRef = useRef(false);
+  const [frozenStream, setFrozenStream] = useState<Trade[] | null>(null);
 
-  // Capture snapshot on pause edge, release on resume
-  if (!paused && wasPausedRef.current) {
-    frozenRef.current = [];
-  }
-  if (paused && !wasPausedRef.current) {
-    frozenRef.current = [...tradeStream];
-  }
-  wasPausedRef.current = paused;
+  // Capture snapshot on pause edge, release on resume (not during render)
+  useEffect(() => {
+    if (paused) {
+      frozenRef.current = [...tradeStream];
+      setFrozenStream(frozenRef.current);
+    } else {
+      frozenRef.current = [];
+      setFrozenStream(null);
+    }
+    // Only react to pause edge — intentionally omit tradeStream from deps
+    // when already paused so the frozen snapshot stays stable.
+  }, [paused]);
 
   // Use frozen snapshot when paused, live stream when not
-  const effectiveStream = paused ? frozenRef.current : tradeStream;
+  const effectiveStream = paused
+    ? (frozenStream ?? frozenRef.current)
+    : tradeStream;
 
   // Newest first, only the render window (store is newest-last)
   const sortedTrades = useMemo(
@@ -265,7 +272,7 @@ function LiveTradeFeed({
   const safeIndex = Math.min(selectedIndex, maxIndex);
 
   // Keyboard: navigate trade rows only while this view is active
-  useKeyboard((key) => {
+  useViewKeyboard((key) => {
     if (!isActive) return;
     if (key.name === "up") {
       setSelectedIndex((i) => Math.max(0, i - 1));
@@ -687,7 +694,7 @@ export function TradeMonitor() {
   const offline = connectionStatus === "offline";
 
   // Keyboard: space toggles pause/resume only while this view is active
-  useKeyboard((key) => {
+  useViewKeyboard((key) => {
     if (!isActive) return;
     if (key.name === "space") {
       setPaused((p) => !p);

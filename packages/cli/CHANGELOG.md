@@ -5,6 +5,16 @@ This project adheres loosely to [Semantic Versioning](https://semver.org/).
 
 ## Unreleased
 
+## [0.11.7] — 2026-08-11
+
+### Added
+
+- **TUI quality release** (ships with `@hoox-sh/hoox-tui@0.3.0` + `@hoox-sh/hoox-shared@1.3.0`): reconnect controller, overlay-safe keyboard, Service Manager/Dashboard keyboard ops, fail-closed prefs path, auth/Access parity, diagnostics palette.
+
+### Notes
+
+- CLI surface unchanged; monorepo release tag for TUI/shared publish + Docker.
+
 ## [0.11.6] — 2026-08-11
 
 ### Added

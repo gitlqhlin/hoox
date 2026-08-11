@@ -20,7 +20,7 @@
  * Follows Pattern 1 (View Composition) and Pattern 2 (Store Subscription).
  */
 import { useMemo, useState, useCallback, useEffect } from "react";
-import { useKeyboard } from "@opentui/react";
+
 import {
   Colors,
   useServiceStore,
@@ -38,6 +38,7 @@ import { getSettingsConnectionSnapshot } from "../../services/tui-connection";
 import * as path from "path";
 import * as os from "os";
 import type { ViewId, NotificationPreferences } from "@hoox-sh/hoox-shared";
+import { useViewKeyboard } from "../../hooks/shell-overlay";
 
 /**
  * Prefer the process-wide CLI bridge test double when test-setup installed it
@@ -234,14 +235,16 @@ interface ShortcutEntry {
 }
 
 const SYSTEM_SHORTCUTS: ShortcutEntry[] = [
-  { key: "Ctrl+1..9", action: "Switch to view 1-9" },
-  { key: "Ctrl+0", action: "Switch to view 10" },
   // Keep action labels short — Keyboard panel is ~34 cols; long text
   // overflows into adjacent panels and corrupts the character frame.
-  { key: "Ctrl+Alt+W", action: "Worker Settings" },
+  // Order matters: first rows stay visible in the 4-column layout.
+  { key: "Ctrl+1..9", action: "Switch to view 1-9" },
+  { key: "Ctrl+0", action: "Switch to view 10" },
   { key: "Ctrl+P", action: "Command Palette" },
   { key: "Ctrl+B", action: "Toggle Sidebar" },
   { key: "Ctrl+Q", action: "Quit" },
+  // Compact summary of Ctrl+Alt chords (sidebar shows per-view keys)
+  { key: "Ctrl+Alt+*", action: "KV/Secrets/DB/AI/…" },
   { key: "Esc", action: "Back / Close" },
   { key: "Tab", action: "Next panel / field" },
   { key: "/", action: "Focus search" },
@@ -975,6 +978,31 @@ export function SettingsView({ dialog }: SettingsViewProps = {}) {
 
   const handleImportConfirm = useCallback(async () => {
     if (!importPath.trim()) return;
+
+    // Fail-closed: require confirm before clobbering local prefs
+    if (!dialog) {
+      useServiceStore.getState().addAlert({
+        id: `import-noconfirm-${Date.now()}`,
+        type: "config",
+        severity: "warning",
+        message: "Import blocked: confirmation dialog unavailable",
+        timestamp: Date.now(),
+        acknowledged: false,
+      });
+      setImporting(false);
+      return;
+    }
+    const confirmed = await showConfirm(dialog, {
+      title: "Import preferences?",
+      message: `Apply settings from ${importPath.trim()}? This overwrites local TUI preferences (not operator secrets).`,
+      confirmLabel: "Import",
+      cancelLabel: "Cancel",
+    });
+    if (!confirmed) {
+      setImporting(false);
+      return;
+    }
+
     try {
       const f = Bun.file(importPath.trim());
       const exists = await f.exists();
@@ -1006,18 +1034,30 @@ export function SettingsView({ dialog }: SettingsViewProps = {}) {
       if (typeof config.refreshIntervalMs === "number")
         updateConfig({ refreshIntervalMs: config.refreshIntervalMs });
       if (typeof config.defaultView === "string")
-        updateConfig({ defaultView: config.defaultView });
+        updateConfig({ defaultView: config.defaultView as ViewId });
       if (typeof config.soundEnabled === "boolean")
         updateConfig({ soundEnabled: config.soundEnabled });
+      // Absolute set — never toggleNotification (would invert vs current state)
       if (
         typeof config.notifications === "object" &&
         config.notifications !== null
       ) {
-        for (const key of Object.keys(config.notifications)) {
-          if (typeof config.notifications[key] === "boolean") {
-            toggleNotification(key as keyof NotificationPreferences);
+        const current = useConfigStore.getState().notifications;
+        const next: NotificationPreferences = { ...current };
+        for (const key of Object.keys(
+          config.notifications
+        ) as (keyof NotificationPreferences)[]) {
+          if (
+            key in next &&
+            typeof (config.notifications as Record<string, unknown>)[key] ===
+              "boolean"
+          ) {
+            next[key] = Boolean(
+              (config.notifications as Record<string, unknown>)[key]
+            );
           }
         }
+        updateConfig({ notifications: next });
       }
       if (config.activeExchanges)
         updateConfig({ activeExchanges: config.activeExchanges });
@@ -1042,7 +1082,7 @@ export function SettingsView({ dialog }: SettingsViewProps = {}) {
     }
     setImporting(false);
     setImportPath("");
-  }, [importPath, updateConfig, toggleNotification]);
+  }, [importPath, updateConfig, dialog]);
 
   const handleCheckSetup = useCallback(async () => {
     setSetupCheck({ kind: "running" });
@@ -1248,7 +1288,7 @@ export function SettingsView({ dialog }: SettingsViewProps = {}) {
 
   // ── Keyboard handling (only when Settings is the active view) ───────────────
 
-  useKeyboard((key) => {
+  useViewKeyboard((key) => {
     if (!isActive) return;
     // Import mode overrides
     if (importing) {

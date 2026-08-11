@@ -24,6 +24,7 @@ function resetStore() {
     modal: null,
     commandPaletteOpen: false,
     previousView: null,
+    statusErrorExpanded: false,
   });
 }
 
@@ -205,6 +206,28 @@ describe("useUIStore", () => {
       useUIStore.getState().showModal({ type: "alert", title: "First" });
       useUIStore.getState().showModal({ type: "confirm", title: "Second" });
       expect(useUIStore.getState().modal?.title).toBe("Second");
+    });
+  });
+
+  // ── Status error diagnostics panel ──────────────────────────────────────
+
+  describe("statusErrorExpanded", () => {
+    it("starts collapsed", () => {
+      expect(useUIStore.getState().statusErrorExpanded).toBe(false);
+    });
+
+    it("toggleStatusErrorExpanded flips the flag", () => {
+      useUIStore.getState().toggleStatusErrorExpanded();
+      expect(useUIStore.getState().statusErrorExpanded).toBe(true);
+      useUIStore.getState().toggleStatusErrorExpanded();
+      expect(useUIStore.getState().statusErrorExpanded).toBe(false);
+    });
+
+    it("setStatusErrorExpanded sets absolute value", () => {
+      useUIStore.getState().setStatusErrorExpanded(true);
+      expect(useUIStore.getState().statusErrorExpanded).toBe(true);
+      useUIStore.getState().setStatusErrorExpanded(false);
+      expect(useUIStore.getState().statusErrorExpanded).toBe(false);
     });
   });
 

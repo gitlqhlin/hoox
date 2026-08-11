@@ -16,7 +16,7 @@
  * `hoox config kv set`. Secret fields are read-only (CLI command shown).
  */
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { useKeyboard } from "@opentui/react";
+
 import {
   Colors,
   AGENT_CONFIG_KV_KEY,
@@ -37,6 +37,7 @@ import { Panel } from "../shared/panel";
 import { Spinner, EmptyState } from "../shared/spinner";
 import { cliBridge } from "../../services/cli-bridge";
 import { loadDashboardSettingsManifests } from "../../services/dashboard-settings-loader";
+import { useViewKeyboard } from "../../hooks/shell-overlay";
 
 function parseKvValue(
   raw: string | null,
@@ -276,15 +277,16 @@ export function WorkerSettingsView() {
       return;
     }
 
-    // Fail-closed confirm for dangerous fields: require a second Enter.
-    if (row.field.kind === "dangerous") {
-      if (pendingDangerousKey !== row.field.key) {
-        setPendingDangerousKey(row.field.key);
-        setStatus(
-          `Confirm dangerous write for "${row.field.label}" — press Enter again to save, Esc to cancel`
-        );
-        return;
-      }
+    // Fail-closed confirm for ALL non-secret writes: require a second Enter.
+    // Prevents accidental live KV mutations from a single mis-press.
+    if (pendingDangerousKey !== row.field.key) {
+      setPendingDangerousKey(row.field.key);
+      const kindLabel =
+        row.field.kind === "dangerous" ? "dangerous write" : "write";
+      setStatus(
+        `Confirm ${kindLabel} for "${row.field.label}" — press Enter again to save, Esc to cancel`
+      );
+      return;
     }
     setPendingDangerousKey(null);
 
@@ -350,7 +352,7 @@ export function WorkerSettingsView() {
     }
   }, [flatFields, fieldIndex, selected, values, pendingDangerousKey, saving]);
 
-  useKeyboard((key) => {
+  useViewKeyboard((key) => {
     if (!isActive) return;
     if (key.name === "escape") {
       if (pendingDangerousKey) {

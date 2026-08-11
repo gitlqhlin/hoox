@@ -24,20 +24,19 @@ describe("WorkerSettingsView", () => {
     expect(display).not.toMatch(/sk-|token|password/i);
   });
 
-  it("dangerous fields require a second confirm before write (contract)", () => {
-    // Mirrors saveCurrent double-Enter gate for kind === "dangerous"
+  it("all non-secret fields require a second confirm before write (contract)", () => {
+    // Mirrors saveCurrent double-Enter gate for every non-secret write
     let pending: string | null = null;
-    const fieldKey = "risk:kill_switch";
-    const kind = "dangerous" as const;
+    const fieldKey = "risk:max_position_size";
 
     // First Enter → arm confirm
-    if (kind === "dangerous" && pending !== fieldKey) {
+    if (pending !== fieldKey) {
       pending = fieldKey;
     }
     expect(pending).toBe(fieldKey);
 
     // Second Enter with same key → proceed
-    const shouldWrite = kind === "dangerous" && pending === fieldKey;
+    const shouldWrite = pending === fieldKey;
     expect(shouldWrite).toBe(true);
   });
 });

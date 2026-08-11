@@ -197,6 +197,33 @@ export function agentChatStream(
   let completed = false;
 
   const finished = (async () => {
+    // Match workers/SSE: Bearer + optional CF Access service-token headers
+    let authHeaders: Record<string, string> = {};
+    let resolvedBase = apiBase;
+    try {
+      const { resolveOperatorTransportProfile, buildOperatorAuthHeaders } =
+        await import("@hoox-sh/hoox-shared");
+      const profile = resolveOperatorTransportProfile(process.env as never, {
+        configApiUrl: apiBase,
+        configApiToken: apiToken,
+      });
+      authHeaders = buildOperatorAuthHeaders(profile);
+      // Prefer profile base when caller passed default localhost but env has remote
+      if (apiBase === "http://localhost:8787" && profile.apiBase) {
+        resolvedBase = profile.apiBase;
+      } else {
+        resolvedBase = apiBase.replace(/\/$/, "") || profile.apiBase;
+      }
+      // Ensure Bearer from explicit apiToken if profile missed it
+      if (apiToken && !authHeaders.Authorization) {
+        authHeaders.Authorization = `Bearer ${apiToken}`;
+      }
+    } catch {
+      if (apiToken) {
+        authHeaders = { Authorization: `Bearer ${apiToken}` };
+      }
+    }
+
     let attempt = 0;
 
     while (
@@ -204,7 +231,7 @@ export function agentChatStream(
       attempt < SSE_MAX_RECONNECT_ATTEMPTS
     ) {
       try {
-        const url = `${apiBase.replace(/\/$/, "")}/api/agent/chat`;
+        const url = `${resolvedBase.replace(/\/$/, "")}/api/agent/chat`;
         const body = JSON.stringify({
           messages: params.messages.map((m) => ({
             role: m.role,
@@ -224,7 +251,7 @@ export function agentChatStream(
           headers: {
             "Content-Type": "application/json",
             Accept: "text/event-stream",
-            ...(apiToken ? { Authorization: `Bearer ${apiToken}` } : {}),
+            ...authHeaders,
           },
           body,
           signal: abortController.signal,

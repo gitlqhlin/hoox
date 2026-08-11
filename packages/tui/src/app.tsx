@@ -131,38 +131,16 @@ function AppRootInner({ safeMode = false }: { safeMode?: boolean }) {
   }, [closePalette, showModal, dismissModal]);
 
   // ── Session restore on mount ────────────────────────────────────────────
-  // Shared restoreSession currently only accepts the original 9 ViewIds.
-  // Re-read session.json and accept any registry ViewId so newer views
-  // (queues, kv, secrets, …) actually restore after restart.
+  // Shared restoreSession validates all 16 ViewIds (unknown → dashboard).
   useEffect(() => {
     let cancelled = false;
     (async () => {
       const session = await restoreSession();
       if (cancelled) return;
 
-      let view: ViewId = session.activeView;
-      let expanded = session.sidebarExpanded;
+      const view: ViewId = session.activeView;
+      const expanded = session.sidebarExpanded;
 
-      try {
-        const rawPath = resolveTuiStatePath("session.json");
-        const file = Bun.file(rawPath);
-        if (await file.exists()) {
-          const raw = (await file.json()) as {
-            activeView?: unknown;
-            sidebarExpanded?: unknown;
-          };
-          if (isRegisteredViewId(raw.activeView)) {
-            view = raw.activeView;
-          }
-          if (typeof raw.sidebarExpanded === "boolean") {
-            expanded = raw.sidebarExpanded;
-          }
-        }
-      } catch {
-        // Corrupt raw session — keep shared restore result
-      }
-
-      if (cancelled) return;
       if (isRegisteredViewId(view)) {
         setView(view);
       }
@@ -479,10 +457,15 @@ function AppRootInner({ safeMode = false }: { safeMode?: boolean }) {
         return;
       }
 
-      // Ctrl+R: refresh worker data (no-op in safe mode network sense — still allowed)
+      // Ctrl+R: refresh worker data + force reconnect from offline
       if (key.ctrl && !key.alt && name === "r") {
         if (!safeMode) {
-          void useServiceStore.getState().fetchWorkers();
+          const store = useServiceStore.getState();
+          if (store.connectionStatus === "offline") {
+            store.forceRetry();
+          } else {
+            void store.fetchWorkers();
+          }
         }
         return;
       }
@@ -493,13 +476,20 @@ function AppRootInner({ safeMode = false }: { safeMode?: boolean }) {
         return;
       }
 
-      // Escape: dismiss modal, then palette
+      // Escape: modal → palette → goBack (when previousView set)
       if (name === "escape") {
         if (modal) {
           dismissModal();
           return;
         }
-        closePalette();
+        if (commandPaletteOpen) {
+          closePalette();
+          return;
+        }
+        const prev = useUIStore.getState().previousView;
+        if (prev) {
+          useUIStore.getState().goBack();
+        }
       }
     },
     [
@@ -555,6 +545,22 @@ function AppRootInner({ safeMode = false }: { safeMode?: boolean }) {
 
         {/* Content area: View (fills remaining space) */}
         <box flexDirection="column" flexGrow={1} padding={1}>
+          {safeMode ? (
+            <box
+              flexDirection="row"
+              paddingLeft={1}
+              paddingRight={1}
+              backgroundColor={Colors.card}
+            >
+              <text fg={Colors.warning} bold>
+                SAFE MODE
+              </text>
+              <text fg={Colors.muted} dim>
+                {" "}
+                — network / CLI / SSE disabled · restart for full ops
+              </text>
+            </box>
+          ) : null}
           {renderView(dialog)}
         </box>
       </box>
@@ -571,7 +577,16 @@ function AppRootInner({ safeMode = false }: { safeMode?: boolean }) {
             if (selection.action === "setView" && selection.command.id) {
               setView(selection.command.id as ViewId);
             } else if (selection.command.id === "refresh") {
-              void useServiceStore.getState().fetchWorkers();
+              const store = useServiceStore.getState();
+              if (store.connectionStatus === "offline") {
+                store.forceRetry();
+              } else {
+                void store.fetchWorkers();
+              }
+            } else if (selection.command.id === "force-retry") {
+              useServiceStore.getState().forceRetry();
+            } else if (selection.command.id === "expand-error") {
+              useUIStore.getState().toggleStatusErrorExpanded();
             } else if (selection.command.id === "toggle-sidebar") {
               toggleSidebar();
             } else if (selection.command.id === "quit") {

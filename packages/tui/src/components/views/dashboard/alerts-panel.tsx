@@ -4,13 +4,14 @@
  */
 
 import { useState, useMemo, useEffect } from "react";
-import { useKeyboard } from "@opentui/react";
 import {
   Colors,
   AlertSeverityColor,
   useServiceStore,
+  useUIStore,
 } from "@hoox-sh/hoox-shared";
 import type { AlertSeverity } from "@hoox-sh/hoox-shared";
+import { useViewKeyboard } from "../../../hooks/shell-overlay";
 
 /** Severity label prefix */
 const SEVERITY_LABEL: Record<AlertSeverity, string> = {
@@ -38,10 +39,17 @@ function formatTime(ts: number): string {
 /**
  * AlertsPanel — scrollable list of recent alerts, newest first.
  * Each alert row shows: [SEV] HH:MM:SS — message
- * Color-coded by severity. Scrollable with ↑↓ keys.
+ * Color-coded by severity.
+ *
+ * Keyboard (when Dashboard is active):
+ *   ↑↓     — move selection
+ *   Enter / Space — acknowledge selected
+ *   x / Delete  — dismiss (remove) selected
  */
 function AlertsPanel() {
   const alerts = useServiceStore((s) => s.alerts);
+  const activeView = useUIStore((s) => s.activeView);
+  const isActive = activeView === "dashboard";
   const [scrollOffset, setScrollOffset] = useState(0);
 
   // Newest first, limited
@@ -56,13 +64,32 @@ function AlertsPanel() {
     setScrollOffset((o) => Math.min(o, Math.max(0, sortedAlerts.length - 1)));
   }, [sortedAlerts.length]);
 
-  // Keyboard: scroll through alerts
-  useKeyboard((key) => {
-    if (key.name === "up") {
+  useViewKeyboard((key) => {
+    if (!isActive) return;
+    const name = String(key.name ?? "").toLowerCase();
+
+    if (name === "up") {
       setScrollOffset((o) => Math.max(0, o - 1));
-    } else if (key.name === "down") {
+      return;
+    }
+    if (name === "down") {
       setScrollOffset((o) =>
         Math.min(Math.max(0, sortedAlerts.length - 1), o + 1)
+      );
+      return;
+    }
+
+    const selected = sortedAlerts[scrollOffset];
+    if (!selected) return;
+
+    if (name === "return" || name === "enter" || name === "space") {
+      useServiceStore.getState().acknowledgeAlert(selected.id);
+      return;
+    }
+    if (name === "x" || name === "delete" || name === "backspace") {
+      useServiceStore.getState().dismissAlert(selected.id);
+      setScrollOffset((o) =>
+        Math.max(0, o - (o > 0 && o >= sortedAlerts.length - 1 ? 1 : 0))
       );
     }
   });
@@ -139,11 +166,12 @@ function AlertsPanel() {
         </scrollbox>
       )}
 
-      {/* Scroll hint */}
+      {/* Scroll / action hint */}
       {sortedAlerts.length > 0 && (
         <box>
           <text fg={Colors.dim} dim>
-            ↑↓ scroll · {scrollOffset + 1}/{sortedAlerts.length}
+            ↑↓ · Enter:ack · x:dismiss · {scrollOffset + 1}/
+            {sortedAlerts.length}
           </text>
         </box>
       )}

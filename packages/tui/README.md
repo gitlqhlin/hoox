@@ -68,34 +68,53 @@ Persistent UI state lives under `$HOME/.hoox/.tui-state/` (session, crash log, c
 
 ## Keyboard Shortcuts
 
-| Key                 | Action                                   |
-| ------------------- | ---------------------------------------- |
-| `Ctrl+1`            | Dashboard view                           |
-| `Ctrl+2`            | Workers Overview                         |
-| `Ctrl+3`            | Worker Detail                            |
-| `Ctrl+4`            | Trade Monitor                            |
-| `Ctrl+5`            | Logs Viewer                              |
-| `Ctrl+6`            | Service Manager                          |
-| `Ctrl+7`            | Config Editor                            |
-| `Ctrl+8`            | Setup Wizard                             |
-| `Ctrl+9`            | Settings                                 |
-| `Ctrl+0`            | Queue Depth                              |
-| `Ctrl+Alt+K`        | KV Viewer                                |
-| `Ctrl+Alt+S`        | Secrets Viewer                           |
-| `Ctrl+Alt+C`        | AI Chat                                  |
-| `Ctrl+Alt+Q`        | DB Query                                 |
-| `Ctrl+Alt+E`        | Edge Topology                            |
-| `Ctrl+Alt+W`        | Worker Settings (dashboard.jsonc)        |
-| `Ctrl+P`            | Open Command Palette                     |
-| `Ctrl+B`            | Toggle Sidebar                           |
-| `Ctrl+R`            | Refresh all data                         |
-| `Ctrl+Q`            | Quit (with confirmation)                 |
-| `Esc`               | Close palette / dismiss modal / go back  |
-| `↑` `↓`             | Navigate within active view              |
-| `Tab` / `Shift+Tab` | Cycle focus between interactive elements |
-| `Enter`             | Select / confirm                         |
-| `Space`             | Toggle                                   |
-| `/`                 | Focus search (in searchable views)       |
+| Key                 | Action                                    |
+| ------------------- | ----------------------------------------- |
+| `Ctrl+1`            | Dashboard view                            |
+| `Ctrl+2`            | Workers Overview                          |
+| `Ctrl+3`            | Worker Detail                             |
+| `Ctrl+4`            | Trade Monitor                             |
+| `Ctrl+5`            | Logs Viewer                               |
+| `Ctrl+6`            | Service Manager                           |
+| `Ctrl+7`            | Config Editor                             |
+| `Ctrl+8`            | Setup Wizard                              |
+| `Ctrl+9`            | Settings                                  |
+| `Ctrl+0`            | Queue Depth                               |
+| `Ctrl+Alt+K`        | KV Viewer                                 |
+| `Ctrl+Alt+S`        | Secrets Viewer                            |
+| `Ctrl+Alt+C`        | AI Chat                                   |
+| `Ctrl+Alt+Q`        | DB Query                                  |
+| `Ctrl+Alt+E`        | Edge Topology                             |
+| `Ctrl+Alt+W`        | Worker Settings (dashboard.jsonc)         |
+| `Ctrl+P`            | Open Command Palette                      |
+| `Ctrl+B`            | Toggle Sidebar                            |
+| `Ctrl+R`            | Refresh data (force reconnect if offline) |
+| `Ctrl+Q`            | Quit (with confirmation)                  |
+| `Ctrl+Shift+D`      | Toggle status-bar error diagnostics       |
+| `Esc`               | Close palette / dismiss modal / go back   |
+| `↑` `↓`             | Navigate within active view               |
+| `Tab` / `Shift+Tab` | Cycle focus between interactive elements  |
+| `Enter`             | Select / confirm                          |
+| `Space`             | Toggle / pause (view-dependent)           |
+| `/`                 | Focus search (in searchable views)        |
+
+### Service Manager keys
+
+| Key               | Action                                 |
+| ----------------- | -------------------------------------- |
+| `↑` `↓`           | Select worker                          |
+| `d` / `r`         | Deploy / restart selected              |
+| `D` / `R` (Shift) | Deploy all / restart all               |
+| `Enter`           | Open worker detail                     |
+| `k` / `e` / `u`   | Kill-switch refresh / engage / release |
+
+### Dashboard keys
+
+| Key                   | Action                                   |
+| --------------------- | ---------------------------------------- |
+| `←` `→`               | Focus worker health card                 |
+| `Enter`               | Open focused worker detail               |
+| `↑` `↓` / Enter / `x` | Alerts: navigate / acknowledge / dismiss |
 
 ---
 
@@ -109,9 +128,9 @@ Persistent UI state lives under `$HOME/.hoox/.tui-state/` (session, crash log, c
 | **Trade Monitor**    | Live trade stream with symbol, side, price, quantity, and P&L per trade.                           |
 | **Logs Viewer**      | Scrollable log stream with level filtering, worker selection, and full-text search.                |
 | **Service Manager**  | Start, stop, restart, and deploy workers. View deployment history and rollback.                    |
-| **Config Editor**    | Edit Hoox configuration — exchange credentials, strategy parameters, risk limits.                  |
-| **Setup Wizard**     | Step-by-step guided setup for new Hoox installations (API keys, exchanges, wallet).                |
-| **Settings**         | Display preferences, theme, notification toggles, and keyboard shortcut customization.             |
+| **Config Viewer**    | Browse/format/validate project config (free-text edit via external editor; secrets files blocked). |
+| **Setup Wizard**     | Prerequisites + exchange flags + deploy; secrets set via CLI (`hoox config secrets set …`).        |
+| **Settings**         | Display preferences, dark theme, notification toggles, import/export, connection readout.          |
 | **Queue Depth**      | Queue backlog visualization across workers.                                                        |
 | **KV Viewer**        | Read-only Cloudflare KV key browser.                                                               |
 | **Secrets Viewer**   | Read-only secret names/metadata (values never shown).                                              |

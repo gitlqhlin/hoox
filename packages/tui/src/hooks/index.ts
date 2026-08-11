@@ -14,3 +14,4 @@ export {
 export type { UsePollingOptions } from "./use-polling";
 export { useServiceData } from "./use-service-data";
 export { setRendererRef, getRendererRef } from "./renderer-ref";
+export { isShellOverlayOpen, useViewKeyboard } from "./shell-overlay";

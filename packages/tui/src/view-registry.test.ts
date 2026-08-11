@@ -107,9 +107,11 @@ describe("view-registry", () => {
     expect(isRegisteredViewId("")).toBe(false);
   });
 
-  it("action commands include refresh, toggle-sidebar, quit", () => {
+  it("action commands include refresh, reconnect, diagnostics, sidebar, quit", () => {
     const ids = ACTION_COMMANDS.map((c) => c.id);
     expect(ids).toContain("refresh");
+    expect(ids).toContain("force-retry");
+    expect(ids).toContain("expand-error");
     expect(ids).toContain("toggle-sidebar");
     expect(ids).toContain("quit");
   });

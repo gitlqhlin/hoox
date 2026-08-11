@@ -21,7 +21,7 @@
  * Colors from @hoox-sh/hoox-shared tokens — no hardcoded hex.
  */
 import { useState, useMemo, useEffect, useCallback, useRef } from "react";
-import { useKeyboard } from "@opentui/react";
+
 import {
   Colors,
   LogLevelColor,
@@ -36,6 +36,7 @@ import {
 import { ErrorBoundary } from "../shared/error-boundary";
 import { StatusDot, type StatusDotStatus } from "../shared/status-dot";
 import { ViewHeader } from "../shared/view-header";
+import { useViewKeyboard } from "../../hooks/shell-overlay";
 
 // ── Local type aliases (inferred from store return types) ──────────────────
 
@@ -97,14 +98,20 @@ export function redactConfigEntries(
 /**
  * Breadcrumb header showing back navigation, worker name, and status indicator.
  */
-function BreadcrumbHeader({ worker }: { worker: Worker }) {
+function BreadcrumbHeader({
+  worker,
+  onBack,
+}: {
+  worker: Worker;
+  onBack: () => void;
+}) {
   return (
     <ViewHeader
       title={worker.name}
       showDivider={false}
       meta={
         <box flexDirection="row" gap={2}>
-          <text fg={Colors.muted} dim>
+          <text fg={Colors.accent} onMouseUp={onBack}>
             ← BACK
           </text>
           <StatusDot
@@ -207,7 +214,7 @@ function LogsPane({
   }, [workerLogs.length, paused]);
 
   // Keyboard: Space toggles pause when this pane is focused
-  useKeyboard((key) => {
+  useViewKeyboard((key) => {
     if (!focused) return;
     if (key.name === "space") {
       setPaused((p) => !p);
@@ -546,25 +553,32 @@ export function WorkerDetail() {
     void fetchConfig();
   }, [fetchConfig]);
 
-  // Fetch logs via CLI as fallback when SSE is not connected
+  // Fetch logs via CLI when SSE is offline OR when connected but empty for this worker
   useEffect(() => {
     if (connectionStatus !== "connected") {
       void fetchLogs();
+      return;
     }
-  }, [connectionStatus, fetchLogs]);
+    // Connected but no lines yet for this worker — still allow a one-shot CLI seed
+    const hasWorkerLogs = useServiceStore
+      .getState()
+      .logs.some((l) => l.workerId === worker?.id || l.source === worker?.name);
+    if (!hasWorkerLogs && worker) {
+      void fetchLogs();
+    }
+  }, [connectionStatus, fetchLogs, worker]);
 
   const handleRefresh = useCallback(() => {
     void fetchConfig();
-    if (connectionStatus !== "connected") {
-      void fetchLogs();
-    }
-  }, [fetchConfig, fetchLogs, connectionStatus]);
+    // Always refresh logs on explicit Ctrl+R — not only when offline
+    void fetchLogs();
+  }, [fetchConfig, fetchLogs]);
 
   const activeView = useUIStore((s) => s.activeView);
   const isActive = activeView === "worker-detail";
 
   // View-local keyboard handling (only when this view is active)
-  useKeyboard((key) => {
+  useViewKeyboard((key) => {
     if (!isActive) return;
     switch (key.name) {
       case "tab":
@@ -586,6 +600,7 @@ export function WorkerDetail() {
       <ErrorBoundary viewName="Worker Detail">
         <box flexDirection="column" flexGrow={1} padding={2} gap={1}>
           <BreadcrumbHeader
+            onBack={goBack}
             worker={{
               id: selectedWorkerId || "unknown",
               name: selectedWorkerId || "Unknown Worker",
@@ -631,7 +646,7 @@ export function WorkerDetail() {
     <ErrorBoundary viewName={`Worker: ${worker.name}`}>
       <box flexDirection="column" flexGrow={1} padding={1} gap={1}>
         {/* Breadcrumb header */}
-        <BreadcrumbHeader worker={worker} />
+        <BreadcrumbHeader worker={worker} onBack={goBack} />
 
         {/* 2×2 Grid of panes */}
         <box flexDirection="column" flexGrow={1} gap={1}>

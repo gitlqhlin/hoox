@@ -13,7 +13,7 @@
  * Color-coded by level using Hoox design tokens. Wrapped in ErrorBoundary.
  */
 import { useState, useMemo, useCallback, useEffect, useRef } from "react";
-import { useKeyboard } from "@opentui/react";
+
 import {
   Colors,
   LogLevelColor,
@@ -25,6 +25,7 @@ import { ErrorBoundary } from "../shared/error-boundary";
 import { cliBridge } from "../../services/cli-bridge";
 import { ViewHeader } from "../shared/view-header";
 import { Panel } from "../shared/panel";
+import { useViewKeyboard } from "../../hooks/shell-overlay";
 
 // ─── Color Tokens ────────────────────────────────────────────────────────────
 
@@ -283,6 +284,8 @@ interface ActionBarProps {
   onTogglePause: () => void;
   onExport: () => void;
   onClear: () => void;
+  /** True when user must confirm clear a second time. */
+  clearArmed?: boolean;
   sseConnected: boolean;
   onFetch?: () => void;
 }
@@ -292,6 +295,7 @@ function ActionBar({
   onTogglePause,
   onExport,
   onClear,
+  clearArmed = false,
   sseConnected,
   onFetch,
 }: ActionBarProps) {
@@ -315,8 +319,12 @@ function ActionBar({
         <text fg={Colors.foreground} onMouseUp={onExport}>
           [Export]
         </text>
-        <text fg={Colors.foreground} onMouseUp={onClear}>
-          [Clear]
+        <text
+          fg={clearArmed ? Colors.warning : Colors.foreground}
+          bold={clearArmed}
+          onMouseUp={onClear}
+        >
+          {clearArmed ? "[Confirm Clear]" : "[Clear]"}
         </text>
         {!sseConnected && onFetch ? (
           <text fg={Colors.accent} onMouseUp={onFetch}>
@@ -325,7 +333,7 @@ function ActionBar({
         ) : null}
       </box>
       <text dim fg={Colors.muted}>
-        Space:pause /:search Tab:switch
+        Space:pause /:search
       </text>
     </box>
   );
@@ -439,23 +447,41 @@ export function LogsViewer() {
     }
   }, []);
 
+  const [clearArmed, setClearArmed] = useState(false);
+  const clearArmTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
   const handleClear = useCallback(() => {
-    // Soft confirm via status alert path — clearing is local buffer only.
-    // (No dialog prop on this view; keep non-destructive.)
+    // Two-step confirm (local buffer only — no dialog on this view).
+    if (!clearArmed) {
+      setClearArmed(true);
+      if (clearArmTimer.current) clearTimeout(clearArmTimer.current);
+      clearArmTimer.current = setTimeout(() => setClearArmed(false), 3000);
+      useServiceStore.getState().addAlert({
+        id: `clear-confirm-${Date.now()}`,
+        type: "info",
+        severity: "warning",
+        message: "Press CLEAR again within 3s to wipe the log buffer",
+        timestamp: Date.now(),
+        acknowledged: false,
+      });
+      return;
+    }
+    setClearArmed(false);
+    if (clearArmTimer.current) {
+      clearTimeout(clearArmTimer.current);
+      clearArmTimer.current = null;
+    }
     const ts = Date.now();
-    useServiceStore.setState((state) => {
-      state.logs = [];
-    });
-    const alert: Alert = {
+    useServiceStore.getState().clearLogs();
+    useServiceStore.getState().addAlert({
       id: `clear-${ts}`,
       type: "info",
       severity: "info",
       message: "Log buffer cleared",
       timestamp: ts,
       acknowledged: false,
-    };
-    useServiceStore.getState().addAlert(alert);
-  }, []);
+    });
+  }, [clearArmed]);
 
   const handleFetch = useCallback(async () => {
     const ts = Date.now();
@@ -526,16 +552,17 @@ export function LogsViewer() {
   }, [paused, frozen, displayed]);
 
   // ── Keyboard (active view only) ─────────────────────────────────────────
-  useKeyboard((key: { name: string; sequence?: string; ctrl?: boolean }) => {
+  useViewKeyboard((key) => {
     if (!isActive) return;
+    const name = String(key.name ?? "");
 
     // Search mode: type to filter, Esc / Enter to leave
     if (searchActive) {
-      if (key.name === "escape" || key.name === "return") {
+      if (name === "escape" || name === "return") {
         setSearchActive(false);
         return;
       }
-      if (key.name === "backspace" || key.name === "delete") {
+      if (name === "backspace" || name === "delete") {
         setSearchText((t) => t.slice(0, -1));
         return;
       }
@@ -545,13 +572,12 @@ export function LogsViewer() {
       return;
     }
 
-    if (key.name === "space") {
+    if (name === "space") {
       setPaused((p) => !p);
       return;
     }
-    if (key.name === "slash" || key.name === "/") {
+    if (name === "slash" || name === "/") {
       setSearchActive(true);
-      return;
     }
   });
 
@@ -607,6 +633,7 @@ export function LogsViewer() {
           onTogglePause={() => setPaused((p) => !p)}
           onExport={handleExport}
           onClear={handleClear}
+          clearArmed={clearArmed}
           sseConnected={sseConnected}
           onFetch={handleFetch}
         />

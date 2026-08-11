@@ -20,22 +20,24 @@
  *     known error types so the user gets a suggested next step, not just
  *     the raw error.
  */
-import { useState, useCallback, memo } from "react";
+import { useCallback, memo } from "react";
+import { useKeyboard } from "@opentui/react";
 import {
   Colors,
   ConnectionStatusColor,
   useServiceStore,
+  useUIStore,
   formatRelativeTimeFromTime as formatRelativeTime,
   type CliErrorType,
   type CliErrorDetails,
 } from "@hoox-sh/hoox-shared";
 import {
   classifyConnectionError,
-  hasApiToken,
   resolveTuiConnectionEnv,
 } from "../../services/tui-connection";
 import { redactSecretsInText } from "../../services/dev-log";
 import { CoolGlyph } from "../shared/cool-brackets";
+import { isShellOverlayOpen } from "../../hooks/shell-overlay";
 
 /** Map each CliErrorType to a short, human-readable label. */
 const ERROR_TYPE_LABELS: Record<CliErrorType, string> = {
@@ -231,26 +233,40 @@ export function StatusBar() {
   const lastErrorDetails = useServiceStore((s) => s.lastErrorDetails);
   const retryCount = useServiceStore((s) => s.retryCount);
   const reconnectDelay = useServiceStore((s) => s.reconnectDelay);
+  const errorExpanded = useUIStore((s) => s.statusErrorExpanded);
+  const toggleStatusErrorExpanded = useUIStore(
+    (s) => s.toggleStatusErrorExpanded
+  );
 
   const conn = resolveTuiConnectionEnv();
   const tuiMode = conn.mode;
   const apiHost = conn.apiHost;
-  const tokenPresent = hasApiToken();
+  // Fail-closed readiness: Bearer and/or Access pair (not token alone)
+  const authReady = conn.hasAuth;
   const errorKind = classifyConnectionError(lastError);
-  // Compact AUTH cue: missing token (remote) or auth error — keep short for host room
+  // Compact AUTH cue: missing any remote credential, or auth error
   const showAuthHint =
     tuiMode === "remote" &&
-    (!tokenPresent ||
-      errorKind === "auth" ||
-      Boolean(lastError?.includes("401")));
-
-  // Local UI state — expansion is purely a presentation concern, so it
-  // lives in component state rather than the global store.
-  const [errorExpanded, setErrorExpanded] = useState<boolean>(false);
+    (!authReady || errorKind === "auth" || Boolean(lastError?.includes("401")));
 
   const toggleError = useCallback(() => {
-    setErrorExpanded((prev) => !prev);
-  }, []);
+    toggleStatusErrorExpanded();
+  }, [toggleStatusErrorExpanded]);
+
+  // Keyboard expand diagnostics: Ctrl+Shift+D (does not steal view chords)
+  useKeyboard((key) => {
+    if (isShellOverlayOpen()) return;
+    const name = String(key.name ?? "").toLowerCase();
+    if (key.ctrl && key.shift && name === "d") {
+      const details = useServiceStore.getState().lastErrorDetails;
+      const status = useServiceStore.getState().connectionStatus;
+      const canExpand =
+        details !== null && (status === "offline" || status === "reconnecting");
+      if (canExpand) {
+        useUIStore.getState().toggleStatusErrorExpanded();
+      }
+    }
+  });
 
   const statusLabel: Record<string, string> = {
     connected: "CONNECTED",
@@ -285,7 +301,7 @@ export function StatusBar() {
   );
 
   if (showAuthHint) {
-    parts.push(!tokenPresent ? "| AUTH?" : "| AUTH!");
+    parts.push(!authReady ? "| AUTH?" : "| AUTH!");
   }
 
   if (lastError && isErrorState && errorKind !== "auth") {
@@ -294,11 +310,11 @@ export function StatusBar() {
   }
 
   // The expand hint appears whenever a clickable error is available so
-  // users know they can drill in.
+  // users know they can drill in (mouse or Ctrl+Shift+D).
   const expandHint = pillInteractive
     ? errorExpanded
-      ? "▾ click to collapse"
-      : "▸ click for details"
+      ? "▾ collapse (^⇧D)"
+      : "▸ details (^⇧D)"
     : "";
 
   return (
@@ -335,7 +351,7 @@ export function StatusBar() {
           <CoolGlyph char="┐" />
         </box>
         <text fg={Colors.dim} dim>
-          ^P PALETTE · ^B SIDEBAR · ^Q QUIT
+          ^P · ^B · ^Q · ^⇧D err
         </text>
       </box>
 

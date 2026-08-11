@@ -18,7 +18,7 @@
  * Colors from design tokens via @hoox-sh/hoox-shared. No CSS, no DOM.
  */
 import { useEffect, useMemo, useState, useCallback, useRef } from "react";
-import { useKeyboard } from "@opentui/react";
+
 import { Colors, useServiceStore } from "@hoox-sh/hoox-shared";
 import { ErrorBoundary } from "../shared/error-boundary";
 import { StatusDot } from "../shared/status-dot";
@@ -36,6 +36,7 @@ import { ModelHealthSection } from "./dashboard/model-health-section";
 import { PyneHealthSection } from "./dashboard/pyne-health-section";
 import { AlertsPanel } from "./dashboard/alerts-panel";
 import { useUIStore } from "@hoox-sh/hoox-shared";
+import { useViewKeyboard } from "../../hooks/shell-overlay";
 
 // ─── Props ────────────────────────────────────────────────────────────────────
 
@@ -73,11 +74,13 @@ function formatStatNumber(value: number, isPnl = false): string {
  * header. Auto-refreshes on mount and shows the engaged/released state with a
  * color-coded status dot. Errors degrade gracefully (badge just shows UNKNOWN).
  */
+/** How often the dashboard kill-switch badge re-probes (ms). */
+const KILL_SWITCH_POLL_MS = 15_000;
+
 function KillSwitchStatusBadge() {
   const [state, setState] = useState<"engaged" | "released" | "unknown">(
     "unknown"
   );
-
   useEffect(() => {
     let cancelled = false;
     const refresh = async () => {
@@ -94,8 +97,13 @@ function KillSwitchStatusBadge() {
       }
     };
     void refresh();
+    // Re-probe periodically so engage/release in Service Manager is visible here
+    const timer = setInterval(() => {
+      void refresh();
+    }, KILL_SWITCH_POLL_MS);
     return () => {
       cancelled = true;
+      clearInterval(timer);
     };
   }, []);
 
@@ -200,10 +208,18 @@ function DashboardHeader({
  * ServiceHealthGrid — displays all workers as a grid of status cards.
  * Each card shows: [█ ▌ ░] WORKER_NAME
  * Limited to first 10 workers (fits the dashboard layout).
+ *
+ * Keyboard (dashboard active, when not handling alerts):
+ *   ←→↑↓ / hjkl — move focus among worker cards
+ *   Enter       — open worker detail
+ * Mouse: click card → detail
  */
 function ServiceHealthGrid() {
   const workers = useServiceStore((s) => s.workers);
   const connectionStatus = useServiceStore((s) => s.connectionStatus);
+  const activeView = useUIStore((s) => s.activeView);
+  const isActive = activeView === "dashboard";
+  const [focusIndex, setFocusIndex] = useState(0);
 
   // Show first 10 workers (dashboard is an overview)
   const visibleWorkers = useMemo(() => workers.slice(0, 10), [workers]);
@@ -214,6 +230,51 @@ function ServiceHealthGrid() {
         : [],
     [visibleWorkers.length]
   );
+
+  useEffect(() => {
+    setFocusIndex((i) =>
+      visibleWorkers.length === 0 ? 0 : Math.min(i, visibleWorkers.length - 1)
+    );
+  }, [visibleWorkers.length]);
+
+  const openWorker = useCallback((workerId: string) => {
+    useServiceStore.getState().selectWorker(workerId);
+    useUIStore.getState().setView("worker-detail");
+  }, []);
+
+  // 5-column grid navigation
+  const COLS = 5;
+  useViewKeyboard((key) => {
+    if (!isActive || visibleWorkers.length === 0) return;
+    const name = String(key.name ?? "").toLowerCase();
+    const n = visibleWorkers.length;
+    if (name === "left" || name === "h") {
+      setFocusIndex((i) => Math.max(0, i - 1));
+      return;
+    }
+    if (name === "right" || name === "l") {
+      setFocusIndex((i) => Math.min(n - 1, i + 1));
+      return;
+    }
+    if (name === "up" || name === "k") {
+      // Prefer alerts panel owning ↑↓ when alerts exist — grid uses only
+      // left/right by default; vertical jumps by COLS when pressed with Alt.
+      if (key.alt) {
+        setFocusIndex((i) => Math.max(0, i - COLS));
+      }
+      return;
+    }
+    if (name === "down" || name === "j") {
+      if (key.alt) {
+        setFocusIndex((i) => Math.min(n - 1, i + COLS));
+      }
+      return;
+    }
+    if (name === "return" || name === "enter") {
+      const w = visibleWorkers[focusIndex];
+      if (w) openWorker(w.id);
+    }
+  });
 
   if (workers.length === 0) {
     const offline =
@@ -238,10 +299,16 @@ function ServiceHealthGrid() {
 
   return (
     <box flexDirection="column" gap={0}>
-      {/* Section label */}
-      <text fg={Colors.foreground} bold dim>
-        SERVICE HEALTH
-      </text>
+      {/* Section label + compact keyboard affordance (avoid extra footer row —
+          OpenTUI flexWrap was overlapping a sibling hint into later cards). */}
+      <box flexDirection="row" gap={2}>
+        <text fg={Colors.foreground} bold dim>
+          SERVICE HEALTH
+        </text>
+        <text fg={Colors.dim} dim>
+          ←→ Enter
+        </text>
+      </box>
 
       {/* 2 rows × 5 columns grid */}
       <box
@@ -251,43 +318,51 @@ function ServiceHealthGrid() {
         paddingTop={1}
         paddingBottom={1}
       >
-        {visibleWorkers.map((worker) => (
+        {visibleWorkers.map((worker, i) => {
+          const focused = i === focusIndex;
+          return (
+            <box
+              key={worker.id}
+              flexDirection="row"
+              width={28}
+              gap={1}
+              paddingLeft={1}
+              paddingRight={1}
+              backgroundColor={focused ? Colors.card : undefined}
+              onMouseUp={() => {
+                setFocusIndex(i);
+                openWorker(worker.id);
+              }}
+            >
+              <StatusDot status={worker.status} />
+              <text
+                fg={focused ? Colors.accent : Colors.foreground}
+                bold={focused}
+              >
+                {worker.name}
+              </text>
+            </box>
+          );
+        })}
+        {/* Fill empty slots in the same wrap container */}
+        {emptySlots.map((i) => (
           <box
-            key={worker.id}
+            key={`empty-${i}`}
             flexDirection="row"
             width={28}
             gap={1}
             paddingLeft={1}
             paddingRight={1}
           >
-            <StatusDot status={worker.status} />
-            <text fg={Colors.foreground}>{worker.name}</text>
+            <text fg={Colors.dim} dim>
+              -
+            </text>
+            <text fg={Colors.dim} dim>
+              -
+            </text>
           </box>
         ))}
       </box>
-
-      {/* Fill empty slots in grid to maintain 10-card layout */}
-      {emptySlots.length > 0 && (
-        <box flexDirection="row" flexWrap="wrap" gap={1}>
-          {emptySlots.map((i) => (
-            <box
-              key={`empty-${i}`}
-              flexDirection="row"
-              width={28}
-              gap={1}
-              paddingLeft={1}
-              paddingRight={1}
-            >
-              <text fg={Colors.dim} dim>
-                —
-              </text>
-              <text fg={Colors.dim} dim>
-                —
-              </text>
-            </box>
-          ))}
-        </box>
-      )}
     </box>
   );
 }
@@ -301,11 +376,14 @@ function MetricCard({
   value,
   color,
   isPnl = false,
+  loading = false,
 }: {
   label: string;
   value: number;
   color: string;
   isPnl?: boolean;
+  /** When true, show placeholder instead of inventing zeros. */
+  loading?: boolean;
 }) {
   return (
     <box
@@ -325,10 +403,10 @@ function MetricCard({
         </text>
       </box>
 
-      {/* Value (large, colored) */}
+      {/* Value (large, colored) — never invent zeros while loading */}
       <box>
-        <text fg={color} bold>
-          {formatStatNumber(value, isPnl)}
+        <text fg={loading ? Colors.dim : color} bold={!loading}>
+          {loading ? "..." : formatStatNumber(value, isPnl)}
         </text>
       </box>
     </box>
@@ -341,8 +419,8 @@ function MetricCard({
  */
 function QuickStatsRow() {
   const metrics = useServiceStore((s) => s.metrics);
+  const loading = metrics === null;
 
-  // Default values when metrics is null/unavailable
   const totalPnl = metrics?.totalPnl ?? 0;
   const activeStrategies = metrics?.activeStrategies ?? 0;
   const dailyTrades = metrics?.dailyTrades ?? 0;
@@ -360,22 +438,29 @@ function QuickStatsRow() {
           value={totalPnl}
           color={totalPnl >= 0 ? Colors.success : Colors.error}
           isPnl
+          loading={loading}
         />
         <MetricCard
           label="ACTIVE STRATEGIES"
           value={activeStrategies}
           color={Colors.accent}
+          loading={loading}
         />
         <MetricCard
           label="DAILY TRADES"
           value={dailyTrades}
           color={Colors.info}
+          loading={loading}
         />
-        <MetricCard label="AI CALLS" value={aiCalls} color={Colors.accent} />
+        <MetricCard
+          label="AI CALLS"
+          value={aiCalls}
+          color={Colors.accent}
+          loading={loading}
+        />
       </box>
 
-      {/* Empty state when metrics unavailable */}
-      {metrics === null && (
+      {loading && (
         <box paddingTop={1} alignItems="center">
           <Spinner label="Waiting for metrics data..." />
         </box>
@@ -554,7 +639,7 @@ export function DashboardView({ dialog }: DashboardViewProps = {}) {
   }, [handleRunAutoRepair]);
 
   // Dismiss repair panel on ESC key when visible
-  useKeyboard((key) => {
+  useViewKeyboard((key) => {
     if (repairState.kind !== "idle" && key.name === "escape") {
       dismissRepairPanel();
     }
