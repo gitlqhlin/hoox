@@ -7,28 +7,44 @@
 
 @custom-variant dark (&:is(.dark *));
 
-/* ── Design tokens — premium dark trading aesthetic ── */
+/* ── Design tokens — premium dark trading aesthetic ──
+ *
+ * Surface ladder (mirrors light, inverted): near-black canvas, then
+ * slightly lighter steps so cards / sidebar / muted panels separate.
+ * Light uses ~0.985 → 1.0 → 0.97 → 0.94 → 0.90 → 0.88; dark needs
+ * wider L steps near black because low-end lightness compresses.
+ */
 :root,
 .dark {
-  --background: oklch(0.09 0.005 260);
+  /* Canvas (deep black) */
+  --background: oklch(0.12 0.006 260);
   --foreground: oklch(0.96 0.005 90);
-  --card: oklch(0.125 0.006 260);
+
+  /* Elevated panels — clear step above canvas (like pure white cards on light) */
+  --card: oklch(0.18 0.007 260);
   --card-foreground: oklch(0.96 0.005 90);
-  --popover: oklch(0.11 0.006 260);
+  --popover: oklch(0.19 0.007 260);
   --popover-foreground: oklch(0.96 0.005 90);
+
   --primary: oklch(0.95 0.01 90);
-  --primary-foreground: oklch(0.1 0.005 260);
-  --secondary: oklch(0.2 0.008 260);
-  --secondary-foreground: oklch(0.88 0.01 90);
-  --muted: oklch(0.22 0.008 260);
-  --muted-foreground: oklch(0.68 0.015 260);
+  --primary-foreground: oklch(0.12 0.005 260);
+
+  /* Mid surfaces (chips, secondary fills) */
+  --secondary: oklch(0.24 0.009 260);
+  --secondary-foreground: oklch(0.9 0.01 90);
+  --muted: oklch(0.24 0.009 260);
+  --muted-foreground: oklch(0.7 0.015 260);
+
   --accent: oklch(0.72 0.17 48);
   --accent-foreground: oklch(0.12 0.02 48);
   --destructive: oklch(0.58 0.22 25);
   --destructive-foreground: oklch(0.96 0.01 25);
-  --border: oklch(0.28 0.01 260);
-  --input: oklch(0.22 0.01 260);
+
+  /* Borders / inputs: one step lighter so edges read on black */
+  --border: oklch(0.32 0.012 260);
+  --input: oklch(0.26 0.01 260);
   --ring: oklch(0.72 0.17 48);
+
   /* Chart palette: high-contrast series on dark panels */
   --chart-1: oklch(0.78 0.14 48);
   --chart-2: oklch(0.7 0.14 200);
@@ -36,13 +52,15 @@
   --chart-4: oklch(0.72 0.12 300);
   --chart-5: oklch(0.75 0.1 80);
   --radius: 0.5rem;
-  --sidebar: oklch(0.11 0.006 260);
+
+  /* Sidebar: between canvas and card; accent row a mid step */
+  --sidebar: oklch(0.145 0.006 260);
   --sidebar-foreground: oklch(0.95 0.005 90);
   --sidebar-primary: oklch(0.72 0.17 48);
   --sidebar-primary-foreground: oklch(0.12 0.02 48);
-  --sidebar-accent: oklch(0.16 0.01 260);
+  --sidebar-accent: oklch(0.22 0.01 260);
   --sidebar-accent-foreground: oklch(0.95 0.005 90);
-  --sidebar-border: oklch(0.24 0.01 260);
+  --sidebar-border: oklch(0.28 0.01 260);
   --sidebar-ring: oklch(0.72 0.17 48);
   --success: oklch(0.68 0.17 145);
   --success-foreground: oklch(0.12 0.02 145);
@@ -205,8 +223,8 @@
 /* ── Grid background ── */
 .grid-bg {
   background-image:
-    linear-gradient(to right, oklch(0.22 0.01 260 / 0.55) 1px, transparent 1px),
-    linear-gradient(to bottom, oklch(0.22 0.01 260 / 0.55) 1px, transparent 1px);
+    linear-gradient(to right, oklch(0.3 0.01 260 / 0.45) 1px, transparent 1px),
+    linear-gradient(to bottom, oklch(0.3 0.01 260 / 0.45) 1px, transparent 1px);
   background-size: 56px 56px;
   mask-image: radial-gradient(
     ellipse 80% 70% at 50% 0%,
@@ -281,10 +299,10 @@ html:not(.dark) .texture-overlay::before {
   display: none;
 }
 
-/* Global thin scrollbar (Firefox + WebKit) */
+/* Global thin scrollbar (Firefox + WebKit) — track uses secondary surface */
 * {
   scrollbar-width: thin;
-  scrollbar-color: oklch(0.4 0.01 260 / 0.55) transparent;
+  scrollbar-color: oklch(0.42 0.012 260 / 0.65) transparent;
 }
 
 *::-webkit-scrollbar {
@@ -295,13 +313,13 @@ html:not(.dark) .texture-overlay::before {
   background: transparent;
 }
 *::-webkit-scrollbar-thumb {
-  background: oklch(0.4 0.01 260 / 0.55);
+  background: oklch(0.42 0.012 260 / 0.65);
   border-radius: 999px;
   border: 2px solid transparent;
   background-clip: content-box;
 }
 *::-webkit-scrollbar-thumb:hover {
-  background: oklch(0.55 0.02 260 / 0.75);
+  background: oklch(0.55 0.02 260 / 0.8);
   background-clip: content-box;
 }
 
