@@ -34,7 +34,7 @@ import { cn } from "@/lib/utils";
 interface HousekeepingResult {
   timestamp?: string;
   issues?: { worker: string; type: string; message: string }[];
-  checks?: HousekeepingCheckVM[];
+  checks?: { service: string; status: string; detail?: unknown }[];
   error?: string;
 }
 
@@ -68,8 +68,27 @@ export function WizardWorkersStep({ onChecked }: WizardWorkersStepProps) {
     void runCheck();
   }, []);
 
+  const formatDetail = (detail: unknown): string => {
+    if (detail == null) return "";
+    if (typeof detail === "string") return detail;
+    if (typeof detail === "number" || typeof detail === "boolean") {
+      return String(detail);
+    }
+    try {
+      return JSON.stringify(detail);
+    } catch {
+      return String(detail);
+    }
+  };
+
   const rows: HousekeepingCheckVM[] = (() => {
-    if (housekeeping?.checks) return housekeeping.checks;
+    if (housekeeping?.checks) {
+      return housekeeping.checks.map((c) => ({
+        service: c.service,
+        status: c.status,
+        detail: formatDetail(c.detail),
+      }));
+    }
     if (housekeeping?.issues) {
       return housekeeping.issues.map((i) => ({
         service: i.worker,
@@ -80,7 +99,9 @@ export function WizardWorkersStep({ onChecked }: WizardWorkersStepProps) {
     return [];
   })();
 
-  const healthyCount = rows.filter((c) => c.status === "ok").length;
+  const healthyCount = rows.filter(
+    (c) => c.status === "ok" || c.status === "skipped"
+  ).length;
   const errorCount = rows.filter((c) => c.status === "error").length;
   const healthPercent = rows.length
     ? Math.round((healthyCount / rows.length) * 100)
@@ -204,11 +225,20 @@ export function WizardWorkersStep({ onChecked }: WizardWorkersStepProps) {
                             "flex size-6 items-center justify-center rounded-full",
                             check.status === "ok"
                               ? "bg-success/10 text-success"
-                              : "bg-destructive/10 text-destructive"
+                              : check.status === "skipped"
+                                ? "bg-muted text-muted-foreground"
+                                : "bg-destructive/10 text-destructive"
                           )}
-                          title={check.status === "ok" ? "Healthy" : "Error"}
+                          title={
+                            check.status === "ok"
+                              ? "Healthy"
+                              : check.status === "skipped"
+                                ? "Skipped"
+                                : "Error"
+                          }
                         >
-                          {check.status === "ok" ? (
+                          {check.status === "ok" ||
+                          check.status === "skipped" ? (
                             <CheckCircle2 className="size-3.5" />
                           ) : (
                             <XCircle className="size-3.5" />

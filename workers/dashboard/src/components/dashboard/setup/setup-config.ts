@@ -48,7 +48,7 @@ export interface WizardStep {
 
 export interface HousekeepingCheckVM {
   service: string;
-  status: "ok" | "error";
+  status: "ok" | "error" | "skipped" | string;
   detail: string;
 }
 

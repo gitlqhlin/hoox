@@ -38,6 +38,7 @@ export type {
   WorkerSecretsStoreBinding,
   WorkerQueueConfig,
   HousekeepingCheck,
+  HousekeepingIssue,
   HousekeepingPayload,
   HousekeepingSummary,
   SettingsPayload,

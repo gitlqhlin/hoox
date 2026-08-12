@@ -151,7 +151,16 @@ export interface WorkerConfigManifestLite {
   migrations?: { tag: string; new_sqlite_classes?: string[] }[];
 }
 
+/** Per-service result from agent-worker `POST /agent/housekeeping`. */
 export interface HousekeepingCheck {
+  service: string;
+  /** "ok" | "error" | "skipped" (and any future statuses). */
+  status: string;
+  detail: unknown;
+}
+
+/** @deprecated Prefer HousekeepingCheck; kept for older issue-list payloads. */
+export interface HousekeepingIssue {
   worker: string;
   type: "error" | "warning" | "info";
   message: string;
@@ -163,12 +172,19 @@ export interface HousekeepingSummary {
   info: number;
 }
 
+/**
+ * Housekeeping response from agent-worker.
+ * Current shape uses `checks`; `issues`/`summary`/worker counts are legacy.
+ */
 export interface HousekeepingPayload {
   timestamp: string;
-  totalWorkers: number;
-  checkedWorkers: number;
-  issues: HousekeepingCheck[];
-  summary: HousekeepingSummary;
+  checks?: HousekeepingCheck[];
+  reconcile?: unknown;
+  /** @deprecated Legacy issue-list shape */
+  issues?: HousekeepingIssue[];
+  totalWorkers?: number;
+  checkedWorkers?: number;
+  summary?: HousekeepingSummary;
 }
 
 export interface SettingsPayload {

@@ -294,6 +294,7 @@ class ApiClient {
   async getHousekeeping(): Promise<{
     timestamp?: string;
     checks?: unknown[];
+    issues?: unknown[];
     error?: string;
   }> {
     try {
@@ -304,10 +305,19 @@ class ApiClient {
         },
       });
       if (!response.ok) {
-        throw new Error(`API Error: ${response.status} ${response.statusText}`);
+        const body = (await response.json().catch(() => null)) as {
+          error?: string;
+        } | null;
+        throw new Error(
+          body?.error || `API Error: ${response.status} ${response.statusText}`
+        );
       }
       const data = (await response.json()) as Record<string, unknown>;
-      if (typeof data.timestamp === "string" && Array.isArray(data.issues)) {
+      // Agent-worker returns { timestamp, checks: [...] }; legacy clients used issues[]
+      if (
+        typeof data.timestamp === "string" &&
+        (Array.isArray(data.checks) || Array.isArray(data.issues))
+      ) {
         return data as unknown as HousekeepingPayload;
       }
       return { error: "Invalid housekeeping payload" };

@@ -111,11 +111,16 @@ export function SetupWizard({
 
       if (hk && !("error" in hk && hk.error) && Array.isArray(hk.checks)) {
         const checks = hk.checks as { status?: string }[];
+        // All checks must be ok/skipped (or empty); any "error" blocks Next
         const ok =
           checks.length === 0 ||
-          checks.some((c) => c.status === "ok" || c.status === "healthy");
-        // If payload used issues[] shape instead
-        setWorkersHealthy(ok || checks.length === 0);
+          checks.every(
+            (c) =>
+              c.status === "ok" ||
+              c.status === "healthy" ||
+              c.status === "skipped"
+          );
+        setWorkersHealthy(ok);
       } else if (hk && Array.isArray((hk as { issues?: unknown[] }).issues)) {
         const issues = (hk as { issues: { type?: string }[] }).issues;
         setWorkersHealthy(!issues.some((i) => i.type === "error"));
