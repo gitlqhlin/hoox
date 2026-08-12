@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import type { MessageBatch } from "@cloudflare/workers-types";
+import type { MessageBatch, Message } from "@cloudflare/workers-types";
 
 export interface QueueHandlerOptions<T> {
   /** Maximum number of retry attempts */
@@ -30,6 +30,43 @@ export interface QueueHandlerOptions<T> {
     info(msg: string, data?: unknown): void;
     error(msg: string, data?: unknown): void;
   };
+  /**
+   * Max number of messages to process concurrently within a batch.
+   * Defaults to 1 (serial) for back-compat. Values < 1 are treated as 1.
+   */
+  concurrency?: number;
+}
+
+/**
+ * Process items with a bounded worker pool. Preserves per-item error isolation
+ * when `fn` catches internally; failures in `fn` reject the returned promise.
+ */
+async function mapPool<T>(
+  items: readonly T[],
+  concurrency: number,
+  fn: (item: T) => Promise<void>
+): Promise<void> {
+  if (items.length === 0) return;
+
+  const limit = Math.min(Math.max(1, concurrency), items.length);
+  if (limit === 1) {
+    for (const item of items) {
+      await fn(item);
+    }
+    return;
+  }
+
+  let nextIndex = 0;
+
+  async function worker(): Promise<void> {
+    while (true) {
+      const i = nextIndex++;
+      if (i >= items.length) return;
+      await fn(items[i]!);
+    }
+  }
+
+  await Promise.all(Array.from({ length: limit }, () => worker()));
 }
 
 /**
@@ -40,6 +77,7 @@ export interface QueueHandlerOptions<T> {
  * const handler = createQueueHandler({
  *   maxRetries: 5,
  *   backoffDelays: [0, 30, 60, 300, 900],
+ *   concurrency: 4, // optional; default 1 (serial)
  *   onMessage: async (msg) => {
  *     await executeTask(msg);
  *   },
@@ -56,43 +94,59 @@ export interface QueueHandlerOptions<T> {
  * ```
  */
 export function createQueueHandler<T>(options: QueueHandlerOptions<T>) {
-  const { maxRetries, backoffDelays, onMessage, onRetry, onDLQ, logger } =
-    options;
+  const {
+    maxRetries,
+    backoffDelays,
+    onMessage,
+    onRetry,
+    onDLQ,
+    logger,
+    concurrency: concurrencyOpt,
+  } = options;
 
-  return async (batch: MessageBatch<T>): Promise<void> => {
-    for (const msg of batch.messages) {
-      const attemptNumber = msg.attempts || 0;
-      const logId = `[${msg.id}]`;
+  const concurrency =
+    typeof concurrencyOpt === "number" &&
+    Number.isFinite(concurrencyOpt) &&
+    concurrencyOpt >= 1
+      ? Math.floor(concurrencyOpt)
+      : 1;
 
-      try {
+  async function processMessage(msg: Message<T>): Promise<void> {
+    const attemptNumber = msg.attempts || 0;
+    const logId = `[${msg.id}]`;
+
+    try {
+      logger?.info(
+        `${logId} Processing message (attempt ${attemptNumber + 1})`
+      );
+      await onMessage(msg.body, attemptNumber);
+      logger?.info(`${logId} Message processed successfully`);
+    } catch (error: unknown) {
+      const errorMsg = error instanceof Error ? error.message : String(error);
+
+      if (attemptNumber < maxRetries) {
+        const delaySeconds =
+          backoffDelays[attemptNumber] ??
+          backoffDelays[backoffDelays.length - 1] ??
+          0;
+
         logger?.info(
-          `${logId} Processing message (attempt ${attemptNumber + 1})`
+          `${logId} Retrying in ${delaySeconds}s (attempt ${attemptNumber + 2}/${maxRetries + 1})`
         );
-        await onMessage(msg.body, attemptNumber);
-        logger?.info(`${logId} Message processed successfully`);
-      } catch (error: unknown) {
-        const errorMsg = error instanceof Error ? error.message : String(error);
 
-        if (attemptNumber < maxRetries) {
-          const delaySeconds =
-            backoffDelays[attemptNumber] ??
-            backoffDelays[backoffDelays.length - 1] ??
-            0;
+        await onRetry?.(msg.body, attemptNumber, errorMsg, delaySeconds);
+        msg.retry({ delaySeconds });
+      } else {
+        logger?.error(
+          `${logId} Max retries exceeded (${maxRetries + 1} attempts), moving to DLQ`
+        );
 
-          logger?.info(
-            `${logId} Retrying in ${delaySeconds}s (attempt ${attemptNumber + 2}/${maxRetries + 1})`
-          );
-
-          await onRetry?.(msg.body, attemptNumber, errorMsg, delaySeconds);
-          msg.retry({ delaySeconds });
-        } else {
-          logger?.error(
-            `${logId} Max retries exceeded (${maxRetries + 1} attempts), moving to DLQ`
-          );
-
-          await onDLQ?.(msg.body, attemptNumber, errorMsg);
-        }
+        await onDLQ?.(msg.body, attemptNumber, errorMsg);
       }
     }
+  }
+
+  return async (batch: MessageBatch<T>): Promise<void> => {
+    await mapPool(batch.messages, concurrency, processMessage);
   };
 }

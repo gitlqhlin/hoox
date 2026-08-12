@@ -117,7 +117,7 @@ Applied on the webhook critical path **before** dispatch:
 | **Body size** | Hard cap **64 KiB** (Content-Length early reject + stream read). Oversized → `413`. |
 | **Auth** | Body `apiKey` compared with `timingSafeEqual` against `WEBHOOK_API_KEY_BINDING`. Missing/invalid → `403` (no key material in responses). |
 | **Rate limit** | KV-backed counter keyed by stable session (apiKey), default **10 req / 60s**. Exceeded → `429` `code: "RATE_LIMITED"`. |
-| **Idempotency** | Durable Object `IdempotencyStore`. Prefers body `idempotencyKey` or `Idempotency-Key` header; otherwise auto fingerprint `trade:{exchange}:{symbol}:{action}:{quantity}:{live\|test}`. Duplicates → `409`. |
+| **Idempotency** | Durable Object `IdempotencyStore`. Prefers body `idempotencyKey` or `Idempotency-Key` header; otherwise auto fingerprint `trade:{exchange}:{symbol}:{action}:{quantity}:{live\|test}:{minuteBucket}` (per-minute bucket so intentional same-size trades later are not blocked). Duplicates → `409`. |
 
 ---
 
