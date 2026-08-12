@@ -102,6 +102,7 @@ export {
   headersToObject,
   kvGetMany,
   kvGetManyAsRecord,
+  KV_BULK_GET_MAX_KEYS,
   kvPutMany,
 } from "./kvUtils";
 export type { EnvWithKV, KvPutEntry } from "./kvUtils";

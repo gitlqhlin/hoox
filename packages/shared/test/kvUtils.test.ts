@@ -36,12 +36,29 @@ interface MockKv {
  * Backed by an in-memory store with tracked put/get operations.
  * Returns a combined type that satisfies both test assertions and KVNamespace compatibility.
  */
-function createMockKv(): MockKv {
+function createMockKv(options?: { bulk?: boolean }): MockKv {
   const store = new Map<string, string>();
+  const useBulk = options?.bulk === true;
   return {
-    get: mock((key: string): Promise<string | null> => {
-      return Promise.resolve(store.get(key) ?? null);
-    }) as MockKv["get"],
+    get: mock(
+      (
+        key: string | string[]
+      ): Promise<string | null | Map<string, string | null>> => {
+        // Native bulk API path: get(string[]) => Map
+        if (Array.isArray(key)) {
+          if (!useBulk) {
+            // Simulate older / single-key-only bindings
+            throw new TypeError("KV bulk get not supported in this mock");
+          }
+          const map = new Map<string, string | null>();
+          for (const k of key) {
+            map.set(k, store.get(k) ?? null);
+          }
+          return Promise.resolve(map);
+        }
+        return Promise.resolve(store.get(key) ?? null);
+      }
+    ) as MockKv["get"],
     put: mock(
       (
         key: string,
@@ -156,7 +173,7 @@ describe("KV Utilities", () => {
   });
 
   describe("kvGetMany / kvPutMany", () => {
-    test("kvGetMany returns values in key order", async () => {
+    test("kvGetMany returns values in key order (Promise.all fallback)", async () => {
       const kv = createMockKv();
       kv._store.set("a", "1");
       kv._store.set("c", "3");
@@ -166,7 +183,23 @@ describe("KV Utilities", () => {
         "c",
       ]);
       expect(values).toEqual(["1", null, "3"]);
-      expect(kv.get.mock.calls.length).toBe(3);
+      // Fallback: one get per key after bulk attempt fails
+      expect(kv.get.mock.calls.length).toBeGreaterThanOrEqual(3);
+    });
+
+    test("kvGetMany uses native bulk get when Map is returned", async () => {
+      const kv = createMockKv({ bulk: true });
+      kv._store.set("a", "1");
+      kv._store.set("c", "3");
+      const values = await kvGetMany(kv as unknown as KVNamespace, [
+        "a",
+        "b",
+        "c",
+      ]);
+      expect(values).toEqual(["1", null, "3"]);
+      // Single bulk call for ≤100 keys
+      expect(kv.get.mock.calls.length).toBe(1);
+      expect(Array.isArray(kv.get.mock.calls[0]?.[0])).toBe(true);
     });
 
     test("kvGetMany returns empty array for empty keys", async () => {
@@ -177,7 +210,7 @@ describe("KV Utilities", () => {
     });
 
     test("kvGetManyAsRecord maps keys to values", async () => {
-      const kv = createMockKv();
+      const kv = createMockKv({ bulk: true });
       kv._store.set("x", "y");
       const record = await kvGetManyAsRecord(kv as unknown as KVNamespace, [
         "x",

@@ -6,6 +6,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getCloudflareContext } from "@opennextjs/cloudflare";
 import { Errors } from "@hoox-sh/hoox-shared/errors";
+import { kvGetMany } from "@hoox-sh/hoox-shared";
 import type { DashboardEnv } from "@/lib/env";
 import { agentConfigSchema } from "@/lib/agent-config-schema";
 
@@ -40,35 +41,44 @@ export async function GET(_request: NextRequest) {
       );
     }
 
-    const killSwitch = await env.CONFIG_KV.get("trade:kill_switch");
-    const configData = await env.CONFIG_KV.get("agent:config");
-    const raw = configData ? JSON.parse(configData) : null;
-    const parsed = raw ? agentConfigSchema.safeParse(raw) : null;
-    const config = parsed?.success ? parsed.data : raw;
-    if (!parsed?.success && raw) {
-      console.warn("agent/status: Invalid agent config schema");
+    // Parallel independent KV reads on the critical path
+    const [killSwitch, configData, stopsList] = await Promise.all([
+      env.CONFIG_KV.get("trade:kill_switch"),
+      env.CONFIG_KV.get("agent:config"),
+      env.CONFIG_KV.list({ prefix: "trade:watermark:" }),
+    ]);
+
+    let config: unknown = null;
+    if (configData) {
+      try {
+        const raw: unknown = JSON.parse(configData);
+        const parsed = agentConfigSchema.safeParse(raw);
+        config = parsed.success ? parsed.data : raw;
+        if (!parsed.success) {
+          console.warn("agent/status: Invalid agent config schema");
+        }
+      } catch {
+        console.warn("agent/status: agent:config is not valid JSON");
+      }
     }
 
-    const stopsList = await env.CONFIG_KV.list({
-      prefix: "trade:watermark:",
+    // Bulk watermark reads (native KV bulk get when available)
+    const stopKeys = stopsList.keys.map((entry) => entry.name);
+    const stopValues = await kvGetMany(env.CONFIG_KV, stopKeys);
+    const stops = stopKeys.map((name, i) => {
+      const parsedKey = parseWatermarkKey(name);
+      const value = stopValues[i];
+      const watermark =
+        value != null && value !== "" ? Number.parseFloat(value) : null;
+      return {
+        key: name,
+        exchange: parsedKey?.exchange ?? "unknown",
+        symbol: parsedKey?.symbol ?? name,
+        side: parsedKey?.side ?? "UNKNOWN",
+        watermark:
+          watermark != null && Number.isFinite(watermark) ? watermark : null,
+      };
     });
-
-    const stops = await Promise.all(
-      stopsList.keys.map(async (entry) => {
-        const parsedKey = parseWatermarkKey(entry.name);
-        const value = await env.CONFIG_KV!.get(entry.name);
-        const watermark =
-          value != null && value !== "" ? Number.parseFloat(value) : null;
-        return {
-          key: entry.name,
-          exchange: parsedKey?.exchange ?? "unknown",
-          symbol: parsedKey?.symbol ?? entry.name,
-          side: parsedKey?.side ?? "UNKNOWN",
-          watermark:
-            watermark != null && Number.isFinite(watermark) ? watermark : null,
-        };
-      })
-    );
 
     return NextResponse.json({
       success: true,

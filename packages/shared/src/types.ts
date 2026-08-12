@@ -14,15 +14,19 @@ export const TradeActionSchema = z.enum([
   "CLOSE_SHORT",
 ]);
 
+/** Hard caps aligned with major CEX max leverage / sane notional guards. */
+export const MAX_WEBHOOK_LEVERAGE = 125;
+export const MAX_WEBHOOK_QUANTITY = 1_000_000;
+
 export const WebhookPayloadSchema = z
   .object({
     exchange: z.string().min(1),
     action: TradeActionSchema,
     symbol: z.string().min(1).max(20),
-    quantity: z.number().positive().finite(),
+    quantity: z.number().positive().finite().max(MAX_WEBHOOK_QUANTITY),
     price: z.number().positive().finite().optional(),
     orderType: z.string().optional(),
-    leverage: z.number().int().positive().optional(),
+    leverage: z.number().int().positive().max(MAX_WEBHOOK_LEVERAGE).optional(),
     /**
      * When true, route the order to the exchange testnet/sandbox API
      * (if the exchange supports it). Live trading is the default.
@@ -38,9 +42,9 @@ export const TradeQueueMessageSchema = z
     exchange: z.string().min(1).max(64),
     action: TradeActionSchema,
     symbol: z.string().min(1).max(32),
-    quantity: z.number().positive().finite(),
+    quantity: z.number().positive().finite().max(MAX_WEBHOOK_QUANTITY),
     price: z.number().positive().finite().optional(),
-    leverage: z.number().int().positive().max(125).optional(),
+    leverage: z.number().int().positive().max(MAX_WEBHOOK_LEVERAGE).optional(),
     /** When true, execute against exchange testnet/sandbox (if supported). */
     test: z.boolean().optional(),
     /**

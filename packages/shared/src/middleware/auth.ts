@@ -140,7 +140,11 @@ export async function requireOperatorAuth(
 
   const authHeader = request.headers.get("Authorization");
   const expectedHeader = `Bearer ${apiKey}`;
-  if (!authHeader || !timingSafeEqual(authHeader, expectedHeader)) {
+  // Hash-then-compare when Web Crypto is available (no length oracle).
+  if (
+    !authHeader ||
+    !(await timingSafeEqualAsync(authHeader, expectedHeader))
+  ) {
     return new Response(JSON.stringify({ error: "Unauthorized" }), {
       status: 401,
       headers: { "Content-Type": "application/json" },

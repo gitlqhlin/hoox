@@ -12,6 +12,7 @@ import {
   applyAgentConfigFieldUpdates,
   expandAgentConfigToFieldMap,
   isAgentConfigEmbeddedField,
+  kvGetMany,
   parseAgentConfigJson,
   serializeAgentConfigForKv,
 } from "@hoox-sh/hoox-shared";
@@ -64,9 +65,8 @@ async function listSettingsFromKV(env: DashboardEnv): Promise<AllSettings> {
     READ_PREFIXES.map((prefix) => env.CONFIG_KV.list({ prefix }))
   );
   const keyNames = lists.flatMap((list) => list.keys.map((k) => k.name));
-  const values = await Promise.all(
-    keyNames.map((name) => env.CONFIG_KV.get(name))
-  );
+  // Bulk KV get (up to 100 keys/op) via shared helper — lower latency + subrequests
+  const values = await kvGetMany(env.CONFIG_KV, keyNames);
 
   const settings: Record<string, unknown> = {};
   for (let i = 0; i < keyNames.length; i++) {

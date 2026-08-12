@@ -109,6 +109,9 @@ export default [
             "Avoid `as any`. Use runtime narrowing, generics, or `unknown` + guards.",
         },
       ],
+      // Cloudflare Workers best practice: floating promises drop work / errors.
+      // https://developers.cloudflare.com/workers/best-practices/workers-best-practices/
+      "@typescript-eslint/no-floating-promises": "error",
     },
   },
   {
@@ -147,6 +150,8 @@ export default [
       "no-empty": "warn",
       // Allow `as any` in tests (mocks); production still bans via main block.
       "no-restricted-syntax": "off",
+      // Typed rule; test block disables projectService so it cannot run here.
+      "@typescript-eslint/no-floating-promises": "off",
     },
   },
 ];

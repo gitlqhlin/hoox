@@ -159,6 +159,30 @@ describe("WebhookPayloadSchema", () => {
     expect(result.success).toBe(false);
   });
 
+  test("rejects leverage above CEX hard cap (125)", () => {
+    const result = WebhookPayloadSchema.safeParse({
+      ...validPayload,
+      leverage: 200,
+    });
+    expect(result.success).toBe(false);
+  });
+
+  test("accepts leverage at CEX hard cap", () => {
+    const result = WebhookPayloadSchema.safeParse({
+      ...validPayload,
+      leverage: 125,
+    });
+    expect(result.success).toBe(true);
+  });
+
+  test("rejects quantity above hard cap", () => {
+    const result = WebhookPayloadSchema.safeParse({
+      ...validPayload,
+      quantity: 1_000_001,
+    });
+    expect(result.success).toBe(false);
+  });
+
   test("rejects non-object input", () => {
     expect(WebhookPayloadSchema.safeParse("string").success).toBe(false);
     expect(WebhookPayloadSchema.safeParse(123).success).toBe(false);

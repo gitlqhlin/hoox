@@ -40,15 +40,72 @@ export async function logKvTimestamp(
 }
 
 /**
- * Parallel KV gets — prefer over sequential `await kv.get` loops.
+ * Max keys per Workers KV bulk read (platform limit).
+ * @see https://developers.cloudflare.com/kv/api/read-key-value-pairs/
+ */
+export const KV_BULK_GET_MAX_KEYS = 100;
+
+type BulkKvGet = (
+  keys: string[]
+) => Promise<Map<string, string | null> | string | null>;
+
+/**
+ * Attempt one bulk KV get for `chunk`. Returns ordered values when the
+ * runtime returns a Map; otherwise `null` so callers can fall back.
+ */
+async function tryBulkGetChunk(
+  kv: KVNamespace,
+  chunk: readonly string[]
+): Promise<Array<string | null> | null> {
+  try {
+    const result = await (kv.get as BulkKvGet)([...chunk]);
+    if (!(result instanceof Map)) {
+      return null;
+    }
+    return chunk.map((key) => result.get(key) ?? null);
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Parallel / bulk KV gets — prefer over sequential `await kv.get` loops.
  * Order of returned values matches `keys`.
+ *
+ * Uses native `kv.get(string[])` bulk reads (up to 100 keys per call) when
+ * available. Bulk reads count as a single operation against the Workers
+ * subrequest limit and avoid simultaneous-connection pressure.
+ * Falls back to `Promise.all` of individual gets for mocks / older runtimes.
  */
 export async function kvGetMany(
   kv: KVNamespace,
   keys: readonly string[]
 ): Promise<Array<string | null>> {
   if (keys.length === 0) return [];
-  return Promise.all(keys.map((key) => kv.get(key)));
+
+  const out: Array<string | null> = new Array(keys.length);
+  let offset = 0;
+
+  while (offset < keys.length) {
+    const chunk = keys.slice(offset, offset + KV_BULK_GET_MAX_KEYS);
+    const bulk = await tryBulkGetChunk(kv, chunk);
+    if (bulk === null) {
+      // Bulk unsupported (test mock / old runtime) — finish with parallel singles.
+      const rest = await Promise.all(
+        keys.slice(offset).map((key) => kv.get(key))
+      );
+      for (let i = 0; i < rest.length; i++) {
+        out[offset + i] = rest[i] ?? null;
+      }
+      return out;
+    }
+    for (let i = 0; i < bulk.length; i++) {
+      out[offset + i] = bulk[i] ?? null;
+    }
+    offset += chunk.length;
+  }
+
+  return out;
 }
 
 /**
