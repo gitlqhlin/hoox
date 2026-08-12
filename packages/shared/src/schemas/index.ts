@@ -18,7 +18,14 @@ export type {
   ValidationReport,
 } from "./types.js";
 
-export { WORKER_MANIFESTS, WORKER_NAMES, CALLED_BY } from "./registry.js";
+export {
+  WORKER_MANIFESTS,
+  WORKER_NAMES,
+  WORKER_CATALOG,
+  CALLED_BY,
+  getWorkerDefaultEnabled,
+} from "./registry.js";
+export type { WorkerCatalogEntry } from "./registry.js";
 
 export {
   validateWranglerJsonc,

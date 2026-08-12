@@ -12,6 +12,11 @@ export interface WorkerManifest {
   name: string;
   /** Path relative to project root (e.g. "workers/trade-worker") */
   path: string;
+  /**
+   * Default for `workers.<name>.enabled` in the root wrangler.jsonc catalog.
+   * Used by `hoox workers enable|disable` and when seeding missing workers.
+   */
+  defaultEnabled: boolean;
   /** Vars the worker declares in its wrangler.jsonc `vars` section */
   vars: Record<string, VarDef>;
   /** Service bindings this worker calls */

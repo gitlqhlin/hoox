@@ -31,6 +31,7 @@ const manifests: Record<string, WorkerManifest> = {
   hoox: {
     name: "hoox",
     path: "workers/hoox-worker",
+    defaultEnabled: true,
     vars: {
       WEBHOOK_API_KEY_BINDING: {
         type: "secret",
@@ -82,6 +83,7 @@ const manifests: Record<string, WorkerManifest> = {
   "trade-worker": {
     name: "trade-worker",
     path: "workers/trade-worker",
+    defaultEnabled: true,
     vars: {
       INTERNAL_KEY_BINDING: {
         type: "secret",
@@ -142,6 +144,7 @@ const manifests: Record<string, WorkerManifest> = {
   "telegram-worker": {
     name: "telegram-worker",
     path: "workers/telegram-worker",
+    defaultEnabled: true,
     vars: {
       INTERNAL_KEY_BINDING: {
         type: "secret",
@@ -176,6 +179,7 @@ const manifests: Record<string, WorkerManifest> = {
   "d1-worker": {
     name: "d1-worker",
     path: "workers/d1-worker",
+    defaultEnabled: true,
     vars: {
       INTERNAL_KEY_BINDING: {
         type: "secret",
@@ -199,6 +203,7 @@ const manifests: Record<string, WorkerManifest> = {
   "web3-wallet-worker": {
     name: "web3-wallet-worker",
     path: "workers/web3-wallet-worker",
+    defaultEnabled: false,
     vars: {
       WALLET_PK_SECRET: { type: "secret", description: "Wallet private key" },
       WALLET_MNEMONIC_SECRET: {
@@ -220,6 +225,7 @@ const manifests: Record<string, WorkerManifest> = {
   "agent-worker": {
     name: "agent-worker",
     path: "workers/agent-worker",
+    defaultEnabled: true,
     vars: {
       AGENT_INTERNAL_KEY: { type: "secret", description: "Agent worker auth" },
       INTERNAL_KEY_BINDING: {
@@ -258,6 +264,7 @@ const manifests: Record<string, WorkerManifest> = {
   "email-worker": {
     name: "email-worker",
     path: "workers/email-worker",
+    defaultEnabled: false,
     vars: {
       INTERNAL_KEY_BINDING: {
         type: "secret",
@@ -296,6 +303,7 @@ const manifests: Record<string, WorkerManifest> = {
   "analytics-worker": {
     name: "analytics-worker",
     path: "workers/analytics-worker",
+    defaultEnabled: true,
     vars: {
       CLOUDFLARE_API_TOKEN: {
         type: "secret",
@@ -316,6 +324,7 @@ const manifests: Record<string, WorkerManifest> = {
   "report-worker": {
     name: "report-worker",
     path: "workers/report-worker",
+    defaultEnabled: false,
     vars: {
       CF_API_TOKEN_BINDING: {
         type: "secret",
@@ -351,6 +360,7 @@ const manifests: Record<string, WorkerManifest> = {
   "pyne-worker": {
     name: "pyne-worker",
     path: "workers/pyne-worker",
+    defaultEnabled: true,
     vars: {
       API_KEY: {
         type: "secret",
@@ -390,6 +400,7 @@ const manifests: Record<string, WorkerManifest> = {
   dashboard: {
     name: "dashboard",
     path: "workers/dashboard",
+    defaultEnabled: true,
     vars: {
       DASHBOARD_USER: {
         type: "secret",
@@ -438,3 +449,28 @@ export const WORKER_MANIFESTS: Record<string, WorkerManifest> = manifests;
 
 /** List of all worker names in the registry. */
 export const WORKER_NAMES: string[] = Object.keys(manifests).sort();
+
+/**
+ * Catalog entry for CLI worker enable/disable — one row per known worker.
+ * `defaultEnabled` is the seed value when the worker is first added to config.
+ */
+export interface WorkerCatalogEntry {
+  name: string;
+  path: string;
+  defaultEnabled: boolean;
+}
+
+/** Full catalog of known workers with default enable flags (sorted by name). */
+export const WORKER_CATALOG: WorkerCatalogEntry[] = WORKER_NAMES.map((name) => {
+  const m = manifests[name]!;
+  return {
+    name: m.name,
+    path: m.path,
+    defaultEnabled: m.defaultEnabled,
+  };
+});
+
+/** Lookup defaultEnabled for a known worker; undefined if not in catalog. */
+export function getWorkerDefaultEnabled(name: string): boolean | undefined {
+  return manifests[name]?.defaultEnabled;
+}

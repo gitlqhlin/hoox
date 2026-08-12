@@ -220,6 +220,84 @@ describe("ConfigService", () => {
     expect(enabled).not.toContain("w2");
   });
 
+  it("listWorkerStatuses() merges catalog with config", async () => {
+    const content = JSON.stringify({
+      global: { cloudflare_account_id: "acct" },
+      workers: {
+        "trade-worker": { enabled: false, path: "workers/trade-worker" },
+      },
+    });
+    await writeConfig(tmpDir, content);
+    const service = new ConfigService(join(tmpDir, "wrangler.jsonc"));
+    await service.load();
+
+    const rows = service.listWorkerStatuses();
+    const trade = rows.find((r) => r.name === "trade-worker");
+    expect(trade?.enabled).toBe(false);
+    expect(trade?.inConfig).toBe(true);
+    expect(trade?.inCatalog).toBe(true);
+    expect(trade?.defaultEnabled).toBe(true);
+
+    // Catalog-only worker (not in config) appears with default
+    const report = rows.find((r) => r.name === "report-worker");
+    expect(report?.inConfig).toBe(false);
+    expect(report?.inCatalog).toBe(true);
+    expect(report?.enabled).toBe(report?.defaultEnabled);
+  });
+
+  it("setWorkersEnabled disables and re-enables a worker", async () => {
+    const content = JSON.stringify({
+      global: { cloudflare_account_id: "acct" },
+      workers: {
+        "trade-worker": { enabled: true, path: "workers/trade-worker" },
+      },
+    });
+    await writeConfig(tmpDir, content);
+    const path = join(tmpDir, "wrangler.jsonc");
+    const service = new ConfigService(path);
+    await service.load();
+
+    await service.setWorkersEnabled(["trade-worker"], false);
+    expect(service.getWorker("trade-worker")?.enabled).toBe(false);
+
+    const disk = JSON.parse(await Bun.file(path).text()) as {
+      workers: { "trade-worker": { enabled: boolean } };
+    };
+    expect(disk.workers["trade-worker"].enabled).toBe(false);
+
+    await service.enableWorker("trade-worker");
+    expect(service.getWorker("trade-worker")?.enabled).toBe(true);
+  });
+
+  it("setWorkersEnabled seeds missing catalog workers", async () => {
+    const content = JSON.stringify({
+      global: { cloudflare_account_id: "acct" },
+      workers: {
+        "trade-worker": { enabled: true, path: "workers/trade-worker" },
+      },
+    });
+    await writeConfig(tmpDir, content);
+    const path = join(tmpDir, "wrangler.jsonc");
+    const service = new ConfigService(path);
+    await service.load();
+
+    const result = await service.setWorkersEnabled(["report-worker"], true);
+    expect(result[0]?.seeded).toBe(true);
+    expect(service.getWorker("report-worker")?.enabled).toBe(true);
+    expect(service.getWorker("report-worker")?.path).toBe(
+      "workers/report-worker"
+    );
+  });
+
+  it("setWorkersEnabled rejects unknown workers", async () => {
+    await writeConfig(tmpDir, validConfigJson());
+    const service = new ConfigService(join(tmpDir, "wrangler.jsonc"));
+    await service.load();
+    await expect(
+      service.setWorkersEnabled(["not-a-real-worker"], true)
+    ).rejects.toThrow(/Unknown worker/);
+  });
+
   it("listEnabledWorkers() returns empty array when all disabled", async () => {
     const content = JSON.stringify({
       global: { cloudflare_account_id: "abc123" },

@@ -3,11 +3,37 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { parse, printParseErrorCode } from "jsonc-parser";
-import type { ParseError } from "jsonc-parser";
+import { parse, printParseErrorCode, modify, applyEdits } from "jsonc-parser";
+import type { ParseError, FormattingOptions } from "jsonc-parser";
 import { join } from "node:path";
-import { resolveHooxPath, getHooxWranglerPath } from "@hoox-sh/hoox-shared";
+import {
+  resolveHooxPath,
+  getHooxWranglerPath,
+  WORKER_CATALOG,
+  WORKER_MANIFESTS,
+  getWorkerDefaultEnabled,
+} from "@hoox-sh/hoox-shared";
 import type { HooxConfig, WorkerConfig, GlobalConfig } from "./types";
+
+const JSONC_FORMAT: FormattingOptions = {
+  tabSize: 2,
+  insertSpaces: true,
+  eol: "\n",
+};
+
+/** Merged view of catalog + config for a single worker. */
+export interface WorkerStatusRow {
+  name: string;
+  path: string;
+  /** Effective enabled flag (config, else catalog default). */
+  enabled: boolean;
+  /** Catalog default (undefined if worker is not in the shared registry). */
+  defaultEnabled?: boolean;
+  /** Whether the worker appears in the root wrangler.jsonc. */
+  inConfig: boolean;
+  /** Whether the worker is in the shared WORKER_CATALOG. */
+  inCatalog: boolean;
+}
 
 /**
  * Structured error from `ConfigService.tryLoad()`.
@@ -276,6 +302,106 @@ export class ConfigService {
     return Object.entries(config.workers)
       .filter(([, w]) => w.enabled)
       .map(([name]) => name);
+  }
+
+  /**
+   * Merge shared worker catalog with current config.
+   * Includes catalog workers missing from config and custom config-only workers.
+   */
+  listWorkerStatuses(): WorkerStatusRow[] {
+    const config = this.ensureLoaded();
+    const names = new Set<string>([
+      ...WORKER_CATALOG.map((w) => w.name),
+      ...Object.keys(config.workers ?? {}),
+    ]);
+
+    return [...names].sort().map((name) => {
+      const catalog = WORKER_MANIFESTS[name];
+      const cfg = config.workers?.[name];
+      return {
+        name,
+        path: cfg?.path ?? catalog?.path ?? `workers/${name}`,
+        enabled: cfg?.enabled ?? catalog?.defaultEnabled ?? false,
+        defaultEnabled: catalog?.defaultEnabled,
+        inConfig: Boolean(cfg),
+        inCatalog: Boolean(catalog),
+      };
+    });
+  }
+
+  /**
+   * Enable or disable one or more workers in wrangler.jsonc.
+   *
+   * - Known catalog workers missing from config are seeded (path + empty secrets).
+   * - Unknown names (not in catalog and not in config) throw.
+   * Reloads in-memory config after write.
+   */
+  async setWorkersEnabled(
+    names: string[],
+    enabled: boolean
+  ): Promise<{ name: string; enabled: boolean; seeded: boolean }[]> {
+    this.ensureLoaded();
+    const filePath = this.configPath;
+    const file = Bun.file(filePath);
+    if (!(await file.exists())) {
+      throw new Error(`Config file not found: ${filePath}`);
+    }
+
+    let raw = await file.text();
+    const results: { name: string; enabled: boolean; seeded: boolean }[] = [];
+    const unique = [...new Set(names.map((n) => n.trim()).filter(Boolean))];
+
+    for (const name of unique) {
+      const existing = this.config!.workers?.[name];
+      const catalog = WORKER_MANIFESTS[name];
+      if (!existing && !catalog) {
+        throw new Error(
+          `Unknown worker "${name}". Known workers: ${WORKER_CATALOG.map((w) => w.name).join(", ")}`
+        );
+      }
+
+      let seeded = false;
+      if (!existing) {
+        const entry: WorkerConfig = {
+          enabled,
+          path: catalog!.path,
+          vars: {},
+          secrets: [],
+        };
+        const seedEdits = modify(raw, ["workers", name], entry, {
+          formattingOptions: JSONC_FORMAT,
+          isArrayInsertion: false,
+        });
+        raw = applyEdits(raw, seedEdits);
+        seeded = true;
+      } else {
+        const edits = modify(raw, ["workers", name, "enabled"], enabled, {
+          formattingOptions: JSONC_FORMAT,
+        });
+        raw = applyEdits(raw, edits);
+      }
+
+      results.push({ name, enabled, seeded });
+    }
+
+    await Bun.write(filePath, raw);
+    await this.load(filePath);
+    return results;
+  }
+
+  /** Enable a single worker (convenience wrapper). */
+  async enableWorker(name: string): Promise<void> {
+    await this.setWorkersEnabled([name], true);
+  }
+
+  /** Disable a single worker (convenience wrapper). */
+  async disableWorker(name: string): Promise<void> {
+    await this.setWorkersEnabled([name], false);
+  }
+
+  /** Catalog default for a worker name, if known. */
+  getWorkerDefaultEnabled(name: string): boolean | undefined {
+    return getWorkerDefaultEnabled(name);
   }
 
   /**

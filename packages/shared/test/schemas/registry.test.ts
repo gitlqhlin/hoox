@@ -7,7 +7,9 @@ import { describe, expect, it } from "bun:test";
 import {
   WORKER_MANIFESTS,
   WORKER_NAMES,
+  WORKER_CATALOG,
   CALLED_BY,
+  getWorkerDefaultEnabled,
 } from "../../src/schemas/registry.js";
 
 describe("Worker Registry", () => {
@@ -18,11 +20,21 @@ describe("Worker Registry", () => {
     expect(WORKER_NAMES).toContain("pyne-worker");
   });
 
-  it("each worker should have a name and path", () => {
+  it("each worker should have a name, path, and defaultEnabled", () => {
     for (const [workerName, m] of Object.entries(WORKER_MANIFESTS)) {
       expect(m.name).toBe(workerName);
       expect(m.path).toMatch(/^workers\//);
+      expect(typeof m.defaultEnabled).toBe("boolean");
     }
+  });
+
+  it("WORKER_CATALOG mirrors manifests with defaults", () => {
+    expect(WORKER_CATALOG).toHaveLength(WORKER_NAMES.length);
+    for (const entry of WORKER_CATALOG) {
+      expect(WORKER_MANIFESTS[entry.name]?.path).toBe(entry.path);
+      expect(getWorkerDefaultEnabled(entry.name)).toBe(entry.defaultEnabled);
+    }
+    expect(getWorkerDefaultEnabled("not-a-worker")).toBeUndefined();
   });
 
   it("deriveCalledBy should compute reverse mappings", () => {
