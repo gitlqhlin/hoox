@@ -112,9 +112,9 @@ describe("Rate Limiter", () => {
 
       // Verify KV put was called 3 times with incremented values
       expect(kv.put.mock.calls.length).toBe(3);
-      expect(kv.put.mock.calls[0][1]).toBe("1");
-      expect(kv.put.mock.calls[1][1]).toBe("2");
-      expect(kv.put.mock.calls[2][1]).toBe("3");
+      expect(kv.put.mock.calls[0]?.[1]).toBe("1");
+      expect(kv.put.mock.calls[1]?.[1]).toBe("2");
+      expect(kv.put.mock.calls[2]?.[1]).toBe("3");
     });
 
     test("blocks when max reached (returns allowed=false, remaining=0)", async () => {
@@ -209,7 +209,9 @@ describe("Rate Limiter", () => {
       await limiter.check(request);
 
       // KV key should contain the CF-Connecting-IP value, not X-Forwarded-For
-      const putKey = kv.put.mock.calls[0][0] as string;
+      const putCall = kv.put.mock.calls[0];
+      if (!putCall) throw new Error("expected KV put call");
+      const putKey = putCall[0] as string;
       expect(putKey).toContain("1.1.1.1");
       expect(putKey).not.toContain("2.2.2.2");
     });
@@ -229,7 +231,9 @@ describe("Rate Limiter", () => {
       await limiter.check(request);
 
       // Verify the KV key contains the custom prefix and IP
-      const putKey = kv.put.mock.calls[0][0] as string;
+      const putCall = kv.put.mock.calls[0];
+      if (!putCall) throw new Error("expected KV put call");
+      const putKey = putCall[0] as string;
       expect(putKey).toContain("my-custom-prefix");
       expect(putKey).toContain("10.0.0.1");
     });

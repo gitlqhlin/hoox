@@ -223,7 +223,7 @@ function installClackSpies(): void {
       const seq = responses.confirmSequence ?? defaultResponses.confirmSequence;
       const val = idx < seq.length ? seq[idx] : seq[seq.length - 1];
       if (simulateCancel) return Symbol.for("clack.cancel");
-      return val;
+      return val ?? false;
     }
   );
   spyOn(clack, "group").mockImplementation(
@@ -488,12 +488,12 @@ describe("init command", () => {
       responses = {
         password: "valid-token",
         text: "test-account-id",
-        multiselect: ["binance", "telegram"],
+        multiselect: ["exchange", "telegram"],
         select: "full", // full preset includes integrations
         confirmSequence: [true, false, false],
         group: {
-          BINANCE_KEY_BINDING: "binance-key-123",
-          BINANCE_SECRET_BINDING: "binance-secret-123",
+          EXCHANGE_KEY_BINDING: "binance-key-123",
+          EXCHANGE_SECRET_BINDING: "binance-secret-123",
           TG_BOT_TOKEN_BINDING: "tg-bot-token-123",
         },
       };
@@ -634,8 +634,8 @@ describe("init command", () => {
         select: "full",
         confirmSequence: [true, false, false],
         group: {
-          BINANCE_KEY_BINDING: "bk",
-          BINANCE_SECRET_BINDING: "bs",
+          EXCHANGE_KEY_BINDING: "bk",
+          EXCHANGE_SECRET_BINDING: "bs",
           TG_BOT_TOKEN_BINDING: "tgt",
         },
       };
@@ -645,8 +645,8 @@ describe("init command", () => {
       const workersJsonc = captured.writes["wrangler.jsonc"];
       expect(workersJsonc).toBeDefined();
       expect(workersJsonc).toContain('"trade-worker"');
-      expect(workersJsonc).toContain('"BINANCE_KEY_BINDING"');
-      expect(workersJsonc).toContain('"BINANCE_SECRET_BINDING"');
+      expect(workersJsonc).toContain('"EXCHANGE_KEY_BINDING"');
+      expect(workersJsonc).toContain('"EXCHANGE_SECRET_BINDING"');
       expect(workersJsonc).toContain('"telegram-worker"');
       expect(workersJsonc).toContain('"TG_BOT_TOKEN_BINDING"');
     });
@@ -699,10 +699,8 @@ describe("init command", () => {
         select: "full",
         confirmSequence: [true, false, false],
         group: {
-          BINANCE_KEY_BINDING: "bk",
-          BINANCE_SECRET_BINDING: "bs",
-          MEXC_KEY_BINDING: "mk",
-          MEXC_SECRET_BINDING: "ms",
+          EXCHANGE_KEY_BINDING: "bk",
+          EXCHANGE_SECRET_BINDING: "bs",
         },
       };
 
@@ -711,11 +709,13 @@ describe("init command", () => {
       const workersJsonc = captured.writes["wrangler.jsonc"];
       expect(workersJsonc).toBeDefined();
       expect(workersJsonc).toContain('"trade-worker"');
-      expect(workersJsonc).toContain('"BINANCE_KEY_BINDING"');
-      expect(workersJsonc).toContain('"MEXC_KEY_BINDING"');
+      expect(workersJsonc).toContain('"EXCHANGE_KEY_BINDING"');
+      expect(workersJsonc).toContain('"EXCHANGE_SECRET_BINDING"');
+      expect(workersJsonc).not.toContain('"BINANCE_KEY_BINDING"');
+      expect(workersJsonc).not.toContain('"MEXC_KEY_BINDING"');
       // Should only appear once
       const tradeWorkerCount =
-        workersJsonc.match(/"trade-worker"/g)?.length ?? 0;
+        workersJsonc?.match(/"trade-worker"/g)?.length ?? 0;
       expect(tradeWorkerCount).toBe(1);
     });
 

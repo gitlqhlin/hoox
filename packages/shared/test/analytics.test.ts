@@ -62,7 +62,9 @@ describe("trackAnalytics", () => {
     await trackAnalytics(env, "/track/api-call", { action: "test" });
 
     expect(env._fetchMock.mock.calls.length).toBe(1);
-    const request = env._fetchMock.mock.calls[0][0] as Request;
+    const firstCall = env._fetchMock.mock.calls[0];
+    if (!firstCall) throw new Error("expected fetch mock call");
+    const request = firstCall[0] as Request;
     expect(request.method).toBe("POST");
   });
 
@@ -73,7 +75,9 @@ describe("trackAnalytics", () => {
 
     await trackAnalytics(env, "/track/test", { data: 1 });
 
-    const request = env._fetchMock.mock.calls[0][0] as Request;
+    const firstCall = env._fetchMock.mock.calls[0];
+    if (!firstCall) throw new Error("expected fetch mock call");
+    const request = firstCall[0] as Request;
     expect(request.headers.get("Content-Type")).toBe("application/json");
   });
 
@@ -85,7 +89,9 @@ describe("trackAnalytics", () => {
 
     await trackAnalytics(env, "/track/test", payload);
 
-    const request = env._fetchMock.mock.calls[0][0] as Request;
+    const firstCall = env._fetchMock.mock.calls[0];
+    if (!firstCall) throw new Error("expected fetch mock call");
+    const request = firstCall[0] as Request;
     const bodyText = await request.text();
     const parsedBody = JSON.parse(bodyText);
     expect(parsedBody).toEqual(payload);
@@ -99,7 +105,9 @@ describe("trackAnalytics", () => {
 
     await trackAnalytics(env, endpoint, {});
 
-    const request = env._fetchMock.mock.calls[0][0] as Request;
+    const firstCall = env._fetchMock.mock.calls[0];
+    if (!firstCall) throw new Error("expected fetch mock call");
+    const request = firstCall[0] as Request;
     expect(new URL(request.url).pathname).toBe(endpoint);
   });
 
@@ -134,7 +142,9 @@ describe("trackAnalytics", () => {
 
     await trackAnalytics(env, "/track/api-call", { action: "test" });
 
-    const request = env._fetchMock.mock.calls[0][0] as Request;
+    const firstCall = env._fetchMock.mock.calls[0];
+    if (!firstCall) throw new Error("expected fetch mock call");
+    const request = firstCall[0] as Request;
     expect(request.headers.get("X-Internal-Auth-Key")).toBe("secret-key-123");
   });
 
@@ -145,7 +155,9 @@ describe("trackAnalytics", () => {
 
     await trackAnalytics(env, "/track/api-call", { action: "test" });
 
-    const request = env._fetchMock.mock.calls[0][0] as Request;
+    const firstCall = env._fetchMock.mock.calls[0];
+    if (!firstCall) throw new Error("expected fetch mock call");
+    const request = firstCall[0] as Request;
     expect(request.headers.get("X-Internal-Auth-Key")).toBeNull();
   });
 
@@ -156,7 +168,9 @@ describe("trackAnalytics", () => {
 
     await trackAnalytics(env, "/track/api-call", { action: "test" });
 
-    const request = env._fetchMock.mock.calls[0][0] as Request;
+    const firstCall = env._fetchMock.mock.calls[0];
+    if (!firstCall) throw new Error("expected fetch mock call");
+    const request = firstCall[0] as Request;
     expect(request.headers.get("X-Internal-Auth-Key")).toBeNull();
   });
 });

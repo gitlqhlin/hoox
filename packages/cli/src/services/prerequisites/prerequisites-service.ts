@@ -70,6 +70,9 @@ export class PrerequisitesService {
       }
 
       const current = match[1];
+      if (!current) {
+        return { outdated: false };
+      }
       const meetsMin = this.satisfies(current, this.MINIMUM_WRANGLER);
 
       return {
@@ -142,7 +145,7 @@ export class PrerequisitesService {
       });
       const stdout = await new Response(proc.stdout).text();
       const match = stdout.match(/(\d+\.\d+)/);
-      const version = match ? match[1] : "unknown";
+      const version = match?.[1] ?? "unknown";
       const [major, minor] = version.split(".").map(Number);
       const passed = (major ?? 0) >= 2 && (minor ?? 0) >= 40;
       return {

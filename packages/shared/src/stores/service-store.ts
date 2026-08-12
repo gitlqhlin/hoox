@@ -236,7 +236,7 @@ const initialState: ServiceState = {
 function getBackoffDelay(retryCount: number): number {
   if (retryCount <= 0) return 0;
   const index = Math.min(retryCount - 1, BACKOFF_SEQUENCE.length - 1);
-  return BACKOFF_SEQUENCE[index];
+  return BACKOFF_SEQUENCE[index] ?? 0;
 }
 
 // ─── Store ───────────────────────────────────────────────────────────────────

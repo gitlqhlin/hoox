@@ -395,13 +395,13 @@ describe("Shared Components", () => {
       it("filters to matching commands", () => {
         const result = filterCommands(SAMPLE_COMMANDS, "dash");
         expect(result.length).toBe(1);
-        expect(result[0].name).toBe("Dashboard");
+        expect(result[0]?.name).toBe("Dashboard");
       });
 
       it("sorts by score (best match first)", () => {
         const result = filterCommands(SAMPLE_COMMANDS, "theme");
         expect(result.length).toBe(2);
-        expect(result[0].name).toBe("Dark Theme"); // or Light Theme
+        expect(result[0]?.name).toBe("Dark Theme"); // or Light Theme
       });
 
       it("deduplicates by id", () => {

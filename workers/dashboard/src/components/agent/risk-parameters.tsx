@@ -122,7 +122,9 @@ export function RiskParameters() {
               <Slider
                 value={[drawdown]}
                 onValueChange={(v) => {
-                  setDrawdown(v[0]);
+                  const next = v[0];
+                  if (next === undefined) return;
+                  setDrawdown(next);
                   setDirty(true);
                 }}
                 min={-10}
@@ -144,7 +146,9 @@ export function RiskParameters() {
               <Slider
                 value={[trailingStop]}
                 onValueChange={(v) => {
-                  setTrailingStop(v[0]);
+                  const next = v[0];
+                  if (next === undefined) return;
+                  setTrailingStop(next);
                   setDirty(true);
                 }}
                 min={1}
@@ -165,7 +169,9 @@ export function RiskParameters() {
               <Slider
                 value={[takeProfit]}
                 onValueChange={(v) => {
-                  setTakeProfit(v[0]);
+                  const next = v[0];
+                  if (next === undefined) return;
+                  setTakeProfit(next);
                   setDirty(true);
                 }}
                 min={1}

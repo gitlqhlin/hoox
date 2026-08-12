@@ -33,8 +33,8 @@ export function timingSafeEqual(a: string, b: string): boolean {
   // Also mix in length difference so equal-prefix different-length still fails.
   let result = aBuf.length === bBuf.length ? 0 : 1;
   for (let i = 0; i < len; i++) {
-    const av = i < aBuf.length ? aBuf[i] : 0;
-    const bv = i < bBuf.length ? bBuf[i] : 0;
+    const av = aBuf[i] ?? 0;
+    const bv = bBuf[i] ?? 0;
     result |= av ^ bv;
   }
   return result === 0;

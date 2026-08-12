@@ -159,12 +159,12 @@ describe("TraceService.query — events view", () => {
 
     expect(result.success).toBe(true);
     expect(result.events).toHaveLength(2);
-    expect(result.events?.[0].$metadata.service).toBe("hoox");
+    expect(result.events?.[0]?.$metadata.service).toBe("hoox");
     expect(calls).toHaveLength(1);
-    expect(calls[0].url).toContain(
+    expect(calls[0]?.url).toContain(
       "/accounts/test-account/workers/observability/telemetry/query"
     );
-    expect(calls[0].method).toBe("POST");
+    expect(calls[0]?.method).toBe("POST");
   });
 
   it("returns empty events array when response has no events", async () => {
@@ -212,13 +212,13 @@ describe("TraceService.query — calculations view", () => {
 
     expect(result.success).toBe(true);
     expect(result.metrics).toHaveLength(2);
-    expect(result.metrics?.[0].calculations[0]).toEqual({
+    expect(result.metrics?.[0]?.calculations[0]).toEqual({
       alias: "count",
       value: 42,
     });
-    expect(result.metrics?.[0].groupBy).toEqual({ service: "hoox" });
+    expect(result.metrics?.[0]?.groupBy).toEqual({ service: "hoox" });
     // String "12.5" coerced to number
-    expect(result.metrics?.[1].calculations[0].value).toBe(12.5);
+    expect(result.metrics?.[1]?.calculations[0]?.value).toBe(12.5);
   });
 
   it("handles missing aggregates and groupBy gracefully", async () => {
@@ -237,8 +237,8 @@ describe("TraceService.query — calculations view", () => {
     });
 
     // No aggregates → empty calculations array (the result map yields no rows).
-    expect(result.metrics?.[0].calculations).toEqual([]);
-    expect(result.metrics?.[0].groupBy).toBeUndefined();
+    expect(result.metrics?.[0]?.calculations).toEqual([]);
+    expect(result.metrics?.[0]?.groupBy).toBeUndefined();
   });
 
   it("handles missing calculations array", async () => {
@@ -286,7 +286,7 @@ describe("TraceService.queryEvents", () => {
     const after = Date.now();
 
     expect(calls).toHaveLength(1);
-    const body = JSON.parse(calls[0].body ?? "{}");
+    const body = JSON.parse(calls[0]?.body ?? "{}");
     expect(body.view).toBe("events");
     expect(body.queryId).toBe("trace-events");
     expect(body.parameters.filters).toEqual([]);
@@ -309,7 +309,7 @@ describe("TraceService.queryEvents", () => {
       to: 2,
     });
 
-    const body = JSON.parse(calls[0].body ?? "{}");
+    const body = JSON.parse(calls[0]?.body ?? "{}");
     expect(body.parameters.filters).toEqual([
       {
         key: "$metadata.service",
@@ -344,7 +344,7 @@ describe("TraceService.queryMetrics", () => {
     const svc = new TraceService();
     await svc.queryMetrics({});
 
-    const body = JSON.parse(calls[0].body ?? "{}");
+    const body = JSON.parse(calls[0]?.body ?? "{}");
     expect(body.view).toBe("calculations");
     expect(body.queryId).toBe("trace-metrics");
     expect(body.parameters.calculations).toEqual([
@@ -368,7 +368,7 @@ describe("TraceService.queryMetrics", () => {
       groupBy: "trigger",
     });
 
-    const body = JSON.parse(calls[0].body ?? "{}");
+    const body = JSON.parse(calls[0]?.body ?? "{}");
     expect(body.parameters.filters).toEqual([
       {
         key: "$metadata.service",
@@ -408,8 +408,8 @@ describe("TraceService.listKeys", () => {
     const result = await svc.listKeys({ needle: "service" });
 
     expect(result.keys).toHaveLength(2);
-    expect(result.keys[0].key).toBe("$metadata.service");
-    const body = JSON.parse(calls[0].body ?? "{}");
+    expect(result.keys[0]?.key).toBe("$metadata.service");
+    const body = JSON.parse(calls[0]?.body ?? "{}");
     expect(body.needle).toEqual({
       value: "service",
       isRegex: false,
@@ -425,7 +425,7 @@ describe("TraceService.listKeys", () => {
 
     const svc = new TraceService();
     await svc.listKeys();
-    const body = JSON.parse(calls[0].body ?? "{}");
+    const body = JSON.parse(calls[0]?.body ?? "{}");
     expect(body.needle).toBeUndefined();
   });
 });
@@ -445,7 +445,7 @@ describe("TraceService.listValues", () => {
     const after = Date.now();
 
     expect(result.values).toEqual(["hoox", "trade-worker"]);
-    const body = JSON.parse(calls[0].body ?? "{}");
+    const body = JSON.parse(calls[0]?.body ?? "{}");
     expect(body.key).toBe("service");
     expect(body.type).toBe("string");
     expect(body.datasets).toEqual([]);
@@ -467,7 +467,7 @@ describe("TraceService.listValues", () => {
       to: 200,
     });
 
-    const body = JSON.parse(calls[0].body ?? "{}");
+    const body = JSON.parse(calls[0]?.body ?? "{}");
     expect(body.type).toBe("number");
     expect(body.limit).toBe(5);
     expect(body.timeframe).toEqual({ from: 100, to: 200 });
@@ -485,8 +485,8 @@ describe("TraceService destinations", () => {
     const svc = new TraceService();
     const result = await svc.listDestinations();
     expect(result).toHaveLength(1);
-    expect(result[0].slug).toBe("logs");
-    expect(calls[0].method).toBe("GET");
+    expect(result[0]?.slug).toBe("logs");
+    expect(calls[0]?.method).toBe("GET");
   });
 
   it("creates a destination", async () => {
@@ -507,8 +507,8 @@ describe("TraceService destinations", () => {
     });
 
     expect(result.slug).toBe("new");
-    expect(calls[0].method).toBe("POST");
-    const body = JSON.parse(calls[0].body ?? "{}");
+    expect(calls[0]?.method).toBe("POST");
+    const body = JSON.parse(calls[0]?.body ?? "{}");
     expect(body).toEqual({
       name: "New",
       type: "otlp",
@@ -524,8 +524,8 @@ describe("TraceService destinations", () => {
     const svc = new TraceService();
     await svc.deleteDestination("old-slug");
     expect(calls).toHaveLength(1);
-    expect(calls[0].url).toContain("/destinations/old-slug");
-    expect(calls[0].method).toBe("DELETE");
+    expect(calls[0]?.url).toContain("/destinations/old-slug");
+    expect(calls[0]?.method).toBe("DELETE");
   });
 });
 
@@ -554,7 +554,9 @@ describe("TraceService.getUsage", () => {
     expect(typeof result.from).toBe("string");
     expect(typeof result.to).toBe("string");
     // Query params: from/to in ms
-    const url = new URL(calls[0].url);
+    const rawUrl = calls[0]?.url;
+    expect(rawUrl).toBeDefined();
+    const url = new URL(rawUrl!);
     expect(url.searchParams.get("from")).toBeTruthy();
     expect(url.searchParams.get("to")).toBeTruthy();
   });
@@ -589,7 +591,7 @@ describe("TraceService live tail", () => {
     const svc = new TraceService();
     const session = await svc.prepareLiveTail();
     expect(session.sessionId).toBe("abc-123");
-    const body = JSON.parse(calls[0].body ?? "{}");
+    const body = JSON.parse(calls[0]?.body ?? "{}");
     expect(body.filters).toEqual([]);
   });
 
@@ -600,7 +602,7 @@ describe("TraceService live tail", () => {
 
     const svc = new TraceService();
     await svc.prepareLiveTail({ service: "hoox" });
-    const body = JSON.parse(calls[0].body ?? "{}");
+    const body = JSON.parse(calls[0]?.body ?? "{}");
     expect(body.filters).toEqual([
       {
         key: "$metadata.service",
@@ -618,9 +620,9 @@ describe("TraceService live tail", () => {
 
     const svc = new TraceService();
     await svc.liveTailHeartbeat("session-xyz");
-    expect(calls[0].url).toContain("/live-tail/heartbeat");
-    expect(calls[0].method).toBe("POST");
-    const body = JSON.parse(calls[0].body ?? "{}");
+    expect(calls[0]?.url).toContain("/live-tail/heartbeat");
+    expect(calls[0]?.method).toBe("POST");
+    const body = JSON.parse(calls[0]?.body ?? "{}");
     expect(body).toEqual({ sessionId: "session-xyz" });
   });
 });
@@ -667,6 +669,6 @@ describe("TraceService — cfApi error paths", () => {
     const svc = new TraceService();
     await svc.listKeys();
 
-    expect(calls[0].headers?.Authorization).toBe("Bearer test-token");
+    expect(calls[0]?.headers?.Authorization).toBe("Bearer test-token");
   });
 });

@@ -84,7 +84,7 @@ function installClackSpies(): void {
         ? confirmSequence[confirmIdx]
         : confirmSequence[confirmSequence.length - 1];
     confirmIdx++;
-    return v;
+    return v ?? false;
   });
   spyOn(clack, "password").mockImplementation(async () => {
     if (simulateCancel) return CANCEL;

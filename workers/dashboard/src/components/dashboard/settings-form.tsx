@@ -205,7 +205,10 @@ export function SettingsForm() {
           setSettings(loadedSettings);
           setBaseline(cloneSettings(loadedSettings));
           if (loadedConfigs.length > 0) {
-            setActiveWorker((prev) => prev || loadedConfigs[0].worker);
+            const first = loadedConfigs[0];
+            if (first) {
+              setActiveWorker((prev) => prev || first.worker);
+            }
           }
           if (healthRes && healthRes.ok) {
             const data = (await healthRes.json()) as {
@@ -707,7 +710,7 @@ export function SettingsForm() {
         </Alert>
       ) : (
         <Tabs
-          value={activeWorker || configs[0].worker}
+          value={activeWorker || configs[0]?.worker || ""}
           onValueChange={setActiveWorker}
           className="w-full"
         >

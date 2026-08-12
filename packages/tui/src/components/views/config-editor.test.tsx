@@ -101,22 +101,25 @@ describe("ConfigEditor", () => {
   describe("CONFIG_TREE_BLUEPRINT", () => {
     it("has config directory as root", async () => {
       expect(CONFIG_TREE_BLUEPRINT.length).toBeGreaterThan(0);
-      expect(CONFIG_TREE_BLUEPRINT[0].name).toBe("config");
-      expect(CONFIG_TREE_BLUEPRINT[0].type).toBe("directory");
+      expect(CONFIG_TREE_BLUEPRINT[0]?.name).toBe("config");
+      expect(CONFIG_TREE_BLUEPRINT[0]?.type).toBe("directory");
     });
 
     it("contains config files without secret-like .env entries", async () => {
-      const children = CONFIG_TREE_BLUEPRINT[0].children!;
+      const root = CONFIG_TREE_BLUEPRINT[0];
+      expect(root?.children).toBeDefined();
+      const children = root!.children!;
       // wrangler.toml, trade.config.json, risk.config.json, strategies (no .env)
       expect(children.length).toBe(4);
       expect(children.some((c) => c.name === ".env")).toBe(false);
     });
 
     it("strategies directory has 3 config files", async () => {
-      const strategies = CONFIG_TREE_BLUEPRINT[0].children!.find(
-        (c) => c.name === "strategies"
-      );
+      const root = CONFIG_TREE_BLUEPRINT[0];
+      expect(root?.children).toBeDefined();
+      const strategies = root!.children!.find((c) => c.name === "strategies");
       expect(strategies).toBeDefined();
+      expect(strategies!.children).toBeDefined();
       expect(strategies!.children!.length).toBe(3);
       const names = strategies!.children!.map((c) => c.name);
       expect(names).toContain("grid.config.json");
@@ -139,10 +142,10 @@ describe("ConfigEditor", () => {
       ];
       const flat = flattenTree(nodes);
       expect(flat.length).toBe(2); // directory + file
-      expect(flat[0].node.name).toBe("dir");
-      expect(flat[0].level).toBe(0);
-      expect(flat[1].node.name).toBe("file.txt");
-      expect(flat[1].level).toBe(1);
+      expect(flat[0]?.node.name).toBe("dir");
+      expect(flat[0]?.level).toBe(0);
+      expect(flat[1]?.node.name).toBe("file.txt");
+      expect(flat[1]?.level).toBe(1);
     });
 
     it("returns empty array for empty input", async () => {
@@ -180,8 +183,8 @@ describe("ConfigEditor", () => {
     it("highlights full-line comments as muted", async () => {
       const tokens = tokenizeTomlLine("# this is a comment");
       expect(tokens.length).toBeGreaterThan(0);
-      expect(tokens[0].text).toContain("#");
-      expect(tokens[0].color).toBe(Colors.muted);
+      expect(tokens[0]?.text).toContain("#");
+      expect(tokens[0]?.color).toBe(Colors.muted);
     });
 
     it("highlights section headers as accent bold", async () => {
@@ -389,8 +392,8 @@ describe("ConfigEditor", () => {
       // line 3 (unclosed string); the parser may point to the same
       // line or to the first line where it becomes unrecoverable.
       // Either way, the error must NOT be on a known-valid line.
-      expect(errors[0].line).toBeGreaterThanOrEqual(3);
-      expect(errors[0].line).toBeLessThanOrEqual(4);
+      expect(errors[0]?.line).toBeGreaterThanOrEqual(3);
+      expect(errors[0]?.line).toBeLessThanOrEqual(4);
     });
 
     it("reports 1-based column for invalid TOML", async () => {
@@ -398,16 +401,16 @@ describe("ConfigEditor", () => {
       const errors = validateSyntax(toml, "toml");
       expect(errors.length).toBeGreaterThan(0);
       // Column must be at least 1 (1-based) for a useful error marker.
-      expect(errors[0].column).toBeGreaterThanOrEqual(1);
+      expect(errors[0]?.column).toBeGreaterThanOrEqual(1);
     });
 
     it("includes the parser's error message verbatim", async () => {
       const toml = 'key = = "invalid"\n';
       const errors = validateSyntax(toml, "toml");
       expect(errors.length).toBeGreaterThan(0);
-      expect(errors[0].message.length).toBeGreaterThan(0);
+      expect(errors[0]?.message.length).toBeGreaterThan(0);
       // Must not be the old generic "Unbalanced brackets" message.
-      expect(errors[0].message).not.toMatch(/unbalanced/i);
+      expect(errors[0]?.message).not.toMatch(/unbalanced/i);
     });
 
     it("returns empty errors for empty TOML", async () => {

@@ -164,7 +164,7 @@ describe("registerMonitorCommand", () => {
       await program.parseAsync(["monitor", "trades"], { from: "user" });
       expect(resolveDbNameMock).toHaveBeenCalled();
       expect(queryMock).toHaveBeenCalled();
-      const sql = queryMock.mock.calls[0][1] as string;
+      const sql = queryMock.mock.calls[0]?.[1] as string;
       expect(sql).toContain("trades");
       expect(sql).toContain("ORDER BY timestamp DESC");
     });
@@ -172,7 +172,7 @@ describe("registerMonitorCommand", () => {
     it("accepts custom limit", async () => {
       const program = await createProgram();
       await program.parseAsync(["monitor", "trades", "25"], { from: "user" });
-      const sql = queryMock.mock.calls[0][1] as string;
+      const sql = queryMock.mock.calls[0]?.[1] as string;
       expect(sql).toContain("LIMIT 25");
     });
   });
@@ -240,7 +240,7 @@ describe("registerMonitorCommand", () => {
     it("queries system_logs without worker filter", async () => {
       const program = await createProgram();
       await program.parseAsync(["monitor", "logs"], { from: "user" });
-      const sql = queryMock.mock.calls[0][1] as string;
+      const sql = queryMock.mock.calls[0]?.[1] as string;
       expect(sql).toContain("system_logs");
       expect(sql).not.toContain("WHERE worker");
     });
@@ -248,7 +248,7 @@ describe("registerMonitorCommand", () => {
     it("filters by valid worker name", async () => {
       const program = await createProgram();
       await program.parseAsync(["monitor", "logs", "hoox"], { from: "user" });
-      const sql = queryMock.mock.calls[0][1] as string;
+      const sql = queryMock.mock.calls[0]?.[1] as string;
       expect(sql).toContain("WHERE worker = 'hoox'");
     });
 
@@ -374,7 +374,7 @@ describe("registerMonitorCommand", () => {
         from: "user",
       });
       expect(queryMock).toHaveBeenCalled();
-      const sql = queryMock.mock.calls[0][1] as string;
+      const sql = queryMock.mock.calls[0]?.[1] as string;
       expect(sql).toContain("total_events");
     });
 
@@ -435,7 +435,7 @@ describe("registerMonitorCommand", () => {
         ["monitor", "analytics", "errors", "--hours", "12"],
         { from: "user" }
       );
-      const sql = queryMock.mock.calls[0][1] as string;
+      const sql = queryMock.mock.calls[0]?.[1] as string;
       expect(sql).toContain("-12 hours");
       expect(sql).toContain("error");
     });

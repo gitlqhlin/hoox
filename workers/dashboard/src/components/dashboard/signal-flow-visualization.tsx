@@ -626,7 +626,9 @@ export function SignalFlowVisualization() {
                     <div key={stage.id} className="flex flex-1 items-center">
                       <StageNode
                         stage={stage}
-                        runtime={stageRuntimes[stage.id]}
+                        runtime={
+                          stageRuntimes[stage.id] ?? { status: "unknown" }
+                        }
                         reducedMotion={reducedMotion}
                       />
                       <ConnectionArrow
@@ -646,7 +648,9 @@ export function SignalFlowVisualization() {
                       <StageNode
                         key={stage.id}
                         stage={stage}
-                        runtime={stageRuntimes[stage.id]}
+                        runtime={
+                          stageRuntimes[stage.id] ?? { status: "unknown" }
+                        }
                         reducedMotion={reducedMotion}
                       />
                     ))}
@@ -665,7 +669,9 @@ export function SignalFlowVisualization() {
                     <div key={stage.id} className="flex flex-1 items-center">
                       <StageNode
                         stage={stage}
-                        runtime={stageRuntimes[stage.id]}
+                        runtime={
+                          stageRuntimes[stage.id] ?? { status: "unknown" }
+                        }
                         reducedMotion={reducedMotion}
                       />
                       {index < spineRight.length - 1 ? (

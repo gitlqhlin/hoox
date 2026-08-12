@@ -159,7 +159,7 @@ export function tokenizeTomlLine(line: string): TokenSpan[] {
 // ─── Syntax Highlighting — JSON ───────────────────────────────────────────────
 
 /** Color map for JSON token types. */
-const JSON_COLORS: Record<string, { fg: string; bold: boolean }> = {
+const JSON_COLORS = {
   brace: { fg: Colors.foreground, bold: false },
   key: { fg: Colors.accent, bold: false },
   colon: { fg: Colors.foreground, bold: false },
@@ -171,7 +171,7 @@ const JSON_COLORS: Record<string, { fg: string; bold: boolean }> = {
   whitespace: { fg: Colors.foreground, bold: false },
   error: { fg: Colors.error, bold: true },
   comment: { fg: Colors.muted, bold: false },
-};
+} as const;
 
 /**
  * Tokenize a single line of JSON text into colored spans.
@@ -202,8 +202,9 @@ export function tokenizeJsonLine(line: string): TokenSpan[] {
   }
 
   // Braces/brackets at start
-  if ("{]}[".includes(trimmed[0])) {
-    spans.push({ text: trimmed[0], color: JSON_COLORS.brace.fg, bold: true });
+  const firstChar = trimmed[0];
+  if (firstChar !== undefined && "{]}[".includes(firstChar)) {
+    spans.push({ text: firstChar, color: JSON_COLORS.brace.fg, bold: true });
     const rest = tokenizeJsonLine(trimmed.slice(1));
     spans.push(...rest);
     return spans;
@@ -218,6 +219,7 @@ export function tokenizeJsonLine(line: string): TokenSpan[] {
     trimmed.endsWith("]")
   ) {
     const last = trimmed[trimmed.length - 1];
+    if (last === undefined) return spans;
     const prefix = trimmed.slice(0, -1);
     const prefixSpans = tokenizeJsonLine(prefix);
     spans.push(...prefixSpans);
@@ -400,8 +402,8 @@ export function validateSyntax(
       const colMatch =
         msg.match(/column\s+(\d+)/i) ?? msg.match(/position\s+(\d+)/i);
       errors.push({
-        line: lineMatch ? parseInt(lineMatch[1]) : 1,
-        column: colMatch ? parseInt(colMatch[1]) : 0,
+        line: lineMatch?.[1] !== undefined ? parseInt(lineMatch[1], 10) : 1,
+        column: colMatch?.[1] !== undefined ? parseInt(colMatch[1], 10) : 0,
         message: msg,
       });
     }

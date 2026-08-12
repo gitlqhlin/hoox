@@ -193,7 +193,11 @@ export class WizardEngine {
 
   /** Get the current step definition. */
   getCurrentStep(): StepDefinition {
-    return STEPS.find((s) => s.id === this.state.step) ?? STEPS[0];
+    const step = STEPS.find((s) => s.id === this.state.step) ?? STEPS[0];
+    if (!step) {
+      throw new Error("Wizard has no steps defined");
+    }
+    return step;
   }
 
   /** Get list of completed step IDs. */
@@ -234,8 +238,11 @@ export class WizardEngine {
 
     // Advance to next step
     const currentIdx = STEP_ORDER.indexOf(this.state.step);
-    if (currentIdx < STEP_ORDER.length - 1) {
-      this.state.step = STEP_ORDER[currentIdx + 1];
+    if (currentIdx >= 0 && currentIdx < STEP_ORDER.length - 1) {
+      const nextStep = STEP_ORDER[currentIdx + 1];
+      if (nextStep !== undefined) {
+        this.state.step = nextStep;
+      }
     }
 
     this.state.updatedAt = Date.now();
@@ -248,6 +255,7 @@ export class WizardEngine {
     const currentIdx = STEP_ORDER.indexOf(this.state.step);
     if (currentIdx > 0) {
       const previousStep = STEP_ORDER[currentIdx - 1];
+      if (previousStep === undefined) return;
       this.state.step = previousStep;
       // Remove current step from completed if this is going back from completed step
       this.state.completedSteps = this.state.completedSteps.filter(

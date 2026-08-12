@@ -276,7 +276,7 @@ function relativeTime(ts: number): string {
 // ── Component ─────────────────────────────────────────────────────────
 
 export function DatabaseTableBrowser() {
-  const [activeTab, setActiveTab] = useState<string>(KNOWN_TABLES[0].id);
+  const [activeTab, setActiveTab] = useState<string>(KNOWN_TABLES[0]!.id);
   /** Per-table search so switching tables doesn't leak filters. */
   const [searchByTable, setSearchByTable] = useState<Record<string, string>>(
     {}
@@ -291,7 +291,7 @@ export function DatabaseTableBrowser() {
     setStates((prev) => ({
       ...prev,
       [tableId]: {
-        ...prev[tableId],
+        ...(prev[tableId] ?? INITIAL_STATE),
         loading: true,
         error: null,
         authError: false,
@@ -317,7 +317,7 @@ export function DatabaseTableBrowser() {
       setStates((prev) => ({
         ...prev,
         [tableId]: {
-          ...prev[tableId],
+          ...(prev[tableId] ?? INITIAL_STATE),
           loading: false,
           error: message,
           authError: isAuthFailure(message),
@@ -336,7 +336,7 @@ export function DatabaseTableBrowser() {
   }, [activeTab, fetchTable]);
 
   const activeTable =
-    KNOWN_TABLES.find((t) => t.id === activeTab) ?? KNOWN_TABLES[0];
+    KNOWN_TABLES.find((t) => t.id === activeTab) ?? KNOWN_TABLES[0]!;
   const activeState = states[activeTable.id] ?? INITIAL_STATE;
   const searchQuery = searchByTable[activeTable.id] ?? "";
 

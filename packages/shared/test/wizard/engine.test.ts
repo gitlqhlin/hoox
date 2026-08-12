@@ -103,7 +103,7 @@ describe("WizardEngine", () => {
     });
     engine.execute({ preset: "standard" });
     const state = engine.getState();
-    expect(state.selectedIntegrations).toContain("binance");
+    expect(state.selectedIntegrations).toContain("exchange");
     expect(state.selectedIntegrations).toContain("telegram");
   });
 
@@ -149,12 +149,12 @@ describe("WizardEngine", () => {
     engine.execute({
       preset: "custom",
       workers: ["trade-worker"],
-      integrations: ["binance"],
+      integrations: ["exchange"],
     });
     const state = engine.getState();
     expect(state.selectedWorkers).toContain("trade-worker");
     expect(state.selectedWorkers).toContain("d1-worker"); // auto-resolved
-    expect(state.selectedIntegrations).toContain("binance");
+    expect(state.selectedIntegrations).toContain("exchange");
   });
 
   it("rejects custom preset with empty workers", () => {
@@ -183,22 +183,24 @@ describe("WizardEngine", () => {
     engine.execute({
       preset: "custom",
       workers: ["trade-worker"],
-      integrations: ["binance"],
+      integrations: ["exchange"],
     });
     // Optional provisioning
     engine.execute({});
     expect(engine.getCurrentStep().id).toBe("SECRETS");
-    // Empty secrets object for binance should error required fields
+    // Empty secrets object for exchange should error required fields
     const errors = engine.execute({
       secrets: {
-        binance: {
-          BINANCE_KEY_BINDING: "",
-          BINANCE_SECRET_BINDING: "  ",
+        exchange: {
+          EXCHANGE_KEY_BINDING: "",
+          EXCHANGE_SECRET_BINDING: "  ",
         },
       },
     });
     expect(errors.length).toBeGreaterThan(0);
-    expect(errors.some((e) => e.includes("Binance"))).toBe(true);
+    expect(errors.some((e) => /Exchange|API Key|API Secret/i.test(e))).toBe(
+      true
+    );
     expect(engine.getCurrentStep().id).toBe("SECRETS");
 
     // Empty secrets map is allowed (skip-style)
@@ -218,20 +220,20 @@ describe("WizardEngine", () => {
     engine.execute({
       preset: "custom",
       workers: ["trade-worker"],
-      integrations: ["binance"],
+      integrations: ["exchange"],
     });
     engine.execute({}); // provisioning
     const errors = engine.execute({
       secrets: {
-        binance: {
-          BINANCE_KEY_BINDING: "key-value",
-          BINANCE_SECRET_BINDING: "sec-value",
+        exchange: {
+          EXCHANGE_KEY_BINDING: "key-value",
+          EXCHANGE_SECRET_BINDING: "sec-value",
         },
       },
     });
     expect(errors).toEqual([]);
     expect(engine.getCurrentStep().id).toBe("CONFIG_WRITE");
-    expect(engine.getState().secrets.binance?.BINANCE_KEY_BINDING).toBe(
+    expect(engine.getState().secrets.exchange?.EXCHANGE_KEY_BINDING).toBe(
       "key-value"
     );
   });

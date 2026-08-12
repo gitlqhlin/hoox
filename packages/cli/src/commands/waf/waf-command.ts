@@ -191,13 +191,24 @@ async function resolveZone(
   }
 
   // Parse first zone: "domain.com (abc123...)"
-  const match = lines[0].match(/^(.+?)\s+\((.+?)\)\s*$/);
+  const firstLine = lines[0];
+  if (!firstLine) {
+    throw new CLIError(
+      "No zones found. Set CLOUDFLARE_ZONE_ID environment variable.",
+      ExitCode.ERROR
+    );
+  }
+  const match = firstLine.match(/^(.+?)\s+\((.+?)\)\s*$/);
   if (match) {
-    return { name: match[1], id: match[2] };
+    const name = match[1];
+    const id = match[2];
+    if (name && id) {
+      return { name, id };
+    }
   }
 
   // Fallback: use the first line as ID
-  return { name: lines[0], id: lines[0] };
+  return { name: firstLine, id: firstLine };
 }
 
 // ---------------------------------------------------------------------------

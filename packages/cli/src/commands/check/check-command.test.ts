@@ -374,7 +374,7 @@ describe("registerCheckCommand", () => {
 
       // d1Execute was called with the table-discovery query.
       expect(d1ExecuteMock.mock.calls.length).toBeGreaterThan(0);
-      const calledSql = d1ExecuteMock.mock.calls[0][1];
+      const calledSql = d1ExecuteMock.mock.calls[0]?.[1];
       expect(calledSql).toBe(
         "SELECT name FROM sqlite_master WHERE type='table'"
       );

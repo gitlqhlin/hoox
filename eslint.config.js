@@ -90,25 +90,15 @@ export default [
       ],
       "@typescript-eslint/explicit-module-boundary-types": "off",
       "@typescript-eslint/no-var-requires": "off",
-      "@typescript-eslint/no-explicit-any": "warn",
-      "@typescript-eslint/ban-ts-comment": "error",
-    },
-  },
-  {
-    files: [
-      "packages/cli/src/commands/housekeeping/index.ts",
-      "packages/cli/src/commands/waf/waf-command.ts",
-      "workers/dashboard/src/lib/settings/loader.ts",
-      "workers/dashboard/src/lib/api.ts",
-      "workers/dashboard/src/components/dashboard/settings-form.tsx",
-    ],
-    rules: {
+      // Production TS: ban `any` and bare `as any` (tests relax below).
       "@typescript-eslint/no-explicit-any": "error",
-      "@typescript-eslint/consistent-type-assertions": [
+      "@typescript-eslint/ban-ts-comment": [
         "error",
         {
-          assertionStyle: "as",
-          objectLiteralTypeAssertions: "never",
+          "ts-expect-error": "allow-with-description",
+          "ts-ignore": true,
+          "ts-nocheck": true,
+          minimumDescriptionLength: 8,
         },
       ],
       "no-restricted-syntax": [
@@ -116,18 +106,9 @@ export default [
         {
           selector: "TSAsExpression > TSAnyKeyword",
           message:
-            "Avoid `as any` in critical modules. Use runtime narrowing or concrete interfaces.",
+            "Avoid `as any`. Use runtime narrowing, generics, or `unknown` + guards.",
         },
       ],
-    },
-  },
-  {
-    files: [
-      "workers/dashboard/src/components/dashboard/setup-checklist.tsx",
-      "workers/dashboard/src/app/api/settings/route.ts",
-    ],
-    rules: {
-      "@typescript-eslint/no-explicit-any": "warn",
     },
   },
   {
@@ -164,6 +145,8 @@ export default [
       "@typescript-eslint/no-explicit-any": "off",
       "@typescript-eslint/ban-ts-comment": "warn",
       "no-empty": "warn",
+      // Allow `as any` in tests (mocks); production still bans via main block.
+      "no-restricted-syntax": "off",
     },
   },
 ];

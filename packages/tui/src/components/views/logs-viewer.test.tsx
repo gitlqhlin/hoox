@@ -113,7 +113,7 @@ describe("LogsViewer filter logic", () => {
     });
     // Entries with workerId=w1 (alpha-worker) + entries with no workerId
     expect(result).toHaveLength(1); // only id=5 has workerId=w1
-    expect(result[0].id).toBe("5");
+    expect(result[0]?.id).toBe("5");
   });
 
   it("filters by text search (case-insensitive)", () => {
@@ -125,7 +125,7 @@ describe("LogsViewer filter logic", () => {
       workers,
     });
     expect(result).toHaveLength(1);
-    expect(result[0].message).toBe("Trade executed");
+    expect(result[0]?.message).toBe("Trade executed");
   });
 
   it("combines filters with AND logic", () => {
@@ -138,7 +138,7 @@ describe("LogsViewer filter logic", () => {
     });
     // Must be error OR info, alpha-worker, contains "auth"
     expect(result).toHaveLength(1);
-    expect(result[0].id).toBe("5"); // error + w1 + "Auth failure"
+    expect(result[0]?.id).toBe("5"); // error + w1 + "Auth failure"
   });
 
   it("handles empty text search as pass-through", () => {
@@ -263,7 +263,7 @@ describe("LogsViewer sanitization & caps", () => {
       workers: [],
     });
     expect(result).toHaveLength(1);
-    expect(result[0].id).toBe("1");
+    expect(result[0]?.id).toBe("1");
   });
 
   it("caps visible render window below store ring buffer (1000)", () => {

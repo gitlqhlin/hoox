@@ -201,11 +201,13 @@ export function getBreadcrumbs(pathname: string | null): BreadcrumbSegment[] {
   let acc = "/dashboard";
 
   for (let i = 0; i < parts.length; i++) {
-    acc += `/${parts[i]}`;
+    const part = parts[i];
+    if (part === undefined) continue;
+    acc += `/${part}`;
     const isLast = i === parts.length - 1;
     const label =
       routeTitles[acc] ??
-      parts[i].replace(/-/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
+      part.replace(/-/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
     segments.push({
       label,
       href: isLast ? undefined : acc,

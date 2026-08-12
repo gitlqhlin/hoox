@@ -69,12 +69,8 @@
         "INTERNAL_KEY_BINDING",
         "TELEGRAM_INTERNAL_KEY_BINDING",
         "API_SERVICE_KEY_BINDING",
-        "BINANCE_KEY_BINDING",
-        "BINANCE_SECRET_BINDING",
-        "BYBIT_KEY_BINDING",
-        "BYBIT_SECRET_BINDING",
-        "MEXC_KEY_BINDING",
-        "MEXC_SECRET_BINDING"
+        "EXCHANGE_KEY_BINDING",
+        "EXCHANGE_SECRET_BINDING"
       ]
     },
     "telegram-worker": {

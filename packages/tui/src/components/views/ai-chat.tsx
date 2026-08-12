@@ -229,7 +229,12 @@ export function AiChatView() {
   const [historyReady, setHistoryReady] = useState(false);
   const [inputText, setInputText] = useState("");
   const [selectedModel, setSelectedModel] = useState<AiModelOption>(
-    AI_MODEL_OPTIONS[0]
+    () =>
+      AI_MODEL_OPTIONS[0] ?? {
+        id: "workers-ai",
+        label: "Workers AI (Llama 3.1)",
+        provider: "cloudflare",
+      }
   );
   const [streamingContent, setStreamingContent] = useState("");
   const [isStreaming, setIsStreaming] = useState(false);

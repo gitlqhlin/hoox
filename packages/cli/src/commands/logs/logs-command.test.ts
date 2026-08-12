@@ -199,7 +199,7 @@ describe("registerLogsCommand", () => {
       const callArgs = (
         spawnMock as unknown as { mock: { calls: Array<unknown[]> } }
       ).mock.calls[0];
-      const spawnArgs = callArgs[0] as string[];
+      const spawnArgs = callArgs?.[0] as string[];
       expect(spawnArgs).toContain("wrangler");
       expect(spawnArgs).toContain("tail");
       expect(spawnArgs).toContain("hoox");
@@ -214,7 +214,7 @@ describe("registerLogsCommand", () => {
       const callArgs = (
         spawnMock as unknown as { mock: { calls: Array<unknown[]> } }
       ).mock.calls[0];
-      const spawnArgs = callArgs[0] as string[];
+      const spawnArgs = callArgs?.[0] as string[];
       expect(spawnArgs).toContain("--format");
       expect(spawnArgs).toContain("json");
     });
@@ -228,7 +228,7 @@ describe("registerLogsCommand", () => {
       const callArgs = (
         spawnMock as unknown as { mock: { calls: Array<unknown[]> } }
       ).mock.calls[0];
-      const spawnArgs = callArgs[0] as string[];
+      const spawnArgs = callArgs?.[0] as string[];
       expect(spawnArgs).toContain("--format");
       expect(spawnArgs).toContain("json");
     });
@@ -240,7 +240,7 @@ describe("registerLogsCommand", () => {
       const callArgs = (
         spawnMock as unknown as { mock: { calls: Array<unknown[]> } }
       ).mock.calls[0];
-      const spawnArgs = callArgs[0] as string[];
+      const spawnArgs = callArgs?.[0] as string[];
       expect(spawnArgs).not.toContain("--format");
     });
 
@@ -400,7 +400,7 @@ describe("registerLogsCommand", () => {
       const callArgs = (
         spawnMock as unknown as { mock: { calls: Array<unknown[]> } }
       ).mock.calls[0];
-      const spawnArgs = callArgs[0] as string[];
+      const spawnArgs = callArgs?.[0] as string[];
       // unknown level → "all" → no --format json
       expect(spawnArgs).not.toContain("--format");
     });

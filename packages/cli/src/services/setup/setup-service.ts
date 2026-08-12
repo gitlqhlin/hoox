@@ -1055,6 +1055,7 @@ export class SetupService {
       if (!varsMatch) continue;
 
       const varsBlock = varsMatch[1];
+      if (varsBlock === undefined) continue;
       const nullEntries = varsBlock.match(/"\w+"\s*:\s*null/g);
       if (!nullEntries) continue;
 

@@ -230,6 +230,13 @@ export class DbService {
           `Refusing to fall back to a no-op migration — please check the script format.`
       );
     }
-    return match[1];
+    const command = match[1];
+    if (!command) {
+      throw new Error(
+        `Migration script "${path}" was found but no \`d1 execute … --command="…"\` line could be extracted. ` +
+          `Refusing to fall back to a no-op migration — please check the script format.`
+      );
+    }
+    return command;
   }
 }

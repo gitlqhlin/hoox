@@ -157,54 +157,22 @@ export const REQUIRED_SECRETS: RequiredSecret[] = [
     priority: "recommended",
   },
 
-  // Exchanges — operator values
+  // Exchanges — one key pair for all venues (signal/routing selects exchange)
   {
     group: "Exchange API Keys",
     worker: "trade-worker",
-    secret: "BINANCE_KEY_BINDING",
-    desc: "Binance API key",
+    secret: "EXCHANGE_KEY_BINDING",
+    desc: "Unified exchange API key (Binance / Bybit / MEXC)",
     kind: "user",
     priority: "recommended",
   },
   {
     group: "Exchange API Keys",
     worker: "trade-worker",
-    secret: "BINANCE_SECRET_BINDING",
-    desc: "Binance API secret",
+    secret: "EXCHANGE_SECRET_BINDING",
+    desc: "Unified exchange API secret",
     kind: "user",
     priority: "recommended",
-  },
-  {
-    group: "Exchange API Keys",
-    worker: "trade-worker",
-    secret: "BYBIT_KEY_BINDING",
-    desc: "Bybit API key",
-    kind: "user",
-    priority: "optional",
-  },
-  {
-    group: "Exchange API Keys",
-    worker: "trade-worker",
-    secret: "BYBIT_SECRET_BINDING",
-    desc: "Bybit API secret",
-    kind: "user",
-    priority: "optional",
-  },
-  {
-    group: "Exchange API Keys",
-    worker: "trade-worker",
-    secret: "MEXC_KEY_BINDING",
-    desc: "MEXC API key",
-    kind: "user",
-    priority: "optional",
-  },
-  {
-    group: "Exchange API Keys",
-    worker: "trade-worker",
-    secret: "MEXC_SECRET_BINDING",
-    desc: "MEXC API secret",
-    kind: "user",
-    priority: "optional",
   },
 
   // Notifications

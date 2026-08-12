@@ -19,8 +19,8 @@ describe("persistence", () => {
         subdomain: "myapp",
       },
       selectedWorkers: ["hoox", "d1-worker"],
-      selectedIntegrations: ["binance"],
-      secrets: { binance: { BINANCE_KEY_BINDING: "key123" } },
+      selectedIntegrations: ["exchange"],
+      secrets: { exchange: { EXCHANGE_KEY_BINDING: "key123" } },
       preset: "minimal",
       startedAt: 1000,
       updatedAt: 2000,
@@ -31,8 +31,8 @@ describe("persistence", () => {
     expect(parsed.step).toBe("CLOUDFLARE_CONFIG");
     expect(parsed.cloudflareConfig?.apiToken).toBe("tok_xxx");
     expect(parsed.selectedWorkers).toContain("hoox");
-    expect(parsed.selectedIntegrations).toContain("binance");
-    expect(parsed.secrets?.binance?.BINANCE_KEY_BINDING).toBe("key123");
+    expect(parsed.selectedIntegrations).toContain("exchange");
+    expect(parsed.secrets?.exchange?.EXCHANGE_KEY_BINDING).toBe("key123");
     expect(parsed.preset).toBe("minimal");
   });
 

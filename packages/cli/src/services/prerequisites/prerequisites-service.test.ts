@@ -102,7 +102,7 @@ describe("PrerequisitesService", () => {
       const svc = new PrerequisitesService();
       const report = await svc.runAll("bun");
       expect(report.checks.length).toBe(1);
-      expect(report.checks[0].name).toBe("Bun");
+      expect(report.checks[0]?.name).toBe("Bun");
     }, 30000);
   });
 });

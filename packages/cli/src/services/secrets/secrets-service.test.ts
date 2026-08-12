@@ -51,8 +51,8 @@ const WORKERS_JSONC = JSON.stringify({
       secrets: [
         "API_SERVICE_KEY_BINDING",
         "INTERNAL_KEY_BINDING",
-        "BINANCE_KEY_BINDING",
-        "BINANCE_SECRET_BINDING",
+        "EXCHANGE_KEY_BINDING",
+        "EXCHANGE_SECRET_BINDING",
       ],
     },
     "d1-worker": {
@@ -123,8 +123,8 @@ describe("SecretsService", () => {
       expect(svc.listSecrets("trade-worker")).toEqual([
         "API_SERVICE_KEY_BINDING",
         "INTERNAL_KEY_BINDING",
-        "BINANCE_KEY_BINDING",
-        "BINANCE_SECRET_BINDING",
+        "EXCHANGE_KEY_BINDING",
+        "EXCHANGE_SECRET_BINDING",
       ]);
     });
 
@@ -163,8 +163,8 @@ describe("SecretsService", () => {
       expect(all["trade-worker"]).toEqual([
         "API_SERVICE_KEY_BINDING",
         "INTERNAL_KEY_BINDING",
-        "BINANCE_KEY_BINDING",
-        "BINANCE_SECRET_BINDING",
+        "EXCHANGE_KEY_BINDING",
+        "EXCHANGE_SECRET_BINDING",
       ]);
     });
 
@@ -194,8 +194,8 @@ describe("SecretsService", () => {
         expect(result.missing).toEqual([
           "API_SERVICE_KEY_BINDING",
           "INTERNAL_KEY_BINDING",
-          "BINANCE_KEY_BINDING",
-          "BINANCE_SECRET_BINDING",
+          "EXCHANGE_KEY_BINDING",
+          "EXCHANGE_SECRET_BINDING",
         ]);
         expect(result.secrets).toHaveLength(4);
         for (const s of result.secrets) {
@@ -211,7 +211,7 @@ describe("SecretsService", () => {
       try {
         writeFileSync(
           join(dir, ".dev.vars"),
-          "API_SERVICE_KEY_BINDING=abc123\nINTERNAL_KEY_BINDING=int999\nBINANCE_KEY_BINDING=xyz789\nBINANCE_SECRET_BINDING=sec456\n"
+          "API_SERVICE_KEY_BINDING=abc123\nINTERNAL_KEY_BINDING=int999\nEXCHANGE_KEY_BINDING=xyz789\nEXCHANGE_SECRET_BINDING=sec456\n"
         );
 
         const svc = await createService();
@@ -235,7 +235,7 @@ describe("SecretsService", () => {
       try {
         writeFileSync(
           join(dir, ".dev.vars"),
-          "API_SERVICE_KEY_BINDING=placeholder_api_service_key\nINTERNAL_KEY_BINDING=real-internal\nBINANCE_KEY_BINDING=binance-real-key\nBINANCE_SECRET_BINDING=your_secret\n"
+          "API_SERVICE_KEY_BINDING=placeholder_api_service_key\nINTERNAL_KEY_BINDING=real-internal\nEXCHANGE_KEY_BINDING=binance-real-key\nEXCHANGE_SECRET_BINDING=your_secret\n"
         );
 
         const svc = await createService();
@@ -246,8 +246,8 @@ describe("SecretsService", () => {
         expect(result.allSet).toBe(false);
         // API_SERVICE placeholder + BINANCE_SECRET your_ — INTERNAL + BINANCE_KEY real
         expect(result.missing).toContain("API_SERVICE_KEY_BINDING");
-        expect(result.missing).toContain("BINANCE_SECRET_BINDING");
-        expect(result.missing).not.toContain("BINANCE_KEY_BINDING");
+        expect(result.missing).toContain("EXCHANGE_SECRET_BINDING");
+        expect(result.missing).not.toContain("EXCHANGE_KEY_BINDING");
         expect(result.missing).not.toContain("INTERNAL_KEY_BINDING");
       } finally {
         rmSync(dir, { recursive: true, force: true });
@@ -259,7 +259,7 @@ describe("SecretsService", () => {
       try {
         writeFileSync(
           join(dir, ".dev.vars"),
-          "# This is a comment\nAPI_SERVICE_KEY_BINDING=real-key\nINTERNAL_KEY_BINDING=int-key\n\n# Another comment\nBINANCE_KEY_BINDING=another-key\nBINANCE_SECRET_BINDING=third-key\n"
+          "# This is a comment\nAPI_SERVICE_KEY_BINDING=real-key\nINTERNAL_KEY_BINDING=int-key\n\n# Another comment\nEXCHANGE_KEY_BINDING=another-key\nEXCHANGE_SECRET_BINDING=third-key\n"
         );
 
         const svc = await createService();
@@ -390,7 +390,7 @@ describe("SecretsService", () => {
       try {
         writeFileSync(
           join(dir, ".dev.vars"),
-          "API_SERVICE_KEY_BINDING=placeholder_api_service_key\nINTERNAL_KEY_BINDING=real-internal\nBINANCE_KEY_BINDING=real-binance-key\nBINANCE_SECRET_BINDING=generate_something\n"
+          "API_SERVICE_KEY_BINDING=placeholder_api_service_key\nINTERNAL_KEY_BINDING=real-internal\nEXCHANGE_KEY_BINDING=real-binance-key\nEXCHANGE_SECRET_BINDING=generate_something\n"
         );
 
         const svc = await createService();
@@ -411,17 +411,17 @@ describe("SecretsService", () => {
         expect(sync.ok).toBe(false);
         expect(sync.synced).toEqual([
           "INTERNAL_KEY_BINDING",
-          "BINANCE_KEY_BINDING",
+          "EXCHANGE_KEY_BINDING",
         ]);
         expect(sync.skipped.map((s) => s.name)).toContain(
           "API_SERVICE_KEY_BINDING"
         );
         expect(sync.skipped.map((s) => s.name)).toContain(
-          "BINANCE_SECRET_BINDING"
+          "EXCHANGE_SECRET_BINDING"
         );
         expect(called).toEqual([
           ["INTERNAL_KEY_BINDING", "real-internal"],
-          ["BINANCE_KEY_BINDING", "real-binance-key"],
+          ["EXCHANGE_KEY_BINDING", "real-binance-key"],
         ]);
       } finally {
         rmSync(dir, { recursive: true, force: true });
@@ -437,8 +437,8 @@ describe("SecretsService", () => {
             "API_SERVICE_KEY_BINDING=api-real",
             "INTERNAL_KEY_BINDING=int-real",
             "TELEGRAM_INTERNAL_KEY_BINDING=tg-int-real",
-            "BINANCE_KEY_BINDING=placeholder_binance",
-            "BINANCE_SECRET_BINDING=",
+            "EXCHANGE_KEY_BINDING=placeholder_binance",
+            "EXCHANGE_SECRET_BINDING=",
           ].join("\n") + "\n"
         );
 
@@ -539,7 +539,7 @@ describe("SecretsService", () => {
           "INTERNAL_KEY_BINDING"
         );
         expect(sync.skipped.map((s) => s.name)).toContain(
-          "BINANCE_KEY_BINDING"
+          "EXCHANGE_KEY_BINDING"
         );
         expect(called).toHaveLength(0);
       } finally {
@@ -575,8 +575,8 @@ describe("SecretsService", () => {
         const sync = expectOk(result);
         expect(sync.ok).toBe(false);
         expect(sync.failed).toHaveLength(1);
-        expect(sync.failed[0].name).toBe("TG_BOT_TOKEN_BINDING");
-        expect(sync.failed[0].reason).toContain("wrangler command failed");
+        expect(sync.failed[0]?.name).toBe("TG_BOT_TOKEN_BINDING");
+        expect(sync.failed[0]?.reason).toContain("wrangler command failed");
       } finally {
         rmSync(dir, { recursive: true, force: true });
       }
@@ -660,7 +660,7 @@ describe("SecretsService", () => {
     });
 
     it("excludes integration secrets", () => {
-      expect(isSystemSecret("BINANCE_KEY_BINDING")).toBe(false);
+      expect(isSystemSecret("EXCHANGE_KEY_BINDING")).toBe(false);
       expect(isSystemSecret("TG_BOT_TOKEN_BINDING")).toBe(false);
     });
   });

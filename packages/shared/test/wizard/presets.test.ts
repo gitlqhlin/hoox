@@ -56,9 +56,10 @@ describe("resolveDependencies", () => {
 describe("INTEGRATIONS", () => {
   it("includes all expected integrations", () => {
     const keys = INTEGRATIONS.map((i) => i.key);
-    expect(keys).toContain("binance");
-    expect(keys).toContain("bybit");
-    expect(keys).toContain("mexc");
+    expect(keys).toContain("exchange");
+    expect(keys).not.toContain("binance");
+    expect(keys).not.toContain("bybit");
+    expect(keys).not.toContain("mexc");
     expect(keys).toContain("wallet");
     expect(keys).toContain("email");
     expect(keys).toContain("telegram");

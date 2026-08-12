@@ -134,8 +134,8 @@ describe("useServiceStore", () => {
 
       const state = useServiceStore.getState();
       expect(state.workers).toHaveLength(2);
-      expect(state.workers[0].name).toBe("alpha");
-      expect(state.workers[1].name).toBe("beta");
+      expect(state.workers[0]?.name).toBe("alpha");
+      expect(state.workers[1]?.name).toBe("beta");
       expect(state.lastUpdated).toBeGreaterThan(0);
     });
 
@@ -714,13 +714,13 @@ describe("useServiceStore", () => {
 
       const alerts = useServiceStore.getState().alerts;
       expect(alerts).toHaveLength(1);
-      expect(alerts[0].severity).toBe("error");
-      expect(alerts[0].type).toBe("connection");
-      expect(alerts[0].message).toContain("CLI failure");
-      expect(alerts[0].message).toContain("Build failed: missing import");
-      expect(alerts[0].acknowledged).toBe(false);
-      expect(alerts[0].id).toBeTruthy();
-      expect(alerts[0].timestamp).toBeGreaterThan(0);
+      expect(alerts[0]?.severity).toBe("error");
+      expect(alerts[0]?.type).toBe("connection");
+      expect(alerts[0]?.message).toContain("CLI failure");
+      expect(alerts[0]?.message).toContain("Build failed: missing import");
+      expect(alerts[0]?.acknowledged).toBe(false);
+      expect(alerts[0]?.id).toBeTruthy();
+      expect(alerts[0]?.timestamp).toBeGreaterThan(0);
     });
 
     it("appends multiple alerts without dropping older ones under the cap", () => {
@@ -733,8 +733,8 @@ describe("useServiceStore", () => {
 
       const alerts = useServiceStore.getState().alerts;
       expect(alerts).toHaveLength(2);
-      expect(alerts[0].message).toContain("Build failed: missing import");
-      expect(alerts[1].message).toContain("second failure");
+      expect(alerts[0]?.message).toContain("Build failed: missing import");
+      expect(alerts[1]?.message).toContain("second failure");
     });
 
     it("respects the MAX_ALERTS cap of 100 entries", () => {
@@ -747,7 +747,7 @@ describe("useServiceStore", () => {
       expect(useServiceStore.getState().alerts).toHaveLength(100);
       // Newest entries survive
       const alerts = useServiceStore.getState().alerts;
-      expect(alerts[alerts.length - 1].message).toContain("failure 109");
+      expect(alerts[alerts.length - 1]?.message).toContain("failure 109");
     });
 
     it("also works when stderr is empty (falls back to command summary)", () => {
@@ -761,8 +761,8 @@ describe("useServiceStore", () => {
       expect(lastError).toBe(cliFailure.command);
       // And the alert still contains the command
       const alerts = useServiceStore.getState().alerts;
-      expect(alerts[0].message).toContain("CLI failure");
-      expect(alerts[0].message).toContain("hoox deploy all");
+      expect(alerts[0]?.message).toContain("CLI failure");
+      expect(alerts[0]?.message).toContain("hoox deploy all");
     });
   });
 
@@ -837,9 +837,9 @@ describe("useServiceStore", () => {
       store.pushTrade(makeTrade({ id: "c", timestamp: 3 }));
 
       const stream = useServiceStore.getState().tradeStream;
-      expect(stream[0].id).toBe("a");
-      expect(stream[1].id).toBe("b");
-      expect(stream[2].id).toBe("c");
+      expect(stream[0]?.id).toBe("a");
+      expect(stream[1]?.id).toBe("b");
+      expect(stream[2]?.id).toBe("c");
     });
   });
 
@@ -854,7 +854,7 @@ describe("useServiceStore", () => {
       useServiceStore.getState().addAlert(alert);
 
       expect(useServiceStore.getState().alerts).toHaveLength(1);
-      expect(useServiceStore.getState().alerts[0].message).toBe(
+      expect(useServiceStore.getState().alerts[0]?.message).toBe(
         "CPU threshold exceeded"
       );
     });
@@ -947,7 +947,7 @@ describe("useServiceStore", () => {
     it("subscribes to SSE trade stream", async () => {
       await useServiceStore.getState().streamTrades();
       expect(subscribeSSEMock).toHaveBeenCalledTimes(1);
-      expect(subscribeSSEMock.mock.calls[0][0]).toBe("/v1/trades/stream");
+      expect(subscribeSSEMock.mock.calls[0]?.[0]).toBe("/v1/trades/stream");
     });
 
     it("streamTrades does not throw on SSE connection failure", async () => {
@@ -971,7 +971,7 @@ describe("useServiceStore", () => {
       const trade = makeTrade({ id: "sse-t1", symbol: "ETH" });
       emitSseEvent(trade, "/v1/trades");
       expect(useServiceStore.getState().tradeStream).toHaveLength(1);
-      expect(useServiceStore.getState().tradeStream[0].id).toBe("sse-t1");
+      expect(useServiceStore.getState().tradeStream[0]?.id).toBe("sse-t1");
     });
   });
 
@@ -979,7 +979,7 @@ describe("useServiceStore", () => {
     it("subscribes to SSE log stream", async () => {
       await useServiceStore.getState().streamLogs();
       expect(subscribeSSEMock).toHaveBeenCalledTimes(1);
-      expect(subscribeSSEMock.mock.calls[0][0]).toBe("/v1/logs/stream");
+      expect(subscribeSSEMock.mock.calls[0]?.[0]).toBe("/v1/logs/stream");
     });
 
     it("pushes logs from SSE events into the ring buffer", async () => {
@@ -987,7 +987,7 @@ describe("useServiceStore", () => {
       const log = makeLog({ id: "sse-l1", message: "from-sse" });
       emitSseEvent(log, "/v1/logs");
       expect(useServiceStore.getState().logs).toHaveLength(1);
-      expect(useServiceStore.getState().logs[0].message).toBe("from-sse");
+      expect(useServiceStore.getState().logs[0]?.message).toBe("from-sse");
     });
   });
 

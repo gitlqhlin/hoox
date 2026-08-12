@@ -53,7 +53,7 @@ describe("SecretsViewer", () => {
   it("filters by name only (values never considered)", () => {
     const secrets: SecretMetadata[] = [
       { name: "OPENAI_API_KEY", type: "api_key", source: "config" },
-      { name: "BINANCE_KEY_BINDING", type: "api_key", source: "Cloudflare" },
+      { name: "EXCHANGE_KEY_BINDING", type: "api_key", source: "Cloudflare" },
     ];
     expect(filterSecrets(secrets, "openai")).toHaveLength(1);
     expect(filterSecrets(secrets, "")).toHaveLength(2);

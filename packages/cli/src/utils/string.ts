@@ -43,13 +43,13 @@ export function levenshtein(a: string, b: string): number {
     for (let i = 1; i <= m; i++) {
       const cost = s.charCodeAt(i - 1) === t.charCodeAt(j - 1) ? 0 : 1;
       curr[i] = Math.min(
-        curr[i - 1] + 1, // insertion
-        prev[i] + 1, // deletion
-        prev[i - 1] + cost // substitution
+        (curr[i - 1] ?? 0) + 1, // insertion
+        (prev[i] ?? 0) + 1, // deletion
+        (prev[i - 1] ?? 0) + cost // substitution
       );
     }
     [prev, curr] = [curr, prev];
   }
 
-  return prev[m];
+  return prev[m] ?? 0;
 }

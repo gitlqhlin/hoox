@@ -90,10 +90,12 @@ global.fetch = ((input: RequestInfo | URL, init?: RequestInit) => {
     const bytes = isBase64
       ? Uint8Array.from(atob(data), (c) => c.charCodeAt(0))
       : new TextEncoder().encode(decodeURIComponent(data));
+    const contentType =
+      url.slice(5, commaIdx).split(";")[0] ?? "application/octet-stream";
     return Promise.resolve(
       new Response(bytes, {
         status: 200,
-        headers: { "Content-Type": url.slice(5, commaIdx).split(";")[0] },
+        headers: { "Content-Type": contentType },
       })
     );
   }

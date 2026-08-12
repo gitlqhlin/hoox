@@ -334,7 +334,7 @@ describe("config set", () => {
       workers: Record<string, { vars: Record<string, string> }>;
     };
 
-    expect(parsed.workers["d1-worker"].vars.database_name).toBe("new-db");
+    expect(parsed.workers["d1-worker"]?.vars.database_name).toBe("new-db");
   });
 
   it("coerces boolean strings to booleans", async () => {
@@ -354,7 +354,7 @@ describe("config set", () => {
       workers: Record<string, { enabled: boolean }>;
     };
 
-    expect(parsed.workers["d1-worker"].enabled).toBe(false);
+    expect(parsed.workers["d1-worker"]?.enabled).toBe(false);
   });
 
   it("coerces numeric strings to numbers", async () => {
@@ -374,7 +374,7 @@ describe("config set", () => {
       workers: Record<string, { vars: Record<string, number> }>;
     };
 
-    expect(parsed.workers["trade-worker"].vars.max_retries).toBe(5);
+    expect(parsed.workers["trade-worker"]?.vars.max_retries).toBe(5);
   });
 
   it("reports error for invalid key paths", async () => {
@@ -583,7 +583,7 @@ describe("config keys", () => {
     const match = content.match(/^WEBHOOK_API_KEY_BINDING=([a-f0-9]+)\n$/);
     expect(match).not.toBeNull();
     // Service keys are 32 bytes = 64 hex chars
-    expect(match![1].length).toBe(64);
+    expect(match?.[1]?.length).toBe(64);
   });
 });
 

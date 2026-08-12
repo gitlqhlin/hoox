@@ -72,7 +72,7 @@ async function listSettingsFromKV(env: DashboardEnv): Promise<AllSettings> {
   for (let i = 0; i < keyNames.length; i++) {
     const name = keyNames[i]!;
     const value = values[i];
-    if (value === null) continue;
+    if (value == null) continue;
     try {
       settings[name] = JSON.parse(value);
     } catch {

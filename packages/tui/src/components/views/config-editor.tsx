@@ -544,20 +544,22 @@ export function ConfigEditor() {
   const handleUndo = useCallback(() => {
     if (undoStack.length === 0 || !selectedFile) return;
     const prev = undoStack[undoStack.length - 1];
+    if (prev === undefined) return;
     setUndoStack((s) => s.slice(0, -1));
     setRedoStack((s) => [...s, currentContent]);
-    setFileContents((contents) => new Map(contents).set(selectedFile!, prev));
-    setUnsavedPaths((paths) => new Set(paths).add(selectedFile!));
+    setFileContents((contents) => new Map(contents).set(selectedFile, prev));
+    setUnsavedPaths((paths) => new Set(paths).add(selectedFile));
     setStatusMessage("Undo");
   }, [undoStack, currentContent, selectedFile]);
 
   const handleRedo = useCallback(() => {
     if (redoStack.length === 0 || !selectedFile) return;
     const next = redoStack[redoStack.length - 1];
+    if (next === undefined) return;
     setRedoStack((s) => s.slice(0, -1));
     setUndoStack((s) => [...s, currentContent]);
-    setFileContents((prev) => new Map(prev).set(selectedFile!, next));
-    setUnsavedPaths((paths) => new Set(paths).add(selectedFile!));
+    setFileContents((prev) => new Map(prev).set(selectedFile, next));
+    setUnsavedPaths((paths) => new Set(paths).add(selectedFile));
     setStatusMessage("Redo");
   }, [redoStack, currentContent, selectedFile]);
 

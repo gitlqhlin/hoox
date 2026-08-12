@@ -1375,7 +1375,7 @@ export function SettingsView({ dialog }: SettingsViewProps = {}) {
         if (activeItem >= 0 && activeItem < 4) {
           if (key.name === "space") {
             const channel = NOTIFICATION_CHANNELS[activeItem];
-            toggleNotification(channel);
+            if (channel !== undefined) toggleNotification(channel);
           }
         } else if (activeItem === 4) {
           if (key.name === "space")

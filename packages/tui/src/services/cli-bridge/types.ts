@@ -150,7 +150,7 @@ export type SqlValidationResult =
  * (`hoox config secrets list`) only surfaces names/types anyway.
  */
 export interface SecretMetadata {
-  /** Secret name / key, e.g. "BINANCE_KEY_BINDING" or "OPENAI_API_KEY". */
+  /** Secret name / key, e.g. "EXCHANGE_KEY_BINDING" or "OPENAI_API_KEY". */
   name: string;
   /**
    * Inferred type based on naming conventions. Cloudflare secrets store

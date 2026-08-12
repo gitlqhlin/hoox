@@ -76,7 +76,8 @@ export function createQueueHandler<T>(options: QueueHandlerOptions<T>) {
         if (attemptNumber < maxRetries) {
           const delaySeconds =
             backoffDelays[attemptNumber] ??
-            backoffDelays[backoffDelays.length - 1];
+            backoffDelays[backoffDelays.length - 1] ??
+            0;
 
           logger?.info(
             `${logId} Retrying in ${delaySeconds}s (attempt ${attemptNumber + 2}/${maxRetries + 1})`

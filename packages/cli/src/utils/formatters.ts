@@ -310,7 +310,12 @@ export function formatTable(
   const compact = opts.compact === true; // default false
 
   // Collect all keys in display order (first row defines column order).
-  const keys = Object.keys(rows[0]);
+  const firstRow = rows[0];
+  if (!firstRow) {
+    process.stdout.write(`${theme.dim("(empty)")}\n`);
+    return;
+  }
+  const keys = Object.keys(firstRow);
 
   // Pre-process cells: apply status colorization.
   const processed: Array<Record<string, string>> = rows.map((row) => {
@@ -353,14 +358,14 @@ export function formatTable(
   }
 
   // Build border segments.
-  const topParts = keys.map((k) => "─".repeat(widths[k] + 2));
+  const topParts = keys.map((k) => "─".repeat((widths[k] ?? 0) + 2));
   const topBorder = `┌${topParts.join("┬")}┐`;
   const sepBorder = `├${topParts.join("┼")}┤`;
   const botBorder = `└${topParts.join("┴")}┘`;
 
   // Header row with themed styling.
   const headerCells = keys.map((k) =>
-    theme.bold(k.padEnd(widths[k])).toString()
+    theme.bold(k.padEnd(widths[k] ?? 0)).toString()
   );
   const headerRow = `│ ${headerCells.join(" │ ")} │`;
 
@@ -369,9 +374,10 @@ export function formatTable(
     const isAlt = zebra && rowIdx % 2 === 0;
     const cells = keys.map((k) => {
       const value = row[k] ?? "";
+      const width = widths[k] ?? 0;
       const padded = numericColumns.has(k)
-        ? value.padStart(widths[k])
-        : value.padEnd(widths[k]);
+        ? value.padStart(width)
+        : value.padEnd(width);
       // For zebra, re-apply textSubtle to non-status cells. Status cells
       // keep their color.
       if (isAlt && !value.includes("\u001b")) {

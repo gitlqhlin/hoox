@@ -486,7 +486,7 @@ interface TabularViewProps {
   loading?: boolean;
 }
 function TabularView({ loading = false }: TabularViewProps) {
-  const [activeTableId, setActiveTableId] = useState<string>(SCHEMA[0].id);
+  const [activeTableId, setActiveTableId] = useState<string>(SCHEMA[0]!.id);
 
   if (loading) {
     return (

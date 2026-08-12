@@ -170,17 +170,20 @@ export function parseWranglerQueuesTable(raw: string): WranglerQueueInfo[] {
       .map((c) => c.trim())
       .filter((c) => c.length > 0);
     if (cells.length < 2) continue;
+    const queueId = cells[0];
+    const queueName = cells[1];
+    if (!queueId || !queueName) continue;
     // Skip header
-    if (cells[0] === "id" || cells[0] === "name") continue;
+    if (queueId === "id" || queueId === "name") continue;
     // Data rows start with a queue id (UUID / hex)
-    if (!/^[0-9a-f-]{16,}$/i.test(cells[0])) continue;
+    if (!/^[0-9a-f-]{16,}$/i.test(queueId)) continue;
     const producers =
       cells[4] !== undefined && cells[4] !== "" ? Number(cells[4]) : undefined;
     const consumers =
       cells[5] !== undefined && cells[5] !== "" ? Number(cells[5]) : undefined;
     queues.push({
-      queue_id: cells[0],
-      queue_name: cells[1],
+      queue_id: queueId,
+      queue_name: queueName,
       created_on: cells[2],
       modified_on: cells[3],
       producers_total_count: Number.isFinite(producers) ? producers : undefined,

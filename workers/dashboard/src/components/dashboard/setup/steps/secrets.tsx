@@ -485,7 +485,7 @@ export function WizardSecretsStep({ onChecked }: WizardSecretsStepProps) {
             </p>
             <p>
               <code className="rounded border border-border bg-background px-1 py-0.5 font-mono text-[10px]">
-                hoox secrets set trade-worker BINANCE_KEY_BINDING
+                hoox secrets set trade-worker EXCHANGE_KEY_BINDING
               </code>{" "}
               → interactive put (hidden prompt) + Cloudflare sync
             </p>

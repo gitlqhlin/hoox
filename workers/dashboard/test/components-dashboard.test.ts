@@ -432,8 +432,13 @@ describe("Dashboard Components - Module Imports", () => {
         buildSecretSetCommand,
         MESH_AUTOMATE_COMMAND,
       } = await import("../src/components/dashboard/setup/setup-config");
-      const userCmd = buildSecretCommand("BINANCE_KEY_BINDING", "trade-worker");
-      expect(userCmd).toBe("hoox secrets set trade-worker BINANCE_KEY_BINDING");
+      const userCmd = buildSecretCommand(
+        "EXCHANGE_KEY_BINDING",
+        "trade-worker"
+      );
+      expect(userCmd).toBe(
+        "hoox secrets set trade-worker EXCHANGE_KEY_BINDING"
+      );
       expect(
         buildSecretSetCommand("telegram-worker", "TG_BOT_TOKEN_BINDING")
       ).toBe("hoox secrets set telegram-worker TG_BOT_TOKEN_BINDING");

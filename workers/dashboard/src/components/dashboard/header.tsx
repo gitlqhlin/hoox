@@ -83,7 +83,7 @@ export function DashboardHeader() {
     const order = ["dark", "light", "system"] as const;
     const current = theme ?? "dark";
     const idx = order.indexOf(current as (typeof order)[number]);
-    const next = order[(idx + 1) % order.length];
+    const next = order[(idx + 1) % order.length] ?? "dark";
     setTheme(next);
   }, [theme, setTheme]);
 

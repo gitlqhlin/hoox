@@ -249,7 +249,7 @@ describe("registerDeployCommand", () => {
       const calls = (
         deployMock as unknown as { mock: { calls: Array<unknown[]> } }
       ).mock.calls;
-      expect(calls[0][1]).toBe("staging");
+      expect(calls[0]?.[1]).toBe("staging");
     });
   });
 
@@ -264,7 +264,7 @@ describe("registerDeployCommand", () => {
       const calls = (
         deployMock as unknown as { mock: { calls: Array<unknown[]> } }
       ).mock.calls;
-      expect(calls[0][0]).toContain("test-worker");
+      expect(calls[0]?.[0]).toContain("test-worker");
     });
 
     it("passes --env to deploy", async () => {
@@ -277,7 +277,7 @@ describe("registerDeployCommand", () => {
       const calls = (
         deployMock as unknown as { mock: { calls: Array<unknown[]> } }
       ).mock.calls;
-      expect(calls[0][1]).toBe("production");
+      expect(calls[0]?.[1]).toBe("production");
     });
 
     it("handles deploy failure (sets exitCode to 1)", async () => {
@@ -510,8 +510,8 @@ describe("registerDeployCommand", () => {
       const calls = (
         rollbackMock as unknown as { mock: { calls: Array<unknown[]> } }
       ).mock.calls;
-      expect(calls[0][0]).toBe("trade-worker");
-      expect(calls[0][1]).toBe("ver-abc-12345678");
+      expect(calls[0]?.[0]).toBe("trade-worker");
+      expect(calls[0]?.[1]).toBe("ver-abc-12345678");
     });
 
     it("sets exitCode when rollback fails", async () => {

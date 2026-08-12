@@ -80,15 +80,15 @@ describe("EnvService", () => {
       };
       const result = EnvService.getWorkerDevVars(vars);
       expect(result["workers/agent-worker"]).toBeDefined();
-      expect(result["workers/agent-worker"].AGENT_INTERNAL_KEY).toBe("sk-123");
+      expect(result["workers/agent-worker"]?.AGENT_INTERNAL_KEY).toBe("sk-123");
       expect(result["workers/telegram-worker"]).toBeDefined();
-      expect(result["workers/telegram-worker"].TG_BOT_TOKEN_BINDING).toBe(
+      expect(result["workers/telegram-worker"]?.TG_BOT_TOKEN_BINDING).toBe(
         "tg-456"
       );
       expect(result["workers/dashboard"]).toBeDefined();
-      expect(result["workers/dashboard"].DASHBOARD_USER).toBe("admin");
-      expect(result["workers/dashboard"].DASHBOARD_PASS).toBe("pass");
-      expect(result["workers/dashboard"].TELEGRAM_INTERNAL_KEY_BINDING).toBe(
+      expect(result["workers/dashboard"]?.DASHBOARD_USER).toBe("admin");
+      expect(result["workers/dashboard"]?.DASHBOARD_PASS).toBe("pass");
+      expect(result["workers/dashboard"]?.TELEGRAM_INTERNAL_KEY_BINDING).toBe(
         "tg-int-key"
       );
     });
@@ -126,41 +126,41 @@ describe("EnvService", () => {
       };
       const result = EnvService.getWorkerDevVars(vars);
       expect(result["workers/agent-worker"]).toBeDefined();
-      expect(result["workers/agent-worker"].AGENT_INTERNAL_KEY).toBe("sk-123");
+      expect(result["workers/agent-worker"]?.AGENT_INTERNAL_KEY).toBe("sk-123");
       expect(result["workers/dashboard"]).toBeDefined();
-      expect(result["workers/dashboard"].DASHBOARD_USER).toBe("admin");
-      expect(result["workers/dashboard"].DASHBOARD_PASS).toBe("pass");
-      expect(result["workers/dashboard"].TELEGRAM_INTERNAL_KEY_BINDING).toBe(
+      expect(result["workers/dashboard"]?.DASHBOARD_USER).toBe("admin");
+      expect(result["workers/dashboard"]?.DASHBOARD_PASS).toBe("pass");
+      expect(result["workers/dashboard"]?.TELEGRAM_INTERNAL_KEY_BINDING).toBe(
         "tg-int-key"
       );
-      expect(result["workers/dashboard"].PYNE_API_KEY).toBe("pyne-api-key");
+      expect(result["workers/dashboard"]?.PYNE_API_KEY).toBe("pyne-api-key");
       expect(result["workers/pyne-worker"]).toBeDefined();
-      expect(result["workers/pyne-worker"].API_KEY).toBe("pyne-api-key");
-      expect(result["workers/pyne-worker"].ALERT_WEBHOOK_URL).toBe(
+      expect(result["workers/pyne-worker"]?.API_KEY).toBe("pyne-api-key");
+      expect(result["workers/pyne-worker"]?.ALERT_WEBHOOK_URL).toBe(
         "https://hooks.example/alert"
       );
-      expect(result["workers/hoox-worker"].HA_TOKEN_BINDING).toBe("ha-token");
-      expect(result["workers/trade-worker"].API_SERVICE_KEY_BINDING).toBe(
+      expect(result["workers/hoox-worker"]?.HA_TOKEN_BINDING).toBe("ha-token");
+      expect(result["workers/trade-worker"]?.API_SERVICE_KEY_BINDING).toBe(
         "api-key"
       );
-      expect(result["workers/telegram-worker"].TELEGRAM_SECRET_TOKEN).toBe(
+      expect(result["workers/telegram-worker"]?.TELEGRAM_SECRET_TOKEN).toBe(
         "tg-secret"
       );
       expect(result["workers/web3-wallet-worker"]).toBeDefined();
-      expect(result["workers/web3-wallet-worker"].WALLET_MNEMONIC_SECRET).toBe(
+      expect(result["workers/web3-wallet-worker"]?.WALLET_MNEMONIC_SECRET).toBe(
         "mnemonic"
       );
       expect(result["workers/email-worker"]).toBeDefined();
-      expect(result["workers/email-worker"].EMAIL_HOST_BINDING).toBe(
+      expect(result["workers/email-worker"]?.EMAIL_HOST_BINDING).toBe(
         "imap.example.com"
       );
       expect(result["workers/dashboard"]).toBeDefined();
-      expect(result["workers/dashboard"].DASHBOARD_USER).toBe("admin");
-      expect(result["workers/dashboard"].DASHBOARD_PASS).toBe("pass");
-      expect(result["workers/dashboard"].SESSION_SECRET).toBe(
+      expect(result["workers/dashboard"]?.DASHBOARD_USER).toBe("admin");
+      expect(result["workers/dashboard"]?.DASHBOARD_PASS).toBe("pass");
+      expect(result["workers/dashboard"]?.SESSION_SECRET).toBe(
         "secret-32-char-min-for-session"
       );
-      expect(result["workers/dashboard"].TELEGRAM_INTERNAL_KEY_BINDING).toBe(
+      expect(result["workers/dashboard"]?.TELEGRAM_INTERNAL_KEY_BINDING).toBe(
         "tg-int-key"
       );
     });

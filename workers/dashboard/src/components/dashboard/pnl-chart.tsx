@@ -214,7 +214,7 @@ export function PnlChart() {
   const minPnl =
     displayData.length > 0 ? Math.min(...displayData.map((d) => d.pnl)) : 0;
   const winners = displayData.filter((d, i, arr) => {
-    const prev = i === 0 ? 0 : arr[i - 1].pnl;
+    const prev = i === 0 ? 0 : (arr[i - 1]?.pnl ?? 0);
     return d.pnl - prev > 0;
   }).length;
 

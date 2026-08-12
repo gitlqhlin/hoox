@@ -966,10 +966,10 @@ describe("CloudflareService", () => {
 
       expect(result.ok).toBe(true);
       if (result.ok) {
-        expect(result.value[0].id).toContain("aaaaaaaa");
-        expect(result.value[0].number).toBe(2);
-        expect(result.value[0].author).toBe("ci");
-        expect(result.value[0].source).toBe("api");
+        expect(result.value[0]?.id).toContain("aaaaaaaa");
+        expect(result.value[0]?.number).toBe(2);
+        expect(result.value[0]?.author).toBe("ci");
+        expect(result.value[0]?.source).toBe("api");
       }
       expect(lastSpawnCmd).toEqual([
         "wrangler",

@@ -192,8 +192,8 @@ describe("WorkerDetail", () => {
     // Only logs for worker "w1" should be relevant
     const workerLogs = state.logs.filter((l) => l.workerId === "w1");
     expect(workerLogs).toHaveLength(2);
-    expect(workerLogs[0].level).toBe("info");
-    expect(workerLogs[1].level).toBe("warn");
+    expect(workerLogs[0]?.level).toBe("info");
+    expect(workerLogs[1]?.level).toBe("warn");
 
     // The log for worker "w2" should be filtered out
     const otherLogs = state.logs.filter((l) => l.workerId === "w2");

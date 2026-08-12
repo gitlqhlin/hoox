@@ -137,9 +137,9 @@ describe("Navigation Integration", () => {
   describe("keyboard shortcuts", () => {
     it("Ctrl+1 through Ctrl+0 switch digit-bound views", () => {
       const map = getViewShortcutMap();
-      for (const key of Object.keys(map)) {
+      for (const [key, view] of Object.entries(map)) {
         dispatchDigitShortcut(key);
-        expect(useUIStore.getState().activeView).toBe(map[key]);
+        expect(useUIStore.getState().activeView).toBe(view);
       }
       expect(Object.keys(map)).toHaveLength(10);
     });
@@ -207,9 +207,11 @@ describe("Navigation Integration", () => {
       for (const view of ALL_VIEW_IDS) {
         useUIStore.getState().setView(view);
       }
-      expect(useUIStore.getState().activeView).toBe(
-        ALL_VIEW_IDS[ALL_VIEW_IDS.length - 1]
-      );
+      const lastView = ALL_VIEW_IDS[ALL_VIEW_IDS.length - 1];
+      if (lastView === undefined) {
+        throw new Error("ALL_VIEW_IDS is empty");
+      }
+      expect(useUIStore.getState().activeView).toBe(lastView);
     });
 
     it("handles rapid sidebar toggles", () => {

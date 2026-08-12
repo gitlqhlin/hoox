@@ -244,6 +244,7 @@ export function generateWranglerJsonc(manifest: WorkerManifest): string {
     parts.push(`  "vars": {`);
     for (const [i, name] of varKeys.entries()) {
       const def = manifest.vars[name];
+      if (!def) continue;
       const comma = i < varKeys.length - 1 ? "," : "";
       const val =
         def.type === "secret"

@@ -34,7 +34,7 @@ export const PRESETS: WorkerPreset[] = [
       "analytics-worker",
       "telegram-worker",
     ],
-    integrations: ["binance", "telegram"],
+    integrations: ["exchange", "telegram"],
   },
   {
     name: "full",
@@ -51,15 +51,7 @@ export const PRESETS: WorkerPreset[] = [
       "web3-wallet-worker",
       "pyne-worker",
     ],
-    integrations: [
-      "binance",
-      "bybit",
-      "mexc",
-      "telegram",
-      "openai",
-      "wallet",
-      "pyne",
-    ],
+    integrations: ["exchange", "telegram", "openai", "wallet", "pyne"],
   },
 ];
 
@@ -109,30 +101,12 @@ export function resolveDependencies(selected: string[]): string[] {
  */
 export const INTEGRATIONS: IntegratedService[] = [
   {
-    key: "binance",
-    label: "Binance Exchange",
+    key: "exchange",
+    label: "Exchange API (Binance / Bybit / MEXC)",
     workerName: "trade-worker",
     secrets: {
-      BINANCE_KEY_BINDING: "Binance API Key",
-      BINANCE_SECRET_BINDING: "Binance API Secret",
-    },
-  },
-  {
-    key: "mexc",
-    label: "MEXC Exchange",
-    workerName: "trade-worker",
-    secrets: {
-      MEXC_KEY_BINDING: "MEXC API Key",
-      MEXC_SECRET_BINDING: "MEXC API Secret",
-    },
-  },
-  {
-    key: "bybit",
-    label: "Bybit Exchange",
-    workerName: "trade-worker",
-    secrets: {
-      BYBIT_KEY_BINDING: "Bybit API Key",
-      BYBIT_SECRET_BINDING: "Bybit API Secret",
+      EXCHANGE_KEY_BINDING: "Exchange API Key",
+      EXCHANGE_SECRET_BINDING: "Exchange API Secret",
     },
   },
   {

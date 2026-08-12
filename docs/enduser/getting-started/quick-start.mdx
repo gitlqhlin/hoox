@@ -58,13 +58,14 @@ Setup **gates** stop the flow when init is incomplete (no `wrangler.jsonc`) or w
 For your safety, exchange credentials (API keys and private signatures) are never stored in plain text. Inject them as encrypted **Cloudflare® Workers Secrets** bound securely to your compute instances:
 
 ```bash
-# Inject Bybit Credentials (worker name is the first argument)
-hoox secrets set trade-worker BYBIT_KEY_BINDING "your_bybit_key_here"
-hoox secrets set trade-worker BYBIT_SECRET_BINDING "your_bybit_secret_here"
+# One key pair for all venues (Binance / Bybit / MEXC).
+# Which exchange is used comes from the signal / routing config — not the secret name.
+hoox secrets set trade-worker EXCHANGE_KEY_BINDING "your_exchange_api_key"
+hoox secrets set trade-worker EXCHANGE_SECRET_BINDING "your_exchange_api_secret"
 
-# Optional: Inject Binance Credentials
-hoox secrets set trade-worker BINANCE_KEY_BINDING "your_binance_key_here"
-hoox secrets set trade-worker BINANCE_SECRET_BINDING "your_binance_secret_here"
+# Optional dedicated testnet pair (when signals use "test": true)
+# hoox secrets set trade-worker EXCHANGE_TESTNET_KEY_BINDING "..."
+# hoox secrets set trade-worker EXCHANGE_TESTNET_SECRET_BINDING "..."
 ```
 
 <Warning>

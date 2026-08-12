@@ -37,7 +37,7 @@ describe("validateWranglerJsonc", () => {
     });
     const errors = validateWranglerJsonc("d1-worker", manifest, jsonc);
     expect(errors.filter((e) => e.severity === "error")).toHaveLength(1);
-    expect(errors[0].message).toContain("INTERNAL_KEY_BINDING");
+    expect(errors[0]?.message).toContain("INTERNAL_KEY_BINDING");
   });
 
   it("should detect wrong service target", () => {
@@ -83,7 +83,7 @@ describe("validateWranglerJsonc", () => {
   it("should handle unparseable JSONC gracefully", () => {
     const errors = validateWranglerJsonc("d1-worker", manifest, "");
     expect(errors.length).toBeGreaterThan(0);
-    expect(errors[0].message).toContain("Failed to parse");
+    expect(errors[0]?.message).toContain("Failed to parse");
   });
 });
 
@@ -103,7 +103,7 @@ describe("validateRootSecrets", () => {
     });
     const errors = validateRootSecrets("d1-worker", manifest, rootJsonc);
     expect(errors.filter((e) => e.severity === "error")).toHaveLength(1);
-    expect(errors[0].message).toContain("INTERNAL_KEY_BINDING");
+    expect(errors[0]?.message).toContain("INTERNAL_KEY_BINDING");
   });
 
   it("should pass when all secrets are present", () => {
@@ -129,7 +129,7 @@ describe("validateDevVars", () => {
     const content = "# just a comment\nSOME_OTHER_VAR=value\n";
     const errors = validateDevVars("d1-worker", manifest, content);
     expect(errors.filter((e) => e.severity === "error")).toHaveLength(1);
-    expect(errors[0].message).toContain("INTERNAL_KEY_BINDING");
+    expect(errors[0]?.message).toContain("INTERNAL_KEY_BINDING");
   });
 
   it("should pass when all secrets are present", () => {

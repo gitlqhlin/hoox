@@ -60,7 +60,7 @@ async function spawnVersion(
 
 function extractSemver(raw: string): string {
   const m = raw.match(/(\d+\.\d+\.\d+)/);
-  return m ? m[1] : raw;
+  return m?.[1] ?? raw;
 }
 
 async function checkBun(): Promise<PrereqCheck> {
@@ -95,7 +95,7 @@ async function checkGit(): Promise<PrereqCheck> {
       hint: "apt install git",
     };
   const m = raw.match(/(\d+\.\d+)/);
-  const ver = m ? m[1] : "unknown";
+  const ver = m?.[1] ?? "unknown";
   const [major, minor] = ver.split(".").map(Number);
   const ok = (major ?? 0) >= 2 && (minor ?? 0) >= 40;
   return {
@@ -189,7 +189,7 @@ async function checkCfAccountId(): Promise<PrereqCheck> {
     const m = text.match(
       /(?:account_id|accountId)\s*["']?\s*:\s*["']([^"']+)["']/
     );
-    if (m)
+    if (m?.[1])
       return {
         name: "Cloudflare Account",
         status: "pass",
@@ -298,10 +298,9 @@ type ValidationState = null | boolean;
 // ─── Default Form Data ──────────────────────────────────────────────────────
 
 const defaultFormData = (): WizardFormData => ({
+  // Single unified exchange API key pair (venue selected via Active Exchanges)
   apiKeys: {
-    binance: { key: "", secret: "" },
-    bybit: { key: "", secret: "" },
-    mexc: { key: "", secret: "" },
+    exchange: { key: "", secret: "" },
   },
   exchanges: { binance: false, bybit: false, mexc: false },
   ai: { providerUrl: "", apiKey: "", model: "default" },
@@ -460,7 +459,7 @@ export function SetupWizard({ dialog }: SetupWizardProps) {
           const m = text.match(
             /(?:account_id|accountId)\s*["']?\s*:\s*["']([^"']+)["']/
           );
-          if (m) setCfAccountId(m[1]);
+          if (m?.[1]) setCfAccountId(m[1]);
         }
         const cfgFile = Bun.file(
           `${process.env.HOME ?? "~"}/.hoox/config.json`
@@ -534,12 +533,18 @@ export function SetupWizard({ dialog }: SetupWizardProps) {
       >;
       for (let i = 0; i < keys.length - 1; i++) {
         const key = keys[i];
-        if (key === "__proto__" || key === "constructor" || key === "prototype")
+        if (
+          key === undefined ||
+          key === "__proto__" ||
+          key === "constructor" ||
+          key === "prototype"
+        )
           return prev;
         obj = obj[key] as Record<string, unknown>;
       }
       const lastKey = keys[keys.length - 1];
       if (
+        lastKey === undefined ||
         lastKey === "__proto__" ||
         lastKey === "constructor" ||
         lastKey === "prototype"
@@ -561,20 +566,17 @@ export function SetupWizard({ dialog }: SetupWizardProps) {
     let allValid = true;
 
     if (step === 1) {
-      for (const exchange of EXCHANGES) {
-        const e = exchange.toLowerCase();
-        const keyPath = `apiKeys.${e}.key`;
-        const secretPath = `apiKeys.${e}.secret`;
-        const key = data.apiKeys[e].key;
-        const secret = data.apiKeys[e].secret;
-        if (key) {
-          results[keyPath] = validateApiKey(key);
-          if (!results[keyPath]) allValid = false;
-        }
-        if (secret) {
-          results[secretPath] = validateApiKey(secret);
-          if (!results[secretPath]) allValid = false;
-        }
+      const keyPath = "apiKeys.exchange.key";
+      const secretPath = "apiKeys.exchange.secret";
+      const key = data.apiKeys.exchange?.key ?? "";
+      const secret = data.apiKeys.exchange?.secret ?? "";
+      if (key) {
+        results[keyPath] = validateApiKey(key);
+        if (!results[keyPath]) allValid = false;
+      }
+      if (secret) {
+        results[secretPath] = validateApiKey(secret);
+        if (!results[secretPath]) allValid = false;
       }
     } else if (step === 3) {
       // AI providers: if a URL is provided it must be valid; key optional but format-checked when set.
@@ -916,34 +918,33 @@ export function SetupWizard({ dialog }: SetupWizardProps) {
         Exchange API Keys
       </text>
       <text dim fg={Colors.muted}>
-        Secrets are not entered in the TUI. Set them via CLI, then continue.
+        One key pair for all venues. Secrets are not entered in the TUI — set
+        via CLI, then continue. Active venues are chosen in the next step.
       </text>
       <text dim fg={Colors.dim}>
-        hoox config secrets set BINANCE_API_KEY · etc.
+        hoox secrets set trade-worker EXCHANGE_KEY_BINDING
+      </text>
+      <text dim fg={Colors.dim}>
+        hoox secrets set trade-worker EXCHANGE_SECRET_BINDING
       </text>
       <box flexDirection="column" gap={1} paddingTop={1}>
-        {EXCHANGES.map((name) => {
-          const e = name.toLowerCase();
-          return (
-            <box flexDirection="column" gap={0}>
-              <text bold fg={Colors.foreground}>
-                {name}
-              </text>
-              <SecretField
-                label="  API Key"
-                value={data.apiKeys[e].key}
-                path={`apiKeys.${e}.key`}
-                cliHint={`hoox config secrets set ${name.toUpperCase()}_API_KEY`}
-              />
-              <SecretField
-                label="  API Secret"
-                value={data.apiKeys[e].secret}
-                path={`apiKeys.${e}.secret`}
-                cliHint={`hoox config secrets set ${name.toUpperCase()}_API_SECRET`}
-              />
-            </box>
-          );
-        })}
+        <box flexDirection="column" gap={0}>
+          <text bold fg={Colors.foreground}>
+            Unified exchange credentials
+          </text>
+          <SecretField
+            label="  API Key"
+            value={data.apiKeys.exchange?.key ?? ""}
+            path="apiKeys.exchange.key"
+            cliHint="hoox secrets set trade-worker EXCHANGE_KEY_BINDING"
+          />
+          <SecretField
+            label="  API Secret"
+            value={data.apiKeys.exchange?.secret ?? ""}
+            path="apiKeys.exchange.secret"
+            cliHint="hoox secrets set trade-worker EXCHANGE_SECRET_BINDING"
+          />
+        </box>
       </box>
     </box>
   );
@@ -961,7 +962,7 @@ export function SetupWizard({ dialog }: SetupWizardProps) {
         {EXCHANGES.map((name) => (
           <Checkbox
             label={name}
-            checked={data.exchanges[name.toLowerCase()]}
+            checked={data.exchanges[name.toLowerCase()] ?? false}
             path={`exchanges.${name.toLowerCase()}`}
           />
         ))}
@@ -1126,9 +1127,8 @@ export function SetupWizard({ dialog }: SetupWizardProps) {
   /** Step 6: Deploy — Summary view */
   const StepDeploy = () => {
     const activeCount = Object.values(data.exchanges).filter(Boolean).length;
-    const apiKeysConfigured = Object.values(data.apiKeys).filter(
-      (e) => e.key || e.secret
-    ).length;
+    const apiKeysConfigured =
+      data.apiKeys.exchange?.key || data.apiKeys.exchange?.secret ? 1 : 0;
     const notifCount = [
       data.notifications.email.enabled,
       data.notifications.telegram.enabled,
@@ -1209,7 +1209,7 @@ export function SetupWizard({ dialog }: SetupWizardProps) {
                 {activeCount === 0 ? "none" : ""})
               </text>
               <text fg={Colors.foreground}>
-                API Keys: {apiKeysConfigured}/3 configured
+                API Keys: {apiKeysConfigured ? "configured" : "not set"}
               </text>
               <text fg={Colors.foreground}>
                 AI Provider:{" "}

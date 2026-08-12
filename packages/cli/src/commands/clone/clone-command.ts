@@ -329,6 +329,7 @@ EXAMPLES:
 
             for (let i = 0; i < workers.length; i++) {
               const name = workers[i];
+              if (!name) continue;
               const workerConfig = configService.getWorker(name);
               if (!workerConfig) continue;
 

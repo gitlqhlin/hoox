@@ -121,9 +121,9 @@ describe("registerOnboardCommand", () => {
     expect(runAll).toHaveBeenCalledTimes(1);
     const setupOpts = (
       runAll.mock.calls as unknown as Array<[Record<string, unknown>]>
-    )[0][0];
-    expect(setupOpts.skipDashboard).toBe(true);
-    expect(setupOpts.skipDb).toBe(true);
+    )[0]?.[0];
+    expect(setupOpts?.skipDashboard).toBe(true);
+    expect(setupOpts?.skipDb).toBe(true);
     // Token/account mirrored into env for setup
     expect(process.env.CLOUDFLARE_API_TOKEN).toBe("cfut_test");
     expect(process.env.CLOUDFLARE_ACCOUNT_ID).toBe("acct_test");

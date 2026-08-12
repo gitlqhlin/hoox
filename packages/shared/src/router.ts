@@ -33,7 +33,8 @@ export function createRouter<TEnv = unknown>(): Router<TEnv> {
     const regex = /:([a-zA-Z_][a-zA-Z0-9_]*)/g;
     let match;
     while ((match = regex.exec(pattern)) !== null) {
-      params.push(match[1]);
+      const name = match[1];
+      if (name !== undefined) params.push(name);
     }
     return params;
   }
@@ -63,7 +64,11 @@ export function createRouter<TEnv = unknown>(): Router<TEnv> {
 
     const params: RouteParams = {};
     for (let i = 0; i < paramNames.length; i++) {
-      params[paramNames[i]] = m[i + 1];
+      const key = paramNames[i];
+      const value = m[i + 1];
+      if (key !== undefined && value !== undefined) {
+        params[key] = value;
+      }
     }
     return params;
   }
@@ -109,6 +114,7 @@ export function createRouter<TEnv = unknown>(): Router<TEnv> {
     // Pattern match: iterate routes with params backwards (last registered wins)
     for (let i = routes.length - 1; i >= 0; i--) {
       const route = routes[i];
+      if (!route) continue;
       if (route.params && route.params.length > 0 && route.regex) {
         const matched = matchPattern(path, route.regex, route.params);
         if (matched && route.method === method) {
@@ -169,6 +175,7 @@ export function createRouter<TEnv = unknown>(): Router<TEnv> {
         let pathExists = false;
         for (let i = routes.length - 1; i >= 0; i--) {
           const r = routes[i];
+          if (!r) continue;
           if (r.path === path) {
             pathExists = true;
             break;

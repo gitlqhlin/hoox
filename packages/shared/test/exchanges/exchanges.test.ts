@@ -181,7 +181,7 @@ describe("BaseExchangeClient", () => {
       });
       const res = await client.openLong("BTCUSDT", 0.5, 65000, "LIMIT");
       expect(exec).toHaveBeenCalledTimes(1);
-      expect(exec.mock.calls[0][0]).toMatchObject({
+      expect(exec.mock.calls[0]?.[0]).toMatchObject({
         symbol: "BTCUSDT",
         side: "BUY",
         quantity: 0.5,
@@ -200,7 +200,7 @@ describe("BaseExchangeClient", () => {
         },
       });
       await client.openShort("ETHUSDT", 2, undefined, "MARKET");
-      expect(exec.mock.calls[0][0]).toMatchObject({
+      expect(exec.mock.calls[0]?.[0]).toMatchObject({
         symbol: "ETHUSDT",
         side: "SELL",
         orderType: "MARKET",
@@ -216,7 +216,7 @@ describe("BaseExchangeClient", () => {
         },
       });
       await client.closeLong("BTCUSDT", 0.1);
-      expect(exec.mock.calls[0][0]).toMatchObject({
+      expect(exec.mock.calls[0]?.[0]).toMatchObject({
         symbol: "BTCUSDT",
         side: "SELL",
         quantity: 0.1,
@@ -234,7 +234,7 @@ describe("BaseExchangeClient", () => {
         },
       });
       await client.closeShort("SOLUSDT", 5);
-      expect(exec.mock.calls[0][0]).toMatchObject({
+      expect(exec.mock.calls[0]?.[0]).toMatchObject({
         symbol: "SOLUSDT",
         side: "BUY",
         quantity: 5,

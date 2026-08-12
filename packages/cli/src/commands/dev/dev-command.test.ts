@@ -292,8 +292,8 @@ describe("registerDevCommand", () => {
         devMock as unknown as { mock: { calls: Array<unknown[]> } }
       ).mock.calls;
       // hoox → port 8787, trade-worker → port 8788
-      expect(calls[0][1]).toBe(8787);
-      expect(calls[1][1]).toBe(8788);
+      expect(calls[0]?.[1]).toBe(8787);
+      expect(calls[1]?.[1]).toBe(8788);
       // exitCode remains unset since the action ran successfully
     });
   });
@@ -309,8 +309,8 @@ describe("registerDevCommand", () => {
       const calls = (
         devMock as unknown as { mock: { calls: Array<unknown[]> } }
       ).mock.calls;
-      expect(calls[0][0]).toContain("test-worker");
-      expect(calls[0][1]).toBe(8787);
+      expect(calls[0]?.[0]).toContain("test-worker");
+      expect(calls[0]?.[1]).toBe(8787);
     });
 
     it("passes --port to dev service", async () => {
@@ -322,7 +322,7 @@ describe("registerDevCommand", () => {
       const calls = (
         devMock as unknown as { mock: { calls: Array<unknown[]> } }
       ).mock.calls;
-      expect(calls[0][1]).toBe(3000);
+      expect(calls[0]?.[1]).toBe(3000);
     });
 
     it("handles unknown worker name", async () => {

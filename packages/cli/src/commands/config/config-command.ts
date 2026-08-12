@@ -116,7 +116,7 @@ EXAMPLES:
   hoox config show                    Display current configuration
   hoox config set workers.agent-worker.enabled false
   hoox config secrets list            List secrets for a worker
-  hoox config secrets set trade-worker BINANCE_KEY_BINDING
+  hoox config secrets set trade-worker EXCHANGE_KEY_BINDING
   hoox config keys generate           Generate new internal keys`
     );
 

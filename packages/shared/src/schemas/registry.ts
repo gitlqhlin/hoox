@@ -16,8 +16,12 @@ function deriveCalledBy(
   for (const [workerName, manifest] of Object.entries(manifests)) {
     if (!calledBy[workerName]) calledBy[workerName] = new Set();
     for (const svc of manifest.services) {
-      if (!calledBy[svc.service]) calledBy[svc.service] = new Set();
-      calledBy[svc.service].add(workerName);
+      let callers = calledBy[svc.service];
+      if (!callers) {
+        callers = new Set();
+        calledBy[svc.service] = callers;
+      }
+      callers.add(workerName);
     }
   }
   const result: Record<string, string[]> = {};
@@ -93,15 +97,22 @@ const manifests: Record<string, WorkerManifest> = {
         type: "secret",
         description: "Telegram outbound auth",
       },
-      BINANCE_KEY_BINDING: { type: "secret", description: "Binance API key" },
-      BINANCE_SECRET_BINDING: {
+      EXCHANGE_KEY_BINDING: {
         type: "secret",
-        description: "Binance API secret",
+        description: "Unified exchange API key (Binance / Bybit / MEXC)",
       },
-      MEXC_KEY_BINDING: { type: "secret", description: "MEXC API key" },
-      MEXC_SECRET_BINDING: { type: "secret", description: "MEXC API secret" },
-      BYBIT_KEY_BINDING: { type: "secret", description: "Bybit API key" },
-      BYBIT_SECRET_BINDING: { type: "secret", description: "Bybit API secret" },
+      EXCHANGE_SECRET_BINDING: {
+        type: "secret",
+        description: "Unified exchange API secret",
+      },
+      EXCHANGE_TESTNET_KEY_BINDING: {
+        type: "secret",
+        description: "Optional unified testnet API key",
+      },
+      EXCHANGE_TESTNET_SECRET_BINDING: {
+        type: "secret",
+        description: "Optional unified testnet API secret",
+      },
     },
     services: [
       {

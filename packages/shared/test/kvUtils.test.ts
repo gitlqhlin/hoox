@@ -68,11 +68,13 @@ describe("KV Utilities", () => {
       expect(kv.put.mock.calls.length).toBe(1);
 
       // Key format should be: {prefix}_{ISO timestamp}
-      const putKey = kv.put.mock.calls[0][0] as string;
+      const putCall = kv.put.mock.calls[0];
+      if (!putCall) throw new Error("expected KV put call");
+      const putKey = putCall[0] as string;
       expect(putKey).toStartWith("test-prefix_");
 
       // Value should be a valid ISO timestamp
-      const putValue = kv.put.mock.calls[0][1] as string;
+      const putValue = putCall[1] as string;
       expect(() => new Date(putValue)).not.toThrow();
       expect(new Date(putValue).toISOString()).toBe(putValue);
     });
@@ -84,7 +86,9 @@ describe("KV Utilities", () => {
       await logKvTimestamp(env);
 
       // Should use default prefix "timestamp"
-      const putKey = kv.put.mock.calls[0][0] as string;
+      const putCall = kv.put.mock.calls[0];
+      if (!putCall) throw new Error("expected KV put call");
+      const putKey = putCall[0] as string;
       expect(putKey).toStartWith("timestamp_");
     });
 

@@ -17,7 +17,7 @@
  *   │  [search…]                           Last sampled 12:34:56   │
  *   │───────────────────────────────────────────────────────────────
  *   │  SECRET NAME                   TYPE        SOURCE   STATUS  │
- *   │  BINANCE_KEY_BINDING          api_key     config   OK      │
+ *   │  EXCHANGE_KEY_BINDING         api_key     config   OK      │
  *   │  OPENAI_API_KEY               api_key     config   OK      │
  *   │  TELEGRAM_BOT_TOKEN           token       config   OK      │
  *   │  …                                                         │

@@ -125,11 +125,11 @@ describe("registerSetupCommand", () => {
       expect(runAll).toHaveBeenCalled();
       const opts = (
         runAll.mock.calls as unknown as Array<[Record<string, unknown>]>
-      )[0][0];
-      expect(opts.skipKeys).toBe(true);
-      expect(opts.skipDb).toBe(true);
-      expect(opts.skipSecrets).toBe(true);
-      expect(opts.skipDashboard).toBe(true);
+      )[0]?.[0];
+      expect(opts?.skipKeys).toBe(true);
+      expect(opts?.skipDb).toBe(true);
+      expect(opts?.skipSecrets).toBe(true);
+      expect(opts?.skipDashboard).toBe(true);
     } finally {
       SetupService.prototype.runAll = origRun;
       SetupService.prototype.checkAuth = origAuth;

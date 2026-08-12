@@ -180,8 +180,8 @@ describe("registerCloneCommand", () => {
     expect(cmd).toBeDefined();
     const args = cmd!.registeredArguments;
     expect(args).toHaveLength(1);
-    expect(args[0].name()).toBe("name");
-    expect(args[0].required).toBe(false);
+    expect(args[0]?.name()).toBe("name");
+    expect(args[0]?.required).toBe(false);
   });
 
   // -- No-arg mode: list clone status ---------------------------------------

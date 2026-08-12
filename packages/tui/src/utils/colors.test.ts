@@ -31,10 +31,15 @@ function hexToRgb(hex: string): { r: number; g: number; b: number } | null {
     /^#?([0-9A-Fa-f]{2})([0-9A-Fa-f]{2})([0-9A-Fa-f]{2})$/
   );
   if (!match) return null;
+  const rHex = match[1];
+  const gHex = match[2];
+  const bHex = match[3];
+  if (rHex === undefined || gHex === undefined || bHex === undefined)
+    return null;
   return {
-    r: parseInt(match[1], 16),
-    g: parseInt(match[2], 16),
-    b: parseInt(match[3], 16),
+    r: parseInt(rHex, 16),
+    g: parseInt(gHex, 16),
+    b: parseInt(bHex, 16),
   };
 }
 

@@ -54,17 +54,12 @@ The `trade-worker` does not expose a public URL, communicating internally via V8
   },
   "secrets": [
     "INTERNAL_KEY_BINDING",
-    "BYBIT_KEY_BINDING",
-    "BYBIT_SECRET_BINDING",
-    "BINANCE_KEY_BINDING",
-    "BINANCE_SECRET_BINDING",
-    "MEXC_KEY_BINDING",
-    "MEXC_SECRET_BINDING",
-    // Optional dedicated testnet keys (preferred when payload.test === true)
-    "BINANCE_TESTNET_KEY_BINDING",
-    "BINANCE_TESTNET_SECRET_BINDING",
-    "BYBIT_TESTNET_KEY_BINDING",
-    "BYBIT_TESTNET_SECRET_BINDING",
+    // Unified exchange API (venue selected by signal / routing)
+    "EXCHANGE_KEY_BINDING",
+    "EXCHANGE_SECRET_BINDING",
+    // Optional testnet pair (preferred when payload.test === true)
+    "EXCHANGE_TESTNET_KEY_BINDING",
+    "EXCHANGE_TESTNET_SECRET_BINDING",
   ],
 }
 ```

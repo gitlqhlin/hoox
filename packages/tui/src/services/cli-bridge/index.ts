@@ -241,8 +241,8 @@ export function parseDbQueryResult(stdout: string): DbQueryResult {
   }
 
   // Derive column order from the first row's keys.
-  const columns =
-    rows.length > 0 && rows[0] !== null ? Object.keys(rows[0]) : [];
+  const firstRow = rows[0];
+  const columns = firstRow ? Object.keys(firstRow) : [];
 
   // wrangler's `meta.duration` is reported in seconds (float). Convert to ms.
   let executionTimeMs: number | null = null;

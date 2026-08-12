@@ -201,10 +201,10 @@ Validates bun ≥1.2, git ≥2.40, wrangler, Docker, Cloudflare auth, and reposi
 hoox secrets list trade-worker
 
 # Set a secret
-hoox secrets set trade-worker BINANCE_KEY_BINDING
+hoox secrets set trade-worker EXCHANGE_KEY_BINDING
 
 # Delete a secret
-hoox secrets delete trade-worker BINANCE_KEY_BINDING
+hoox secrets delete trade-worker EXCHANGE_KEY_BINDING
 
 # Sync system/mesh secrets only (recommended after key rotation)
 hoox secrets sync --system

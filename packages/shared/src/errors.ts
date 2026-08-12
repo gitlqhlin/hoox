@@ -24,13 +24,9 @@ export type { AppError };
 export function toError(err: unknown, fallback = "Unknown error"): string {
   if (err instanceof Error) return err.message;
   if (typeof err === "string") return err;
-  if (
-    err &&
-    typeof err === "object" &&
-    "message" in err &&
-    typeof (err as Record<string, unknown>).message === "string"
-  ) {
-    return (err as Record<string, string>).message;
+  if (err && typeof err === "object" && "message" in err) {
+    const message = (err as Record<string, unknown>).message;
+    if (typeof message === "string") return message;
   }
   // null/undefined should use fallback, not be stringified to "null"/"undefined"
   if (err === null || err === undefined) return fallback;

@@ -32,9 +32,10 @@ describe("redactWizardSecrets", () => {
   it("clears exchange keys, AI key, telegram token, and discord webhook", () => {
     const redacted = redactWizardSecrets({
       apiKeys: {
-        binance: { key: "binance-key-secret-value", secret: "binance-sec" },
-        bybit: { key: "bybit-key", secret: "bybit-sec" },
-        mexc: { key: "mexc-key", secret: "mexc-sec" },
+        exchange: {
+          key: "exchange-key-secret-value",
+          secret: "exchange-sec",
+        },
       },
       exchanges: { binance: true, bybit: false, mexc: false },
       ai: {
@@ -57,9 +58,7 @@ describe("redactWizardSecrets", () => {
       },
     });
 
-    expect(redacted.apiKeys.binance).toEqual({ key: "", secret: "" });
-    expect(redacted.apiKeys.bybit).toEqual({ key: "", secret: "" });
-    expect(redacted.apiKeys.mexc).toEqual({ key: "", secret: "" });
+    expect(redacted.apiKeys.exchange).toEqual({ key: "", secret: "" });
     expect(redacted.ai.apiKey).toBe("");
     expect(redacted.ai.providerUrl).toBe("https://api.example.com");
     expect(redacted.ai.model).toBe("gpt-4");
@@ -74,9 +73,7 @@ describe("redactWizardSecrets", () => {
   it("does not mutate the input object", () => {
     const original = {
       apiKeys: {
-        binance: { key: "keep-me", secret: "keep-me-too" },
-        bybit: { key: "", secret: "" },
-        mexc: { key: "", secret: "" },
+        exchange: { key: "keep-me", secret: "keep-me-too" },
       },
       exchanges: { binance: true, bybit: false, mexc: false },
       ai: { providerUrl: "", apiKey: "secret", model: "default" },
@@ -88,7 +85,7 @@ describe("redactWizardSecrets", () => {
       },
     };
     redactWizardSecrets(original);
-    expect(original.apiKeys.binance.key).toBe("keep-me");
+    expect(original.apiKeys.exchange.key).toBe("keep-me");
     expect(original.ai.apiKey).toBe("secret");
     expect(original.notifications.telegram.botToken).toBe("tok");
   });
@@ -96,9 +93,10 @@ describe("redactWizardSecrets", () => {
   it("session payload is safe to JSON.stringify (no secrets)", () => {
     const redacted = redactWizardSecrets({
       apiKeys: {
-        binance: { key: "binance-key-secret-value", secret: "binance-sec" },
-        bybit: { key: "", secret: "" },
-        mexc: { key: "", secret: "" },
+        exchange: {
+          key: "exchange-key-secret-value",
+          secret: "exchange-sec",
+        },
       },
       exchanges: { binance: true, bybit: false, mexc: false },
       ai: {
@@ -118,7 +116,7 @@ describe("redactWizardSecrets", () => {
     });
     const json = JSON.stringify({ step: 2, data: redacted });
     expect(json).not.toContain("sk-live");
-    expect(json).not.toContain("binance-key");
+    expect(json).not.toContain("exchange-key");
     expect(json).not.toContain("123:ABC");
     expect(json).not.toContain("webhooks/x");
   });

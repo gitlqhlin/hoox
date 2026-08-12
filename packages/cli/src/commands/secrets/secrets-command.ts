@@ -37,7 +37,7 @@ COMMANDS:
 
 EXAMPLES:
   hoox secrets list trade-worker
-  hoox secrets set trade-worker BINANCE_KEY_BINDING
+  hoox secrets set trade-worker EXCHANGE_KEY_BINDING
   hoox secrets sync --system
   hoox secrets sync`
     );

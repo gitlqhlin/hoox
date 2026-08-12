@@ -338,11 +338,12 @@ export function flattenSettings(
   const merged: MergedSettings = {};
 
   for (const config of configs) {
-    merged[config.worker] = {};
+    const workerSettings: MergedSettings[string] = {};
+    merged[config.worker] = workerSettings;
 
     for (const section of config.sections) {
       for (const field of section.fields) {
-        merged[config.worker][field.key] = field.default;
+        workerSettings[field.key] = field.default;
       }
     }
   }

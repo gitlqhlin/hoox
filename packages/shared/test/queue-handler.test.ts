@@ -134,7 +134,7 @@ describe("createQueueHandler", () => {
     } as any);
 
     expect(onMessage).toHaveBeenCalledTimes(2);
-    expect(onMessage).toHaveBeenNthCalledWith(1, mockMsgs[0].body, 0);
-    expect(onMessage).toHaveBeenNthCalledWith(2, mockMsgs[1].body, 0);
+    expect(onMessage).toHaveBeenNthCalledWith(1, mockMsgs[0]!.body, 0);
+    expect(onMessage).toHaveBeenNthCalledWith(2, mockMsgs[1]!.body, 0);
   });
 });

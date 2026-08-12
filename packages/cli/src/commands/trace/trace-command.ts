@@ -52,15 +52,19 @@ function parseTime(input: string | undefined): number | undefined {
   // Relative time: "1h", "30m", "2d"
   const relativeMatch = input.match(/^(\d+)([smhd])$/);
   if (relativeMatch) {
-    const value = parseInt(relativeMatch[1], 10);
+    const rawValue = relativeMatch[1];
     const unit = relativeMatch[2];
+    if (!rawValue || !unit) return undefined;
+    const value = parseInt(rawValue, 10);
     const multipliers: Record<string, number> = {
       s: 1000,
       m: 60 * 1000,
       h: 60 * 60 * 1000,
       d: 24 * 60 * 60 * 1000,
     };
-    return Date.now() - value * multipliers[unit];
+    const mult = multipliers[unit];
+    if (mult === undefined) return undefined;
+    return Date.now() - value * mult;
   }
 
   // Assume ISO-8601 → Unix ms

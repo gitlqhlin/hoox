@@ -297,8 +297,8 @@ The command will prompt for the secret value (hidden input).
 It writes to the worker's .dev.vars file and syncs to Cloudflare.
 
 EXAMPLES:
-  hoox secrets set trade-worker BINANCE_KEY_BINDING
-  hoox config secrets set trade-worker BINANCE_KEY_BINDING`
+  hoox secrets set trade-worker EXCHANGE_KEY_BINDING
+  hoox config secrets set trade-worker EXCHANGE_KEY_BINDING`
     )
     .action(
       withErrorHandling(
@@ -391,8 +391,8 @@ ARGUMENTS:
 This removes the secret from Cloudflare and from the worker's .dev.vars file.
 
 EXAMPLES:
-  hoox secrets delete trade-worker BINANCE_KEY_BINDING
-  hoox config secrets delete trade-worker BINANCE_KEY_BINDING`
+  hoox secrets delete trade-worker EXCHANGE_KEY_BINDING
+  hoox config secrets delete trade-worker EXCHANGE_KEY_BINDING`
     )
     .action(
       withErrorHandling(

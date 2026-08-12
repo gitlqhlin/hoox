@@ -254,7 +254,10 @@ export function ChatInterface() {
             <span className="text-sm text-muted-foreground">Temp</span>
             <Slider
               value={[temperature]}
-              onValueChange={(v) => setTemperature(v[0])}
+              onValueChange={(v) => {
+                const next = v[0];
+                if (next !== undefined) setTemperature(next);
+              }}
               min={0}
               max={2}
               step={0.1}
