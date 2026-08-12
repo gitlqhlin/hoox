@@ -31,6 +31,8 @@ export const KV_BOT_ENABLED = "bot:enabled";
 export const KV_BOT_DEFAULT_CHAT_ID = "bot:default_chat_id";
 export const KV_BOT_NOTIFY_ON_EXECUTION = "bot:notify_on_execution";
 export const KV_BOT_NOTIFY_ON_ERROR = "bot:notify_on_error";
+/** JSON array of string|number — gateway notify chatId allowlist (fail-closed). */
+export const KV_TELEGRAM_ALLOWED_CHAT_IDS = "telegram:allowed_chat_ids";
 
 // --- Webhook Keys ---
 export const KV_WEBHOOK_IP_CHECK_ENABLED =
@@ -78,6 +80,7 @@ export const KVKeys = {
   KV_BOT_DEFAULT_CHAT_ID,
   KV_BOT_NOTIFY_ON_EXECUTION,
   KV_BOT_NOTIFY_ON_ERROR,
+  KV_TELEGRAM_ALLOWED_CHAT_IDS,
   KV_WEBHOOK_IP_CHECK_ENABLED,
   KV_WEBHOOK_ALLOWED_IPS,
   KV_WEBHOOK_QUEUE_MODE,
