@@ -171,7 +171,7 @@ hoox clone my-hoox-app
 | `TG_BOT_TOKEN_BINDING`    | telegram-worker                     | `wrangler secret put` | Optional     | Telegram bot token                     |
 | `TG_CHAT_ID_BINDING`      | telegram-worker                     | `wrangler secret put` | Optional     | Default Telegram chat ID               |
 | `TELEGRAM_SECRET_TOKEN`   | telegram-worker                     | `wrangler secret put` | Optional     | Telegram webhook secret                |
-| `AUTHORIZED_CHAT_IDS`     | telegram-worker                     | `wrangler secret put` | Optional     | Comma-separated authorized chat IDs    |
+| `AUTHORIZED_CHAT_IDS`     | telegram-worker                     | `wrangler secret put` | Required (webhook); recommended (alert allowlist) | Comma-separated chat IDs; webhook fail-closed when unset; `/alert` restricts to list or `TG_CHAT_ID_BINDING` |
 | `WALLET_PK_SECRET`        | web3-wallet-worker                  | `wrangler secret put` | Optional     | Wallet private key                     |
 | `WALLET_MNEMONIC_SECRET`  | web3-wallet-worker                  | `wrangler secret put` | Optional     | Wallet mnemonic phrase                 |
 | `EMAIL_HOST`              | email-worker                        | `wrangler secret put` | Optional     | Email IMAP host                        |

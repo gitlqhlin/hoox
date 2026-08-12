@@ -13,6 +13,7 @@ import {
   expandAgentConfigToFieldMap,
   isAgentConfigEmbeddedField,
   kvGetMany,
+  kvPutMany,
   parseAgentConfigJson,
   serializeAgentConfigForKv,
 } from "@hoox-sh/hoox-shared";
@@ -283,19 +284,35 @@ async function handleSingleUpdate(input: z.infer<typeof SingleUpdateSchema>) {
   // providers/models/risk numerics → merge into agent:config
   if (isAgentConfigEmbeddedField(input.key)) {
     try {
+      const dualWriteFlat =
+        input.key === "risk:max_daily_drawdown_percent" ||
+        input.key === "risk:trailing_stop_percent";
+
+      // RMW agent:config then dual-write flat risk key in parallel when needed
+      if (env.CONFIG_KV && dualWriteFlat) {
+        const raw = await readAgentConfigRaw(env);
+        const current = parseAgentConfigJson(raw);
+        const next = applyAgentConfigFieldUpdates(current, {
+          [input.key]: input.value,
+        });
+        const payload = serializeAgentConfigForKv(next);
+        const flatKey = buildKVKey(input.worker, input.key);
+        await kvPutMany(env.CONFIG_KV, [
+          { key: AGENT_CONFIG_KV_KEY, value: payload },
+          { key: flatKey, value: JSON.stringify(input.value) },
+        ]);
+        return NextResponse.json({
+          success: true,
+          worker: input.worker,
+          key: input.key,
+          value: input.value,
+          kvKey: AGENT_CONFIG_KV_KEY,
+        });
+      }
+
       const { kvKey } = await writeAgentConfigEmbedded(env, {
         [input.key]: input.value,
       });
-      // Dual-write trade:* for risk fields the trade path may also read
-      if (
-        input.key === "risk:max_daily_drawdown_percent" ||
-        input.key === "risk:trailing_stop_percent"
-      ) {
-        const flatKey = buildKVKey(input.worker, input.key);
-        if (env.CONFIG_KV) {
-          await putToKV(env, flatKey, input.value);
-        }
-      }
       return NextResponse.json({
         success: true,
         worker: input.worker,
@@ -399,11 +416,15 @@ async function handleBatchedUpdate(
   }
 
   try {
-    let agentWritten = 0;
+    // Read-modify-write agent:config once, then bulk-put it with flat keys
+    let agentPayload: string | null = null;
     if (Object.keys(agentConfigUpdates).length > 0) {
-      await writeAgentConfigEmbedded(env, agentConfigUpdates);
-      agentWritten = 1;
+      const raw = await readAgentConfigRaw(env);
+      const current = parseAgentConfigJson(raw);
+      const next = applyAgentConfigFieldUpdates(current, agentConfigUpdates);
+      agentPayload = serializeAgentConfigForKv(next);
     }
+    const agentWritten = agentPayload != null ? 1 : 0;
 
     if (writes.length === 0 && agentWritten === 0) {
       return NextResponse.json({
@@ -418,17 +439,42 @@ async function handleBatchedUpdate(
     }
 
     if (env.CONFIG_KV) {
-      // Parallel writes — KV is consistent and supports concurrent puts
-      await Promise.all(writes.map((w) => putToKV(env, w.kvKey, w.value)));
+      // Single parallel bulk put for agent:config + all flat keys
+      await kvPutMany(env.CONFIG_KV, [
+        ...(agentPayload != null
+          ? [{ key: AGENT_CONFIG_KV_KEY, value: agentPayload }]
+          : []),
+        ...writes.map((w) => ({
+          key: w.kvKey,
+          value: JSON.stringify(w.value),
+        })),
+      ]);
     } else {
       // D1 fallback is sequential because the d1-worker API takes one key at a time
+      if (agentPayload != null) {
+        const agentResult = await postToD1Service(
+          env,
+          "agent-worker",
+          AGENT_CONFIG_KV_KEY,
+          agentPayload
+        );
+        if (!agentResult.ok) {
+          return NextResponse.json(
+            {
+              error: `Failed to save agent:config: ${agentResult.error ?? "unknown"}`,
+              written: 0,
+            },
+            { status: agentResult.status }
+          );
+        }
+      }
       for (const w of writes) {
         const result = await postToD1Service(env, w.worker, w.kvKey, w.value);
         if (!result.ok) {
           return NextResponse.json(
             {
               error: `Failed to save ${w.worker}.${w.key}: ${result.error ?? "unknown"}`,
-              written: writes.indexOf(w),
+              written: writes.indexOf(w) + agentWritten,
             },
             { status: result.status }
           );

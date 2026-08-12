@@ -567,8 +567,8 @@ describe("Secrets API Route", () => {
 
     expect(response.status).toBe(500);
     expect(body.success).toBe(false);
-    expect(body.error).toBe("Cloudflare Secret Store is not configured");
-    expect(JSON.stringify(body)).not.toContain("CLOUDFLARE_ACCOUNT_ID");
+    // Operator-facing message may name the missing env keys; must not leak values.
+    expect(body.error).toMatch(/Cloudflare credentials not configured/i);
     expect(JSON.stringify(body)).not.toContain(
       "debc6545e63bea36be059cbc82d80ec8"
     );

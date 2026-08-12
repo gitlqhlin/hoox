@@ -64,7 +64,7 @@ The `telegram-worker` mounts multiple storage and vector search services to impl
 - **`TG_CHAT_ID_BINDING`**: Your default Chat ID for receiving notifications.
 - **`TELEGRAM_SECRET_TOKEN`**: A secure, random token sent as the `X-Telegram-Bot-Api-Secret-Token` header to validate webhook requests from Telegram.
 - **`INTERNAL_KEY_BINDING`**: Shared key used to validate calls from `hoox` or `trade-worker`.
-- **`AUTHORIZED_CHAT_IDS`**: Optional comma-separated list of chat IDs allowed to send bot commands. If set, only these chat IDs can interact with the bot.
+- **`AUTHORIZED_CHAT_IDS`**: Comma-separated numeric chat IDs. **Inbound `/webhook`**: fail-closed when unset (commands silently dropped). **Outbound `/alert`**: when set, destination must be listed; when unset, only `TG_CHAT_ID_BINDING` is permitted (blocks arbitrary `chatId` overrides). Align with gateway `TELEGRAM_ALLOWED_CHAT_IDS` for public notify (gateway already fail-closes independently).
 
 ### Local Development Mocking (`.dev.vars`)
 

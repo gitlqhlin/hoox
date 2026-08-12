@@ -41,10 +41,9 @@ export async function GET(_request: NextRequest) {
       );
     }
 
-    // Parallel independent KV reads on the critical path
-    const [killSwitch, configData, stopsList] = await Promise.all([
-      env.CONFIG_KV.get("trade:kill_switch"),
-      env.CONFIG_KV.get("agent:config"),
+    // Bulk fixed-key gets + list in parallel (kvGetMany uses native bulk get when available)
+    const [[killSwitch, configData], stopsList] = await Promise.all([
+      kvGetMany(env.CONFIG_KV, ["trade:kill_switch", "agent:config"]),
       env.CONFIG_KV.list({ prefix: "trade:watermark:" }),
     ]);
 

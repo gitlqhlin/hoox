@@ -126,11 +126,45 @@ async function listWorkerSecretNames(
   }
 }
 
+async function listSecretsStoreNames(
+  accountId: string,
+  apiToken: string,
+  storeId: string
+): Promise<Set<string>> {
+  try {
+    const response = await fetch(
+      `https://api.cloudflare.com/client/v4/accounts/${accountId}/secrets_store/stores/${storeId}/secrets`,
+      {
+        headers: {
+          Authorization: `Bearer ${apiToken}`,
+          "Content-Type": "application/json",
+        },
+        cache: "no-store",
+      }
+    );
+    const data = (await response.json()) as {
+      success: boolean;
+      result?: { name: string }[];
+    };
+    const names = new Set<string>();
+    if (data.success && data.result) {
+      for (const s of data.result) names.add(s.name);
+    }
+    return names;
+  } catch {
+    // Secrets Store optional — continue with Worker secret probes
+    return new Set();
+  }
+}
+
 export async function GET() {
   try {
-    const accountId = await getCloudflareAccountId();
-    const apiToken = await getCloudflareApiToken();
-    const storeId = await getCloudflareSecretStoreId();
+    // Independent env lookups — resolve in parallel
+    const [accountId, apiToken, storeId] = await Promise.all([
+      getCloudflareAccountId(),
+      getCloudflareApiToken(),
+      getCloudflareSecretStoreId(),
+    ]);
 
     if (!apiToken || !accountId) {
       return Errors.internal(
@@ -138,41 +172,21 @@ export async function GET() {
       );
     }
 
-    // 1) Optional Secrets Store (legacy / shared bindings)
-    const availableNames = new Set<string>();
-    if (storeId) {
-      try {
-        const response = await fetch(
-          `https://api.cloudflare.com/client/v4/accounts/${accountId}/secrets_store/stores/${storeId}/secrets`,
-          {
-            headers: {
-              Authorization: `Bearer ${apiToken}`,
-              "Content-Type": "application/json",
-            },
-            cache: "no-store",
-          }
-        );
-        const data = (await response.json()) as {
-          success: boolean;
-          result?: { name: string }[];
-        };
-        if (data.success && data.result) {
-          for (const s of data.result) availableNames.add(s.name);
-        }
-      } catch {
-        // Secrets Store optional — continue with Worker secret probes
-      }
-    }
-
-    // 2) Worker-level secrets (what `wrangler secret put` actually sets)
+    // 1) Optional Secrets Store + 2) Worker-level secrets in parallel
     //    Mesh keys live on workers; dashboard used to only check Secrets Store
     //    and falsely reported WEBHOOK / API_SERVICE_KEY as missing after sync.
-    const workerResults = await Promise.all(
-      WORKER_SCRIPT_NAMES.map(async (name) => {
-        const names = await listWorkerSecretNames(accountId, apiToken, name);
-        return names;
-      })
-    );
+    const [storeNames, workerResults] = await Promise.all([
+      storeId
+        ? listSecretsStoreNames(accountId, apiToken, storeId)
+        : Promise.resolve(new Set<string>()),
+      Promise.all(
+        WORKER_SCRIPT_NAMES.map((name) =>
+          listWorkerSecretNames(accountId, apiToken, name)
+        )
+      ),
+    ]);
+
+    const availableNames = new Set<string>(storeNames);
     for (const names of workerResults) {
       for (const n of names) availableNames.add(n);
     }
