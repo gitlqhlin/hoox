@@ -98,6 +98,7 @@ describe("Shared package exports — deep imports", () => {
     it("resolves `@hoox-sh/hoox-shared/middleware/auth`", async () => {
       const mod = await import("@hoox-sh/hoox-shared/middleware/auth");
       expect(typeof mod.timingSafeEqual).toBe("function");
+      expect(typeof mod.timingSafeEqualAsync).toBe("function");
     });
   });
 });

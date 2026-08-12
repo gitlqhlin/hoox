@@ -9,7 +9,13 @@
  */
 
 import { describe, test, expect, mock } from "bun:test";
-import { logKvTimestamp, headersToObject } from "../src/kvUtils";
+import {
+  logKvTimestamp,
+  headersToObject,
+  kvGetMany,
+  kvGetManyAsRecord,
+  kvPutMany,
+} from "../src/kvUtils";
 import type { KVNamespace } from "@cloudflare/workers-types";
 
 type MockFn = ReturnType<typeof mock>;
@@ -142,6 +148,55 @@ describe("KV Utilities", () => {
       expect(obj["x-one"]).toBe("1");
       expect(obj["x-two"]).toBe("2");
       expect(obj["x-three"]).toBe("3");
+    });
+  });
+
+  describe("kvGetMany / kvPutMany", () => {
+    test("kvGetMany returns values in key order", async () => {
+      const kv = createMockKv();
+      kv._store.set("a", "1");
+      kv._store.set("c", "3");
+      const values = await kvGetMany(kv as unknown as KVNamespace, [
+        "a",
+        "b",
+        "c",
+      ]);
+      expect(values).toEqual(["1", null, "3"]);
+      expect(kv.get.mock.calls.length).toBe(3);
+    });
+
+    test("kvGetMany returns empty array for empty keys", async () => {
+      const kv = createMockKv();
+      const values = await kvGetMany(kv as unknown as KVNamespace, []);
+      expect(values).toEqual([]);
+      expect(kv.get.mock.calls.length).toBe(0);
+    });
+
+    test("kvGetManyAsRecord maps keys to values", async () => {
+      const kv = createMockKv();
+      kv._store.set("x", "y");
+      const record = await kvGetManyAsRecord(kv as unknown as KVNamespace, [
+        "x",
+        "missing",
+      ]);
+      expect(record).toEqual({ x: "y", missing: null });
+    });
+
+    test("kvPutMany writes all entries in parallel", async () => {
+      const kv = createMockKv();
+      await kvPutMany(kv as unknown as KVNamespace, [
+        { key: "k1", value: "v1" },
+        { key: "k2", value: "v2", options: { expirationTtl: 60 } },
+      ]);
+      expect(kv.put.mock.calls.length).toBe(2);
+      expect(kv._store.get("k1")).toBe("v1");
+      expect(kv._store.get("k2")).toBe("v2");
+    });
+
+    test("kvPutMany is a no-op for empty entries", async () => {
+      const kv = createMockKv();
+      await kvPutMany(kv as unknown as KVNamespace, []);
+      expect(kv.put.mock.calls.length).toBe(0);
     });
   });
 });

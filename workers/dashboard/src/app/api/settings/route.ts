@@ -58,18 +58,26 @@ const BatchedUpdateSchema = z.object({
 // ── Shared helpers (use the prefixes module — no inline maps here) ─────
 
 async function listSettingsFromKV(env: DashboardEnv): Promise<AllSettings> {
+  // Parallelize prefix lists, then parallelize all key gets — sequential
+  // list+get loops dominate settings page latency under many CONFIG_KV keys.
+  const lists = await Promise.all(
+    READ_PREFIXES.map((prefix) => env.CONFIG_KV.list({ prefix }))
+  );
+  const keyNames = lists.flatMap((list) => list.keys.map((k) => k.name));
+  const values = await Promise.all(
+    keyNames.map((name) => env.CONFIG_KV.get(name))
+  );
+
   const settings: Record<string, unknown> = {};
-  for (const prefix of READ_PREFIXES) {
-    const list = await env.CONFIG_KV.list({ prefix });
-    for (const kv of list.keys) {
-      const value = await env.CONFIG_KV.get(kv.name);
-      if (value === null) continue;
-      try {
-        settings[kv.name] = JSON.parse(value);
-      } catch {
-        // Store the raw string if not valid JSON (legacy values)
-        settings[kv.name] = value;
-      }
+  for (let i = 0; i < keyNames.length; i++) {
+    const name = keyNames[i]!;
+    const value = values[i];
+    if (value === null) continue;
+    try {
+      settings[name] = JSON.parse(value);
+    } catch {
+      // Store the raw string if not valid JSON (legacy values)
+      settings[name] = value;
     }
   }
 

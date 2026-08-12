@@ -436,6 +436,7 @@ describe("SecretsService", () => {
           [
             "API_SERVICE_KEY_BINDING=api-real",
             "INTERNAL_KEY_BINDING=int-real",
+            "TELEGRAM_INTERNAL_KEY_BINDING=tg-int-real",
             "BINANCE_KEY_BINDING=placeholder_binance",
             "BINANCE_SECRET_BINDING=",
           ].join("\n") + "\n"
@@ -456,25 +457,37 @@ describe("SecretsService", () => {
         });
         const sync = expectOk(result);
         expect(sync.ok).toBe(true);
-        expect(sync.synced).toEqual([
-          "API_SERVICE_KEY_BINDING",
-          "INTERNAL_KEY_BINDING",
-        ]);
-        expect(called).toEqual([
-          ["API_SERVICE_KEY_BINDING", "api-real"],
-          ["INTERNAL_KEY_BINDING", "int-real"],
-        ]);
+        // trade-worker mesh map: INTERNAL + TELEGRAM_INTERNAL + API_SERVICE
+        // exchange keys are ignored under --system
+        expect(sync.synced.sort()).toEqual(
+          [
+            "API_SERVICE_KEY_BINDING",
+            "INTERNAL_KEY_BINDING",
+            "TELEGRAM_INTERNAL_KEY_BINDING",
+          ].sort()
+        );
+        expect(called.map(([n]) => n).sort()).toEqual(
+          [
+            "API_SERVICE_KEY_BINDING",
+            "INTERNAL_KEY_BINDING",
+            "TELEGRAM_INTERNAL_KEY_BINDING",
+          ].sort()
+        );
+        expect(called.find(([n]) => n.startsWith("BINANCE"))).toBeUndefined();
       } finally {
         rmSync(dir, { recursive: true, force: true });
       }
     });
 
-    it("with systemOnly returns ok empty when worker has no system secrets", async () => {
+    it("with systemOnly syncs telegram mesh INTERNAL key (not bot token)", async () => {
       const dir = tmpDir();
       try {
         writeFileSync(
           join(dir, ".dev.vars"),
-          "TG_BOT_TOKEN_BINDING=my-real-token\n"
+          [
+            "TG_BOT_TOKEN_BINDING=my-real-token",
+            "INTERNAL_KEY_BINDING=int-real",
+          ].join("\n") + "\n"
         );
 
         const svc = await createService();
@@ -492,8 +505,9 @@ describe("SecretsService", () => {
         });
         const sync = expectOk(result);
         expect(sync.ok).toBe(true);
-        expect(sync.synced).toEqual([]);
-        expect(called).toHaveLength(0);
+        // Bot token is user secret — only mesh INTERNAL is system for telegram
+        expect(sync.synced).toEqual(["INTERNAL_KEY_BINDING"]);
+        expect(called).toEqual([["INTERNAL_KEY_BINDING", "int-real"]]);
       } finally {
         rmSync(dir, { recursive: true, force: true });
       }

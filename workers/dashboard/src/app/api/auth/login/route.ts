@@ -12,6 +12,7 @@ import {
   validateRequiredEnv,
 } from "@/lib/config";
 import { Errors } from "@hoox-sh/hoox-shared/errors";
+import { timingSafeEqual } from "@hoox-sh/hoox-shared/middleware/auth";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -61,7 +62,17 @@ export async function POST(
     const validUsername = getConfig().auth.username;
     const validPassword = getConfig().auth.password;
 
-    if (username !== validUsername || password !== validPassword) {
+    // Constant-time compare for both fields to avoid timing side-channels.
+    // Coerce missing body fields to empty strings so comparison always runs.
+    const userOk = timingSafeEqual(
+      typeof username === "string" ? username : "",
+      validUsername ?? ""
+    );
+    const passOk = timingSafeEqual(
+      typeof password === "string" ? password : "",
+      validPassword ?? ""
+    );
+    if (!userOk || !passOk) {
       return NextResponse.json(
         { error: "Invalid credentials" },
         { status: 401 }

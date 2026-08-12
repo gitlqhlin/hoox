@@ -32,6 +32,12 @@ export const ENV_KEYS = {
     d1: "D1_SERVICE_URL",
     agent: "AGENT_SERVICE_URL",
     pyne: "PYNE_WORKER_URL",
+    /** Public gateway base URL (TradingView webhooks). */
+    hoox: "HOOX_URL",
+    hooxGateway: "HOOX_GATEWAY_URL",
+    d1Worker: "D1_WORKER_URL",
+    agentWorker: "AGENT_WORKER_URL",
+    tradeWorker: "TRADE_WORKER_URL",
   },
   internalAuth: {
     d1Read: "D1_READ_KEY_BINDING",
@@ -58,6 +64,102 @@ export const ENV_KEYS = {
     sessionSecret: "SESSION_SECRET",
   },
 } as const;
+
+/** TradingView alert path on the public gateway worker. */
+export const TRADINGVIEW_WEBHOOK_PATH = "/webhook/tradingview";
+
+/**
+ * Resolve the public hoox gateway base URL (no trailing slash).
+ *
+ * Order:
+ *  1. HOOX_URL / HOOX_GATEWAY_URL (dashboard wrangler vars)
+ *  2. Derive from a sibling `*.workers.dev` URL by swapping the first label to `hoox`
+ *  3. null — caller may fall back to a template
+ */
+export function resolveHooxGatewayUrl(): string | null {
+  const direct =
+    getEnvVar(ENV_KEYS.services.hoox) ||
+    getEnvVar(ENV_KEYS.services.hooxGateway);
+  if (direct) {
+    try {
+      return new URL(direct).origin;
+    } catch {
+      return direct.replace(/\/+$/, "");
+    }
+  }
+
+  const siblings = [
+    getEnvVar(ENV_KEYS.services.d1Worker),
+    getEnvVar(ENV_KEYS.services.agentWorker),
+    getEnvVar(ENV_KEYS.services.tradeWorker),
+    getEnvVar(ENV_KEYS.services.d1),
+    getEnvVar(ENV_KEYS.services.agent),
+    getEnvVar(ENV_KEYS.services.pyne),
+    DEFAULT_SERVICE_URLS.D1_SERVICE_URL,
+  ];
+
+  for (const raw of siblings) {
+    if (!raw) continue;
+    try {
+      const url = new URL(raw);
+      // d1-worker.cryptolinx.workers.dev → hoox.cryptolinx.workers.dev
+      if (!url.hostname.endsWith(".workers.dev")) continue;
+      const parts = url.hostname.split(".");
+      if (parts.length < 3) continue;
+      parts[0] = "hoox";
+      return `${url.protocol}//${parts.join(".")}`;
+    } catch {
+      // try next
+    }
+  }
+  return null;
+}
+
+/**
+ * Extract workers.dev account/subdomain prefix from a gateway or sibling URL.
+ * e.g. https://hoox.cryptolinx.workers.dev → "cryptolinx"
+ */
+export function extractWorkersSubdomainPrefix(
+  baseUrl: string | null
+): string | null {
+  if (!baseUrl) return null;
+  try {
+    const host = new URL(baseUrl).hostname;
+    // <script>.<prefix>.workers.dev
+    const m = host.match(/^[a-z0-9-]+\.([a-z0-9-]+)\.workers\.dev$/i);
+    return m?.[1] ?? null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Full TradingView webhook URL for the setup wizard.
+ * Prefers configured HOOX_URL; never invents a fake prefix when known.
+ */
+export function resolveTradingViewWebhookUrl(): {
+  url: string;
+  gatewayUrl: string | null;
+  subdomainPrefix: string | null;
+  resolved: boolean;
+} {
+  const gatewayUrl = resolveHooxGatewayUrl();
+  const subdomainPrefix = extractWorkersSubdomainPrefix(gatewayUrl);
+  if (gatewayUrl) {
+    return {
+      url: `${gatewayUrl}${TRADINGVIEW_WEBHOOK_PATH}`,
+      gatewayUrl,
+      subdomainPrefix,
+      resolved: true,
+    };
+  }
+  return {
+    url: `https://hoox.[your-prefix].workers.dev${TRADINGVIEW_WEBHOOK_PATH}`,
+    gatewayUrl: null,
+    subdomainPrefix: null,
+    resolved: false,
+  };
+}
 
 export function getEnvVar(key: string): string | undefined {
   const value = process.env[key];

@@ -17,9 +17,25 @@ import {
   createInternalAuthMiddleware,
   resolveOperatorApiKey,
   requireOperatorAuth,
+  timingSafeEqual,
+  timingSafeEqualAsync,
 } from "../../src/middleware/auth";
 import type { InternalAuthEnv } from "../../src/middleware/auth";
 import type { Env } from "../../src/types";
+
+describe("timingSafeEqual / timingSafeEqualAsync direct", () => {
+  it("sync equal and unequal", () => {
+    expect(timingSafeEqual("secret", "secret")).toBe(true);
+    expect(timingSafeEqual("secret", "secreX")).toBe(false);
+    expect(timingSafeEqual("short", "longer")).toBe(false);
+  });
+
+  it("async SHA-256 path matches sync semantics", async () => {
+    expect(await timingSafeEqualAsync("token-abc", "token-abc")).toBe(true);
+    expect(await timingSafeEqualAsync("token-abc", "token-xyz")).toBe(false);
+    expect(await timingSafeEqualAsync("a", "aa")).toBe(false);
+  });
+});
 
 describe("timingSafeEqual", () => {
   it("returns true for identical strings", async () => {

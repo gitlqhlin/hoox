@@ -13,6 +13,14 @@
 import { z } from "zod";
 import type { Result } from "../types";
 
+/** Default body size cap for JSON request parsing (1 MiB). */
+export const DEFAULT_MAX_JSON_BODY_BYTES = 1_048_576;
+
+export interface ParseJsonBodyOptions {
+  /** Reject bodies larger than this many bytes (Content-Length or measured). */
+  maxBytes?: number;
+}
+
 /**
  * Validate unknown data against a Zod schema, returning a Result type.
  * Provides structured error messages from Zod issue paths.
@@ -31,6 +39,59 @@ export function validateJson<T extends z.ZodTypeAny>(
     };
   }
   return { ok: true as const, value: result.data };
+}
+
+/**
+ * Parse a Request body as JSON and validate against a Zod schema.
+ * Enforces an optional max body size to stay within Workers memory limits.
+ *
+ * @example
+ * const parsed = await parseJsonBody(request, WebhookPayloadSchema);
+ * if (!parsed.ok) return Errors.badRequest(parsed.error);
+ * const payload = parsed.value;
+ */
+export async function parseJsonBody<T extends z.ZodTypeAny>(
+  request: Request,
+  schema: T,
+  options: ParseJsonBodyOptions = {}
+): Promise<Result<z.infer<T>>> {
+  const maxBytes = options.maxBytes ?? DEFAULT_MAX_JSON_BODY_BYTES;
+
+  const contentLength = request.headers.get("content-length");
+  if (contentLength !== null) {
+    const declared = Number(contentLength);
+    if (Number.isFinite(declared) && declared > maxBytes) {
+      return {
+        ok: false as const,
+        error: `Request body too large (max ${maxBytes} bytes)`,
+      };
+    }
+  }
+
+  let text: string;
+  try {
+    text = await request.text();
+  } catch {
+    return { ok: false as const, error: "Failed to read request body" };
+  }
+
+  // TextEncoder length approximates UTF-8 byte size for enforcement.
+  const byteLength = new TextEncoder().encode(text).byteLength;
+  if (byteLength > maxBytes) {
+    return {
+      ok: false as const,
+      error: `Request body too large (max ${maxBytes} bytes)`,
+    };
+  }
+
+  let data: unknown;
+  try {
+    data = text.length === 0 ? null : JSON.parse(text);
+  } catch {
+    return { ok: false as const, error: "Invalid JSON in request body" };
+  }
+
+  return validateJson(schema, data);
 }
 
 /**

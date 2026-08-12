@@ -22,6 +22,7 @@ export {
   createInternalAuthMiddleware,
   checkInternalAuth,
   timingSafeEqual,
+  timingSafeEqualAsync,
   collectInternalAuthKeys,
   type InternalAuthEnv,
   type InternalAuthKeyName,
@@ -35,9 +36,13 @@ export {
 export {
   validateJson,
   validateJsonLegacy,
+  parseJsonBody,
   requireField,
   optionalField,
+  DEFAULT_MAX_JSON_BODY_BYTES,
+  type ParseJsonBodyOptions,
 } from "./validate";
+export { safeWaitUntil, waitUntilAll } from "./wait-until";
 export {
   corsHeaders,
   resolveCorsOptions,

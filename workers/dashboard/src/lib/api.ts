@@ -353,6 +353,30 @@ class ApiClient {
   }
 
   /**
+   * Resolved TradingView webhook URL for setup wizard step 4.
+   * Server reads HOOX_URL (or derives from sibling worker URLs).
+   */
+  async getSetupWebhook(): Promise<{
+    success: boolean;
+    webhookUrl?: string;
+    gatewayUrl?: string | null;
+    subdomainPrefix?: string | null;
+    resolved?: boolean;
+    path?: string;
+    error?: string;
+  }> {
+    return this.fetchWithAuth<{
+      success: boolean;
+      webhookUrl?: string;
+      gatewayUrl?: string | null;
+      subdomainPrefix?: string | null;
+      resolved?: boolean;
+      path?: string;
+      error?: string;
+    }>("/api/setup/webhook");
+  }
+
+  /**
    * Ask the secrets API for CLI automation hints (no values are written).
    * Prefer `hoox keys generate && hoox secrets sync --system` from a terminal.
    */

@@ -64,4 +64,42 @@ describe("dashboard config", () => {
       env.NODE_ENV = prevNodeEnv;
     }
   });
+
+  test("resolveTradingViewWebhookUrl uses HOOX_URL and extracts prefix", async () => {
+    process.env.HOOX_URL = "https://hoox.cryptolinx.workers.dev";
+    delete process.env.HOOX_GATEWAY_URL;
+
+    const {
+      resolveTradingViewWebhookUrl,
+      resolveHooxGatewayUrl,
+      extractWorkersSubdomainPrefix,
+    } = await import("../src/lib/config");
+
+    expect(resolveHooxGatewayUrl()).toBe("https://hoox.cryptolinx.workers.dev");
+    expect(
+      extractWorkersSubdomainPrefix("https://hoox.cryptolinx.workers.dev")
+    ).toBe("cryptolinx");
+
+    const resolved = resolveTradingViewWebhookUrl();
+    expect(resolved.resolved).toBe(true);
+    expect(resolved.subdomainPrefix).toBe("cryptolinx");
+    expect(resolved.url).toBe(
+      "https://hoox.cryptolinx.workers.dev/webhook/tradingview"
+    );
+  });
+
+  test("resolveTradingViewWebhookUrl derives from sibling worker URL", async () => {
+    delete process.env.HOOX_URL;
+    delete process.env.HOOX_GATEWAY_URL;
+    process.env.D1_WORKER_URL = "https://d1-worker.myprefix.workers.dev";
+
+    const { resolveTradingViewWebhookUrl } = await import("../src/lib/config");
+    const resolved = resolveTradingViewWebhookUrl();
+    expect(resolved.resolved).toBe(true);
+    expect(resolved.gatewayUrl).toBe("https://hoox.myprefix.workers.dev");
+    expect(resolved.url).toBe(
+      "https://hoox.myprefix.workers.dev/webhook/tradingview"
+    );
+    expect(resolved.subdomainPrefix).toBe("myprefix");
+  });
 });

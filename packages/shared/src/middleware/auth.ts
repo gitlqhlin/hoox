@@ -14,9 +14,11 @@ import type { MiddlewareHandler } from "../types/router";
 /**
  * Constant-time string comparison to prevent timing attacks.
  *
- * Length is NOT short-circuited: both strings are hashed to fixed-size
- * digests via a simple XOR-fold into equal-length buffers so that
- * unequal lengths do not leak via early return (length oracle).
+ * Length is NOT short-circuited: both strings are padded to equal length
+ * and XOR-folded so unequal lengths do not leak via early return
+ * (length oracle). Prefer {@link timingSafeEqualAsync} when Web Crypto
+ * is available — it hashes both sides to fixed-size digests first
+ * (Cloudflare Workers best practice).
  *
  * Note: true crypto.subtle.timingSafeEqual needs equal-length ArrayBuffers;
  * we pad both encodings to the same max length before XOR comparison.
@@ -36,6 +38,43 @@ export function timingSafeEqual(a: string, b: string): boolean {
     result |= av ^ bv;
   }
   return result === 0;
+}
+
+/**
+ * Web Crypto constant-time string comparison (Cloudflare recommended).
+ *
+ * Hashes both inputs with SHA-256 so lengths never leak, then compares
+ * equal-length digests via `crypto.subtle.timingSafeEqual`.
+ *
+ * Falls back to the synchronous XOR implementation if subtle crypto is
+ * unavailable (e.g. very constrained test harnesses).
+ */
+/** Workers/WebCrypto expose timingSafeEqual on SubtleCrypto; DOM/node libs often omit it. */
+type SubtleWithTimingSafe = SubtleCrypto & {
+  timingSafeEqual(
+    a: ArrayBuffer | ArrayBufferView,
+    b: ArrayBuffer | ArrayBufferView
+  ): boolean;
+};
+
+export async function timingSafeEqualAsync(
+  a: string,
+  b: string
+): Promise<boolean> {
+  const subtle = globalThis.crypto?.subtle as SubtleWithTimingSafe | undefined;
+  if (
+    !subtle ||
+    typeof subtle.digest !== "function" ||
+    typeof subtle.timingSafeEqual !== "function"
+  ) {
+    return timingSafeEqual(a, b);
+  }
+  const encoder = new TextEncoder();
+  const [providedHash, expectedHash] = await Promise.all([
+    subtle.digest("SHA-256", encoder.encode(a)),
+    subtle.digest("SHA-256", encoder.encode(b)),
+  ]);
+  return subtle.timingSafeEqual(providedHash, expectedHash);
 }
 
 /**
@@ -161,16 +200,22 @@ export function collectInternalAuthKeys(
   return keys;
 }
 
+/**
+ * Compare provided key against all expected secrets without short-circuiting
+ * on the first match (avoids a small timing oracle under multi-key env).
+ */
 function matchesAnyInternalAuthKey(
   providedKey: string,
   expectedKeys: string[]
 ): boolean {
+  let matched = false;
   for (const expected of expectedKeys) {
+    // Always evaluate every secret — do not `return` early on match.
     if (timingSafeEqual(providedKey, expected)) {
-      return true;
+      matched = true;
     }
   }
-  return false;
+  return matched;
 }
 
 function internalAuthNotConfiguredResponse(

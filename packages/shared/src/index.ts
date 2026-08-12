@@ -97,8 +97,14 @@ export type {
 
 export { BaseExchangeClient } from "./exchanges";
 export type { SupportedExchange } from "./exchanges";
-export { logKvTimestamp, headersToObject } from "./kvUtils";
-export type { EnvWithKV } from "./kvUtils";
+export {
+  logKvTimestamp,
+  headersToObject,
+  kvGetMany,
+  kvGetManyAsRecord,
+  kvPutMany,
+} from "./kvUtils";
+export type { EnvWithKV, KvPutEntry } from "./kvUtils";
 export { trackAnalytics } from "./analytics";
 export type { AnalyticsEnv } from "./analytics";
 export { healthCheck } from "./health";

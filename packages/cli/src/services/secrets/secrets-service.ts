@@ -82,6 +82,35 @@ export const SYSTEM_SECRET_NAMES = [
 
 const SYSTEM_SECRET_SET = new Set<string>(SYSTEM_SECRET_NAMES);
 
+/**
+ * Mesh secrets each logical worker should receive under `--system` sync.
+ * Keep aligned with SetupService DEV_VARS_WORKER_KEYS / keys generate.
+ * (Root wrangler.jsonc often omits these from the `secrets` array.)
+ */
+export const WORKER_SYSTEM_SECRETS: Readonly<
+  Record<string, readonly string[]>
+> = {
+  "d1-worker": ["INTERNAL_KEY_BINDING"],
+  "analytics-worker": ["INTERNAL_KEY_BINDING"],
+  "trade-worker": [
+    "INTERNAL_KEY_BINDING",
+    "TELEGRAM_INTERNAL_KEY_BINDING",
+    "API_SERVICE_KEY_BINDING",
+  ],
+  "report-worker": ["INTERNAL_KEY_BINDING"],
+  "email-worker": ["INTERNAL_KEY_BINDING"],
+  "agent-worker": ["INTERNAL_KEY_BINDING", "AGENT_INTERNAL_KEY"],
+  hoox: ["INTERNAL_KEY_BINDING", "WEBHOOK_API_KEY_BINDING"],
+  "web3-wallet-worker": ["INTERNAL_KEY_BINDING"],
+  "telegram-worker": ["INTERNAL_KEY_BINDING"],
+  dashboard: [
+    "AGENT_INTERNAL_KEY",
+    "SESSION_SECRET",
+    "TRADE_INTERNAL_KEY",
+    "API_SERVICE_KEY_BINDING",
+  ],
+};
+
 /** True when `name` is a system/mesh secret (see {@link SYSTEM_SECRET_NAMES}). */
 export function isSystemSecret(name: string): boolean {
   return SYSTEM_SECRET_SET.has(name);
@@ -295,16 +324,28 @@ export class SecretsService {
       existingValues = this.parseDotEnv(content);
     }
 
-    // Candidate names: declared secrets, or under --system also mesh keys
-    // present in .dev.vars (covers keys generate → per-worker .dev.vars even
-    // when root wrangler.jsonc omits them from the secrets array).
+    // Value fallback: `.keys/setup.env` fills mesh keys missing from .dev.vars
+    // without expanding the *candidate set* to every system secret on every worker.
+    let keysFallback = new Map<string, string>();
+    if (options.systemOnly) {
+      const keysFile = Bun.file(".keys/setup.env");
+      if (await keysFile.exists()) {
+        keysFallback = this.parseDotEnv(await keysFile.text());
+      }
+    }
+
+    // Candidate names under --system:
+    //  1) declared system secrets in root wrangler.jsonc
+    //  2) system secrets already present in this worker's .dev.vars
+    //  3) WORKER_SYSTEM_SECRETS map (canonical mesh placement)
     let secrets: string[];
     if (options.systemOnly) {
       const fromDeclared = declared.filter((s) => isSystemSecret(s));
       const fromDevVars = [...SYSTEM_SECRET_NAMES].filter((s) =>
         existingValues.has(s)
       );
-      secrets = [...new Set([...fromDeclared, ...fromDevVars])];
+      const fromMap = [...(WORKER_SYSTEM_SECRETS[workerName] ?? [])];
+      secrets = [...new Set([...fromDeclared, ...fromDevVars, ...fromMap])];
     } else {
       secrets = declared;
     }
@@ -316,7 +357,7 @@ export class SecretsService {
 
     for (const secret of secrets) {
       try {
-        const value = existingValues.get(secret);
+        const value = existingValues.get(secret) ?? keysFallback.get(secret);
         if (value !== undefined && !this.isPlaceholder(value)) {
           await this.execWranglerSecretPut(
             worker.path,

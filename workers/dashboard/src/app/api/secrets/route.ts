@@ -11,7 +11,7 @@ export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 
 /**
- * Catalog names checked against Cloudflare Secrets Store (and process env).
+ * Catalog names checked for sync status.
  * Aligned with setup wizard + CLI SYSTEM_SECRET_NAMES + common integrations.
  */
 const ALL_SECRETS = [
@@ -53,6 +53,24 @@ const INTERNAL_KEY_SECRETS = [
   "SESSION_SECRET",
 ];
 
+/**
+ * Logical worker script names to probe for Worker secrets.
+ * Matches root wrangler.jsonc worker keys / deploy names.
+ */
+const WORKER_SCRIPT_NAMES = [
+  "hoox",
+  "agent-worker",
+  "trade-worker",
+  "dashboard",
+  "telegram-worker",
+  "d1-worker",
+  "analytics-worker",
+  "email-worker",
+  "web3-wallet-worker",
+  "report-worker",
+  "pyne-worker",
+] as const;
+
 /** Canonical CLI snippets returned to the UI. */
 const CLI_HINTS = {
   automateMesh: "hoox keys generate && hoox secrets sync --system",
@@ -73,20 +91,18 @@ async function getCloudflareSecretStoreId(): Promise<string | null> {
   return getEnvVar(ENV_KEYS.cloudflare.secretStoreId) || null;
 }
 
-export async function GET() {
+/**
+ * List secret *names* on a Worker (values never returned by CF API).
+ * Failures return empty set so one offline worker does not blank the UI.
+ */
+async function listWorkerSecretNames(
+  accountId: string,
+  apiToken: string,
+  scriptName: string
+): Promise<Set<string>> {
   try {
-    const accountId = await getCloudflareAccountId();
-    const apiToken = await getCloudflareApiToken();
-    const storeId = await getCloudflareSecretStoreId();
-
-    if (!apiToken || !accountId || !storeId) {
-      return Errors.internal("Cloudflare Secret Store is not configured");
-    }
-
-    let fetchedSecrets: { name: string }[] = [];
-
     const response = await fetch(
-      `https://api.cloudflare.com/client/v4/accounts/${accountId}/secrets_store/stores/${storeId}/secrets`,
+      `https://api.cloudflare.com/client/v4/accounts/${accountId}/workers/scripts/${encodeURIComponent(scriptName)}/secrets`,
       {
         headers: {
           Authorization: `Bearer ${apiToken}`,
@@ -95,17 +111,75 @@ export async function GET() {
         cache: "no-store",
       }
     );
-
+    if (!response.ok) return new Set();
     const data = (await response.json()) as {
-      success: boolean;
-      result?: { name: string }[];
+      success?: boolean;
+      result?: Array<{ name?: string } | string>;
     };
-    if (data.success && data.result) {
-      fetchedSecrets = data.result;
+    if (!data.success || !Array.isArray(data.result)) return new Set();
+    const names = new Set<string>();
+    for (const item of data.result) {
+      if (typeof item === "string") names.add(item);
+      else if (item && typeof item.name === "string") names.add(item.name);
+    }
+    return names;
+  } catch {
+    return new Set();
+  }
+}
+
+export async function GET() {
+  try {
+    const accountId = await getCloudflareAccountId();
+    const apiToken = await getCloudflareApiToken();
+    const storeId = await getCloudflareSecretStoreId();
+
+    if (!apiToken || !accountId) {
+      return Errors.internal(
+        "Cloudflare credentials not configured (CLOUDFLARE_ACCOUNT_ID / CLOUDFLARE_API_TOKEN)"
+      );
     }
 
-    const availableNames = new Set(fetchedSecrets.map((s) => s.name));
+    // 1) Optional Secrets Store (legacy / shared bindings)
+    const availableNames = new Set<string>();
+    if (storeId) {
+      try {
+        const response = await fetch(
+          `https://api.cloudflare.com/client/v4/accounts/${accountId}/secrets_store/stores/${storeId}/secrets`,
+          {
+            headers: {
+              Authorization: `Bearer ${apiToken}`,
+              "Content-Type": "application/json",
+            },
+            cache: "no-store",
+          }
+        );
+        const data = (await response.json()) as {
+          success: boolean;
+          result?: { name: string }[];
+        };
+        if (data.success && data.result) {
+          for (const s of data.result) availableNames.add(s.name);
+        }
+      } catch {
+        // Secrets Store optional — continue with Worker secret probes
+      }
+    }
 
+    // 2) Worker-level secrets (what `wrangler secret put` actually sets)
+    //    Mesh keys live on workers; dashboard used to only check Secrets Store
+    //    and falsely reported WEBHOOK / API_SERVICE_KEY as missing after sync.
+    const workerResults = await Promise.all(
+      WORKER_SCRIPT_NAMES.map(async (name) => {
+        const names = await listWorkerSecretNames(accountId, apiToken, name);
+        return names;
+      })
+    );
+    for (const names of workerResults) {
+      for (const n of names) availableNames.add(n);
+    }
+
+    // 3) Process env on the dashboard isolate (local dev / OpenNext bindings)
     const syncedSecrets = ALL_SECRETS.map((name) => ({
       name,
       synced: availableNames.has(name) || !!getEnvVar(name),
@@ -119,6 +193,10 @@ export async function GET() {
         synced: availableNames.has(name) || !!getEnvVar(name),
       })),
       cli: CLI_HINTS,
+      sources: {
+        secretsStore: Boolean(storeId),
+        workerSecrets: true,
+      },
     });
   } catch (err) {
     return Errors.internal(String(err));
