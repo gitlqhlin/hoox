@@ -27,7 +27,6 @@ import {
   KV_AGENT_CONFIG,
   KV_TRADE_DEFAULT_LEVERAGE,
   KV_TRADE_MAX_POSITION_SIZE,
-  KV_TRADE_TRAILING_STOP_PERCENT,
   KV_BOT_ENABLED,
 } from "./kvKeys";
 
@@ -154,7 +153,8 @@ describe("dashboard-manifest", () => {
   it("loadDashboardKvManifestFromRoot builds keys from monorepo", () => {
     const m = loadDashboardKvManifestFromRoot(MONOREPO_ROOT);
     expect(m.namespace).toBe("CONFIG_KV");
-    expect(m.keys.length).toBeGreaterThan(20);
+    // Pruned to live keys only — still covers gateway/trade/email/exchange
+    expect(m.keys.length).toBeGreaterThan(10);
     expect(m.keys.some((k) => k.key === "trade:kill_switch")).toBe(true);
     expect(m.keys.some((k) => k.key === "global:kill_switch")).toBe(true);
     expect(
@@ -182,10 +182,12 @@ describe("dashboard-manifest", () => {
     expect(keys).not.toContain("agent:workers_ai_model");
     expect(keys).not.toContain("cron:enabled");
     expect(keys).not.toContain("behavior:auto_trailing_stop");
-    // Still export real agent keys + risk flat trade:* from risk section
-    expect(keys).toContain("agent:config");
+    // Agent secrets still flat; risk kill → trade:kill_switch; trailing dual-writes
     expect(keys).toContain("agent:openai_key");
+    expect(keys).toContain("trade:kill_switch");
     expect(keys).toContain("trade:trailing_stop_percent");
+    // Raw agent:config blob no longer a dashboard seed field
+    expect(keys).not.toContain("agent:config");
   });
 
   it("covers critical worker-facing KVKeys from dashboard.jsonc", () => {
@@ -195,7 +197,7 @@ describe("dashboard-manifest", () => {
       KV_TRADE_KILL_SWITCH,
       KV_TRADE_DEFAULT_LEVERAGE,
       KV_TRADE_MAX_POSITION_SIZE,
-      KV_TRADE_TRAILING_STOP_PERCENT,
+      // trailing lives in agent:config (risk section not flat-kv)
       KV_WEBHOOK_IP_CHECK_ENABLED,
       KV_WEBHOOK_ALLOWED_IPS,
       KV_WEBHOOK_QUEUE_MODE,
@@ -203,14 +205,17 @@ describe("dashboard-manifest", () => {
       KV_EMAIL_COIN_PATTERN,
       KV_EMAIL_ACTION_PATTERN,
       KV_AGENT_OPENAI_KEY,
-      KV_AGENT_CONFIG,
-      KV_BOT_ENABLED,
       "global:kill_switch",
       "exchange:mexc:enabled",
+      "wallet:config",
     ];
     for (const key of required) {
       expect(keys.has(key)).toBe(true);
     }
+    // agent:config is edited via providers/models/risk merge — not a flat seed field
+    expect(keys.has(KV_AGENT_CONFIG)).toBe(false);
+    // dead bot:* preference toggles removed
+    expect(keys.has(KV_BOT_ENABLED)).toBe(false);
   });
 
   it("isDashboardSectionEditable is inverse of UI skip set", () => {

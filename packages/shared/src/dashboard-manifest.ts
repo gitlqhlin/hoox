@@ -140,6 +140,7 @@ export const DASHBOARD_FIELD_KV_OVERRIDES: Record<string, string> = {
   "exchanges:binance_enabled": "exchange:binance:enabled",
   "exchanges:mexc_enabled": "exchange:mexc:enabled",
   "exchanges:bybit_enabled": "exchange:bybit:enabled",
+  "wallet:config": "wallet:config",
 };
 
 /**

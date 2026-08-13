@@ -320,6 +320,12 @@ export async function loadWorkerConfig(
   }
 }
 
+/**
+ * Sections that exist only as wrangler/docs notes (not editable runtime KV).
+ * Mirrors packages/shared DASHBOARD_SECTIONS_UI_SKIP.
+ */
+const UI_SKIP_SECTIONS = new Set(["cron", "behavior", "endpoints"]);
+
 export async function loadAllConfigs(
   workerNames: string[]
 ): Promise<WorkerConfigManifest[]> {
@@ -327,9 +333,13 @@ export async function loadAllConfigs(
     workerNames.map((name) => loadWorkerConfig(name))
   );
 
-  return configs.filter(
-    (c): c is WorkerConfigManifest => c !== null && c.sections.length > 0
-  );
+  return configs
+    .filter((c): c is WorkerConfigManifest => c !== null)
+    .map((c) => ({
+      ...c,
+      sections: c.sections.filter((s) => !UI_SKIP_SECTIONS.has(s.id)),
+    }))
+    .filter((c) => c.sections.length > 0);
 }
 
 export function flattenSettings(

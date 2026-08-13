@@ -97,6 +97,8 @@ export const FIELD_KV_OVERRIDES: Record<string, string> = {
   "exchanges:binance_enabled": "exchange:binance:enabled",
   "exchanges:mexc_enabled": "exchange:mexc:enabled",
   "exchanges:bybit_enabled": "exchange:bybit:enabled",
+  /** Web3 single document config (not flat wallet:slippage_* keys). */
+  "wallet:config": "wallet:config",
 };
 
 /** Reverse map of FIELD_KV_OVERRIDES for GET rehydration. */
