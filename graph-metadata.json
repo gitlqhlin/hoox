@@ -1,23 +1,26 @@
 {
   "workers": {
     "workers/hoox-worker": {
-      "description": "Gateway worker \u2014 the only public-facing entry point. Receives TradingView webhooks, validates API keys, enforces WAF rules, manages sessions via KV, deduplicates signals via Durable Objects, and routes to trade-worker via Queue.",
+      "description": "Gateway worker — the only public-facing entry point. Receives TradingView webhooks, validates API keys, enforces WAF/IP allowlist, two-phase DO idempotency, atomic DO rate limits, notify chatId allowlist, and routes to trade-worker via Queue/service binding.",
       "category": "gateway",
       "tags": [
         "webhook",
         "auth",
         "rate-limit",
         "idempotency",
+        "two-phase-idempotency",
         "queue-producer",
         "security-headers",
         "session-management",
         "ip-allowlist",
-        "kill-switch"
+        "chatid-allowlist",
+        "kill-switch",
+        "safe-wait-until"
       ],
-      "llmContext": "Start here for signal ingestion flow. hoox is the ONLY public-facing worker (POST /webhook, GET /health). Exports IdempotencyStore Durable Object class for signal deduplication. Uses shared middleware: createRateLimiter (KV-backed, session-based, 10 trades/min), withRequestLog for structured logging, validateJson with Zod schemas. Session management via httpOnly cookies stored in SESSIONS_KV (24hr expiry). Security: X-Content-Type-Options, CSP, HSTS headers, kill_switch check in CONFIG_KV, TradingView IP allowlist check, timingSafeEqual for API key comparison. Produces TradeQueueMessage to TRADE_QUEUE for async processing by trade-worker. References shared types WebhookPayloadSchema, StandardResponse. Key internal functions: checkRateLimit (session-based), checkIdempotency (via DO), sendTradeToQueue, processTrade, processNotification. Rate limiter: window=60s, max=10, prefix='session'. Security headers: 7 headers including CSP default-src 'self'.",
+      "llmContext": "Start here for signal ingestion. Public: POST /webhook, GET /health (+ operator routes). Exports IdempotencyStore (reserve/commit/release, 16 shards, fail-closed if unbound) and RateLimiterStore (atomic multi-isolate; falls back to CONFIG_KV/memory). Session identity is SHA-256 of webhook API key (never store secrets as KV keys). Notify path: TELEGRAM_ALLOWED_CHAT_IDS / AUTHORIZED_CHAT_IDS fail-closed (+ optional KV telegram:allowed_chat_ids). Auto idempotency fingerprint trade:{ex}:{sym}:{action}:{qty}:{mode}:{minuteBucket}. Commit only on trade success body (soft-fail releases). Parallel processTrade ∥ processNotification after validation. Background analytics via safeWaitUntil. Rate limit: 10/min per session. Timing-safe API key compare.",
       "cron": null,
       "isPublic": true,
-      "smartPlacement": false,
+      "smartPlacement": true,
       "entryPoints": ["POST /webhook", "GET /health"]
     },
     "workers/trade-worker": {
@@ -35,7 +38,7 @@
         "retry-logic",
         "exponential-backoff"
       ],
-      "llmContext": "Core trade execution engine. Consumes from TRADE_QUEUE async (queue handler), also accepts direct calls via POST /webhook (service binding from hoox/email-worker), POST /process (legacy internal endpoint), GET/POST /api/signals (D1 signal CRUD), GET /report (R2 report download). Queue handler implements retry with exponential backoff: max 5 retries, delays=[0s, 30s, 1m, 5m, 15m], moves to DLQ after exhaustion. Failed trades logged to D1 system_logs table. Key exports: executeTrade (validates API creds, routes to exchange clients), DbLogger (tracks request/response pairs), MexcClient/BinanceClient/BybitClient (exchange-specific implementations), sendTradeNotification (via telegram-worker service binding). On success: queues R2 report save via saveReportToR2 (ctx.waitUntil). Analytics tracked via trackAnalytics to analytics-worker for every /webhook and /process call (latency, success). Uses requireInternalAuth middleware with INTERNAL_KEY_BINDING for service-to-service auth. Uses factories pattern with createDbLogger for testability (vi.spyOn injection point). Schema: WebhookPayload (exchange, action, symbol, quantity, price, leverage).",
+      "llmContext": "Core trade execution. Queue consumer (createQueueHandler concurrency=3) + POST /webhook|/process. HTTP path: check-only idempotency then store after success (mirrors queue). REST-only order placement (WS use_websocket ignored for orders; ExchangeConnectionManager still holds WS for future). Exchange clients log method+path only (no signatures/bodies). Reconcile: parallel per-exchange (mapPool max 3); D1 open positions via GET /api/dashboard/positions then POST /rpc/list-open-positions (never free-form /query). Signals/logs: /rpc/list-signals, /rpc/list-system-logs. Background analytics/R2/D1 writes via safeWaitUntil. DO connect/setAlarm lifecycle via safeWaitUntil. Retry: max 5, delays [0s,30s,1m,5m,15m].",
       "cron": null,
       "isPublic": false,
       "smartPlacement": true,
@@ -44,12 +47,13 @@
         "POST /webhook (service binding target)",
         "POST /process (legacy internal)",
         "GET/POST /api/signals",
+        "POST /api/positions/reconcile",
         "GET /report",
         "GET /health"
       ]
     },
     "workers/agent-worker": {
-      "description": "AI risk manager. Runs on a configurable cron (1\u20131440 minutes; default */15 * * * *) to monitor open positions, assess portfolio risk using Workers AI, and autonomously adjust positions via trade-worker or alert via telegram-worker.",
+      "description": "AI risk manager. Runs on a configurable cron (1–1440 minutes; default */15 * * * *) to monitor open positions, assess portfolio risk using Workers AI, and autonomously adjust positions via trade-worker or alert via telegram-worker.",
       "category": "ai-agent",
       "tags": [
         "ai",
@@ -62,7 +66,7 @@
         "trailing-stop",
         "model-router"
       ],
-      "llmContext": "Autonomous AI agent with multi-provider model routing. Runs on configurable cron (1\u20131440 minutes; default */15 * * * *) executing runHousekeeping (reads positions from D1, checks trailing stops) and processRoutine (AI risk assessment via ProviderManager). Scheduled handler also triggered via POST /agent/housekeeping endpoint (service binding target from dashboard). REST endpoints (all require internal auth except /agent/health): POST /agent/housekeeping (trigger housekeeping), POST /agent/risk-override (set trailingStopPercent in CONFIG_KV), GET /agent/status (provider config + active trailing stops), GET/POST /agent/config (load/update AgentConfig), POST /agent/test-model (test specific provider/model), POST /agent/chat (generic AI chat with system prompt + temperature + maxTokens), POST /agent/embedding (generate text embeddings), GET /agent/models (list all available models), GET /agent/health (provider health status). ProviderManager supports fallback chain: workers-ai \u2192 openai \u2192 anthropic \u2192 google. Manages trailing stops via CONFIG_KV keys prefixed 'trade:watermark:'. Exported for testing: requireInternalAuth, checkInternalAuth, processRoutine. Key types: AIRequest (messages, model, temperature, maxTokens), AgentConfig (defaultProvider, fallbackChain, modelMap), ProviderName union. Uses createInternalAuthMiddleware for auth. Key logic files: ./logic/trade (fetchMarkPrice, sendCloseOrder), ./logic/housekeeping, ./logic/routine.",
+      "llmContext": "Autonomous AI agent. Cron (default */15) runHousekeeping + processRoutine. Provider keys resolve env secrets first (OPENAI_API_KEY, ANTHROPIC_API_KEY, GOOGLE_API_KEY, AZURE_API_KEY/AZURE_ENDPOINT) then CONFIG_KV fallback (warn once per isolate). Google auth uses x-goog-api-key header (not query). Fallback chain: workers-ai → openai → anthropic → google. Trailing stops in CONFIG_KV trade:watermark:*. Cron background work via safeWaitUntil. Positions via D1_SERVICE (dashboard/positions). Internal auth on management routes.",
       "cron": "*/15 * * * *",
       "isPublic": false,
       "smartPlacement": true,
@@ -93,13 +97,18 @@
         "table-allowlist",
         "settings-api"
       ],
-      "llmContext": "Data access layer \u2014 single point of contact for ALL D1 operations. Uses D1Database from @cloudflare/workers-types with native binding DB. Table allowlist: trade_signals, trades, positions, balances, system_logs, trade_requests, trade_responses \u2014 any query referencing tables outside this allowlist is rejected (403 forbidden). Forbidden SQL keywords blocked: DROP, PRAGMA, ALTER, TRUNCATE, VACUUM, ATTACH, DETACH. Query types allowed: SELECT (returns results[]), INSERT/UPDATE/DELETE/REPLACE (returns lastRowId + changes). Natively supports DB.batch() for atomic multi-statement execution. Endpoints: POST /query (single SQL with params), POST /batch (array of statements, atomic), GET/POST /api/settings (read/write config via CONFIG_KV with prefixes global:, webhook:, trade:, agent:), GET /api/balances (latest balance snapshots per exchange+asset, includes aggregated totalBalance), GET /api/positions (open positions only, ordered by updated_at DESC), GET /api/logs (last 50 system_logs entries), GET /health (validates DB connectivity with SELECT 1). All endpoints except health require internal auth via createInternalAuthMiddleware. CORS headers added to all responses (incl OPTIONS preflight). Analytics tracked via trackAnalytics for /query and /batch endpoints. CONFIG_KV used for settings storage, not DB. Uses AnalyticsEnv for Analytics Engine tracking.",
+      "llmContext": "D1 SQL proxy. Prefer named RPC for hot paths: POST /rpc/insert-trade, /rpc/upsert-position, /rpc/insert-signal, /rpc/insert-system-log, GET|POST /rpc/list-signals, /rpc/list-system-logs, /rpc/list-open-positions (optional exchange filter, fixed SQL). Free-form POST /query and /batch are SELECT-only (writes rejected). Dashboard: GET /api/balances, /api/positions (explicit columns), /api/logs, settings via CONFIG_KV. Table allowlist + forbidden DDL keywords. Analytics via safeWaitUntil. Observability head_sampling_rate 0.1.",
       "cron": null,
       "isPublic": false,
       "smartPlacement": true,
       "entryPoints": [
         "POST /query",
         "POST /batch",
+        "GET|POST /rpc/list-signals",
+        "GET|POST /rpc/list-system-logs",
+        "GET|POST /rpc/list-open-positions",
+        "POST /rpc/insert-trade",
+        "POST /rpc/upsert-position",
         "GET/POST /api/settings",
         "GET /api/balances",
         "GET /api/positions",
@@ -119,13 +128,14 @@
         "embeddings",
         "r2-reader"
       ],
-      "llmContext": "Notification hub \u2014 called by 6 workers (hoox, trade-worker, agent-worker, report-worker, web3-wallet-worker, email-worker) via service bindings. Endpoints: POST /process (legacy internal \u2014 parses ProcessRequestBody<NotificationPayload>, requires internal auth, calls sendTelegramNotification), POST /webhook (new service binding target \u2014 calls handleWebhookRequest). Also exports helper functions for testing: generateEmbeddings, insertEmbeddings, queryEmbeddings (RAG pipeline using Vectorize index), handleGetLatestTradeSignalR2 (reads from UPLOADS_BUCKET). On every request, logs KV timestamp via logKvTimestamp from @hoox-sh/hoox-shared/kvUtils. NotificationPayload structure: { message: string, chatId?: string } \u2014 if chatId omitted, uses TG_CHAT_ID_BINDING secret. Uses Workers AI for message summarization before sending. Vectorize index (my-rag-index) for context retrieval. R2 user-uploads bucket for storing shared media/files.",
+      "llmContext": "Notification hub. POST /alert (internal auth) + POST /webhook (bot updates). Outbound chat allowlist: AUTHORIZED_CHAT_IDS when set; when unset only TG_CHAT_ID_BINDING permitted. Inbound webhook: AUTHORIZED_CHAT_IDS fail-closed + TELEGRAM_SECRET_TOKEN timing-safe. Body size cap 64KiB. Background KV/analytics/R2 via safeWaitUntil. Align AUTHORIZED_CHAT_IDS with gateway TELEGRAM_ALLOWED_CHAT_IDS. RAG/Vectorize + R2 uploads as before.",
       "cron": null,
       "isPublic": false,
       "smartPlacement": true,
       "entryPoints": [
+        "POST /alert (service binding / mesh)",
         "POST /process (legacy internal)",
-        "POST /webhook (service binding target)",
+        "POST /webhook (bot + secret token)",
         "GET /health"
       ]
     },
@@ -142,7 +152,7 @@
         "secrets-store",
         "ethereum"
       ],
-      "llmContext": "On-chain execution using ethers.js library. Endpoints: GET / (wallet initialization \u2014 reads private key from WALLET_PK_SECRET or mnemonic from WALLET_MNEMONIC_SECRET via Cloudflare Secrets Store bindings, creates ethers.Wallet or HDNodeWallet, returns wallet address), GET /health. Validates secret format: private key must match ^0x?[0-9a-fA-F]{64}$, mnemonic must have 12+ words. On successful init: sends notification via TELEGRAM_SERVICE service binding (fire-and-forget via ctx.waitUntil, calls /webhook endpoint with wallet address). Tracks analytics via trackAnalytics (endpoint: '/'). Uses createInternalAuthMiddleware for auth. Key ethers imports: ethers (v6), HDNodeWallet from mnemonic, Wallet from private key. Secrets not stored in env vars but fetched from Cloudflare Secrets Store bindings at runtime.",
+      "llmContext": "On-chain execution (ethers v6). Secrets from Secrets Store (WALLET_PK_SECRET / WALLET_MNEMONIC_SECRET). Init + swap paths notify via TELEGRAM_SERVICE and track analytics with safeWaitUntil (not bare waitUntil). Internal auth on management routes.",
       "cron": null,
       "isPublic": false,
       "smartPlacement": true,
@@ -159,7 +169,7 @@
         "trading-signal",
         "webhook-receiver"
       ],
-      "llmContext": "Email/JSON signal ingestion. Two ingress paths: (1) POST /webhook \u2014 Mailgun webhook with HMAC-SHA256 signature validation (header fields: Mailgun-Signature, Mailgun-Timestamp, Mailgun-Token, verified with MAILGUN_API_KEY via crypto.subtle), parses formData body-plain or stripped-text; (2) POST /email-signal \u2014 direct JSON POST (requires internal auth), accepts { text, body } or full JSON object. Both paths process through parseEmailSignal which tries JSON parse first, falls back to plaintext regex extraction using configurable patterns from CONFIG_KV: coinPattern (default: BTC|ETH|SOL), actionPattern (default: buy|sell|long|short), quantityMultiplier. Extracted fields: exchange (binance/mexc/bybit normalization), action (buy/sell normalization), symbol (uppercase, stripped), quantity (default 100 * multiplier), price, leverage. Forwards parsed signal to trade-worker via TRADE_SERVICE service binding (POST /webhook with X-Internal-Auth-Key and X-Source: email-worker headers). Tracks analytics via trackAnalytics on both success and failure. Scheduled handler exists but IMAP scanning is DISABLED in edge runtime (logs info message). Uses Mailgun webhook as primary ingestion path. Key types: EmailSignal { exchange, action, symbol, quantity, price?, leverage? }, SignalPatterns (coinPattern, actionPattern, quantityMultiplier). Key functions: handleMailgunWebhook (HMAC validation), handleDirectJson, processEmail, parseEmailSignal, extractFromPlaintext, extractField, loadSignalPatterns.",
+      "llmContext": "Email/JSON signal ingestion. Two ingress paths: (1) POST /webhook — Mailgun webhook with HMAC-SHA256 signature validation (header fields: Mailgun-Signature, Mailgun-Timestamp, Mailgun-Token, verified with MAILGUN_API_KEY via crypto.subtle), parses formData body-plain or stripped-text; (2) POST /email-signal — direct JSON POST (requires internal auth), accepts { text, body } or full JSON object. Both paths process through parseEmailSignal which tries JSON parse first, falls back to plaintext regex extraction using configurable patterns from CONFIG_KV: coinPattern (default: BTC|ETH|SOL), actionPattern (default: buy|sell|long|short), quantityMultiplier. Extracted fields: exchange (binance/mexc/bybit normalization), action (buy/sell normalization), symbol (uppercase, stripped), quantity (default 100 * multiplier), price, leverage. Forwards parsed signal to trade-worker via TRADE_SERVICE service binding (POST /webhook with X-Internal-Auth-Key and X-Source: email-worker headers). Tracks analytics via trackAnalytics on both success and failure. Scheduled handler exists but IMAP scanning is DISABLED in edge runtime (logs info message). Uses Mailgun webhook as primary ingestion path. Key types: EmailSignal { exchange, action, symbol, quantity, price?, leverage? }, SignalPatterns (coinPattern, actionPattern, quantityMultiplier). Key functions: handleMailgunWebhook (HMAC validation), handleDirectJson, processEmail, parseEmailSignal, extractFromPlaintext, extractField, loadSignalPatterns.",
       "cron": null,
       "isPublic": false,
       "smartPlacement": true,
@@ -167,7 +177,7 @@
         "POST /webhook (Mailgun webhook receiver)",
         "POST /email-signal (direct JSON, internal auth)",
         "GET /health",
-        "scheduled (DISABLED \u2014 IMAP not available in edge)"
+        "scheduled (DISABLED — IMAP not available in edge)"
       ]
     },
     "workers/analytics-worker": {
@@ -183,7 +193,7 @@
         "zod-validation",
         "sql-api"
       ],
-      "llmContext": "Central observability hub \u2014 fan-in analytics collector for all system workers. Uses Cloudflare Analytics Engine (ANALYTICS_ENGINE binding, dataset: hoox-analytics) for time-series metric storage. Endpoints (all POST, all require internal auth via Zod schema validation): /track/trade (TradeBodySchema: { payload: {exchange, symbol, action, quantity}, result: {success}, latencyMs }), /track/api-call (ApiCallBodySchema: { worker, endpoint, latencyMs, success } \u2014 most commonly used, called by 6 workers), /track/worker-perf (WorkerPerfBodySchema: { data: {worker, requests, errors, duration} }), /track/signal (SignalBodySchema: { data: {source, type, symbol, confidence} }), /track/notification (NotificationBodySchema: { data: {type, target, success} }), GET /health. All schemas use Zod with .strict() to reject unknown fields. Key exported functions: writeDataPoint (low-level Analytics Engine write), trackTrade, trackApiCall, trackWorkerPerf, trackSignal, trackNotification (each builds DataPoint via buildDataPoint helper with specific blobs/doubles/indexes). Query methods for dashboard/reporting: getTradeMetrics, getTradesByExchange, getTradeSuccessRate, getWorkerPerformance, getApiCallStats, getSignalOutcomes \u2014 each builds SQL via buildQuery helper and executes via Cloudflare SQL API (requires CLOUDFLARE_API_TOKEN + CLOUDFLARE_ACCOUNT_ID). Key types: DataPoint (blobs, doubles, indexes), TradePayload, TradeResult, WorkerPerfData, SignalData, NotificationData \u2014 all in ./types.",
+      "llmContext": "Central observability hub — fan-in analytics collector for all system workers. Uses Cloudflare Analytics Engine (ANALYTICS_ENGINE binding, dataset: hoox-analytics) for time-series metric storage. Endpoints (all POST, all require internal auth via Zod schema validation): /track/trade (TradeBodySchema: { payload: {exchange, symbol, action, quantity}, result: {success}, latencyMs }), /track/api-call (ApiCallBodySchema: { worker, endpoint, latencyMs, success } — most commonly used, called by 6 workers), /track/worker-perf (WorkerPerfBodySchema: { data: {worker, requests, errors, duration} }), /track/signal (SignalBodySchema: { data: {source, type, symbol, confidence} }), /track/notification (NotificationBodySchema: { data: {type, target, success} }), GET /health. All schemas use Zod with .strict() to reject unknown fields. Key exported functions: writeDataPoint (low-level Analytics Engine write), trackTrade, trackApiCall, trackWorkerPerf, trackSignal, trackNotification (each builds DataPoint via buildDataPoint helper with specific blobs/doubles/indexes). Query methods for dashboard/reporting: getTradeMetrics, getTradesByExchange, getTradeSuccessRate, getWorkerPerformance, getApiCallStats, getSignalOutcomes — each builds SQL via buildQuery helper and executes via Cloudflare SQL API (requires CLOUDFLARE_API_TOKEN + CLOUDFLARE_ACCOUNT_ID). Key types: DataPoint (blobs, doubles, indexes), TradePayload, TradeResult, WorkerPerfData, SignalData, NotificationData — all in ./types.",
       "cron": null,
       "isPublic": false,
       "smartPlacement": true,
@@ -209,12 +219,12 @@
         "html-template",
         "d1-reader"
       ],
-      "llmContext": "Automated portfolio report generator. Cron: 0 6,18 * * * (twice daily at 06:00/18:00 UTC). Scheduled handler calls generateAndStoreReport. Also triggerable via GET /report (requires internal auth, returns 202 Accepted, runs via ctx.waitUntil). Report generation flow: (1) fetchPortfolioSummary \u2014 calls d1-worker via D1_SERVICE binding (GET /api/balances + GET /api/positions, requires X-Internal-Auth-Key), aggregates totalValue, dailyPnL, totalPnL, openPositions, winRate, topAsset; (2) buildReportHtml \u2014 renders responsive HTML template with grid cards, conditional positive/negative P&L styling, A4-formatted with inline CSS; (3) generatePdf \u2014 calls Cloudflare Browser Rendering REST API (POST https://api.cloudflare.com/client/v4/{account}/browser-rendering/pdf with html + options { format: A4, printBackground: true, margin }), requires CF_API_TOKEN_BINDING; (4) stores PDF in REPORTS_BUCKET R2 (key: reports/daily-{timestamp}.pdf, contentType: application/pdf); (5) sendNotification \u2014 calls telegram-worker via TELEGRAM_SERVICE binding (POST /process with markdown message including signed report URL). Exported for testing: generatePdf, sendNotification, fetchPortfolioSummary, buildReportHtml, generateAndStoreReport. Uses @cloudflare/workers-types ScheduledController for cron type.",
+      "llmContext": "Portfolio PDF reports. Cron 0 8 * * * + 0 18 * * *. GET /report (internal auth, 202) runs generateAndStoreReport via safeWaitUntil. D1 via fixed GET /api/balances + /api/positions only. R2 keys must match SAFE_R2_KEY_RE (reports/*.pdf). Telegram: omit chatId by default (TG_CHAT_ID_BINDING); optional REPORT_TELEGRAM_CHAT_ID if format-valid. 64KiB Content-Length gate. Head sampling 0.1.",
       "cron": "0 8 * * *, 0 18 * * *",
       "isPublic": false,
       "smartPlacement": true,
       "entryPoints": [
-        "scheduled (0 6,18 * * *)",
+        "scheduled (0 8 * * *, 0 18 * * *)",
         "GET /report (manual trigger)",
         "GET /health"
       ]
@@ -233,7 +243,7 @@
         "tailwind",
         "server-components"
       ],
-      "llmContext": "User-facing Next.js 16 dashboard. Deployed to Cloudflare Workers via @opennextjs/cloudflare adapter (NOT Pages, NOT @cloudflare/next-on-pages). Routes: / (main dashboard page), /dashboard/* (auth-protected dashboard pages), /api/* (API routes), /auth/* (login/register). Server Components by default, 'use client' for Framer Motion animations. Connects to d1-worker (D1_SERVICE binding) for data and agent-worker (AGENT_SERVICE binding) for status. Dark mode with shadcn/ui components and Tailwind CSS. OpenNext adapter: 'bunx opennextjs-cloudflare build' \u2192 .open-next/worker.js, deployed via 'bunx wrangler deploy'. Static assets served from .open-next/assets/ via ASSETS binding. Next.js ISR cache in NEXT_INC_CACHE_KV. Uses middleware.ts for auth. Layout: app/layout.tsx with globals.css. Error boundary: app/global-error.tsx. Custom 404: app/not-found.tsx. Footer: app/footer.tsx. CI: 'bun run build' checks typecheck + lint + build.",
+      "llmContext": "User-facing Next.js 16 dashboard. Deployed to Cloudflare Workers via @opennextjs/cloudflare adapter (NOT Pages, NOT @cloudflare/next-on-pages). Routes: / (main dashboard page), /dashboard/* (auth-protected dashboard pages), /api/* (API routes), /auth/* (login/register). Server Components by default, 'use client' for Framer Motion animations. Connects to d1-worker (D1_SERVICE binding) for data and agent-worker (AGENT_SERVICE binding) for status. Dark mode with shadcn/ui components and Tailwind CSS. OpenNext adapter: 'bunx opennextjs-cloudflare build' → .open-next/worker.js, deployed via 'bunx wrangler deploy'. Static assets served from .open-next/assets/ via ASSETS binding. Next.js ISR cache in NEXT_INC_CACHE_KV. Uses middleware.ts for auth. Layout: app/layout.tsx with globals.css. Error boundary: app/global-error.tsx. Custom 404: app/not-found.tsx. Footer: app/footer.tsx. CI: 'bun run build' checks typecheck + lint + build.",
       "cron": null,
       "isPublic": true,
       "smartPlacement": false,
@@ -246,7 +256,7 @@
       ]
     },
     "workers/pyne-worker": {
-      "description": "Python Cloudflare Worker for PYNE Pine Script edge evaluation \u2014 /run, script registry, bar-close cron, R2 OHLCV, alert webhooks, trade-worker forwarding.",
+      "description": "Python Cloudflare Worker for PYNE Pine Script edge evaluation — /run, script registry, bar-close cron, R2 OHLCV, alert webhooks, trade-worker forwarding.",
       "category": "tooling",
       "tags": [
         "pyne",
@@ -258,7 +268,7 @@
         "cron",
         "alerts"
       ],
-      "llmContext": "Python edge host for PYNE (hoox-pyne / pynescript). Auth via X-API-Key (Worker secret API_KEY), not mesh INTERNAL_KEY_BINDING. Endpoints: GET /health, POST /run (mode interpret|compile|auto), POST /ingest, scripts registry, cron jobs, feed refresh. Cron * * * * * for bar-close. R2 OHLCV_DATA bucket. TRADE_SERVICE \u2192 trade-worker for strategy events. ALERT_WEBHOOK_URL for L2 alert delivery. Dashboard binds PYNE_SERVICE + PYNE_API_KEY.",
+      "llmContext": "Python edge host for PYNE (hoox-pyne / pynescript). Auth via X-API-Key (Worker secret API_KEY), not mesh INTERNAL_KEY_BINDING. Endpoints: GET /health, POST /run (mode interpret|compile|auto), POST /ingest, scripts registry, cron jobs, feed refresh. Cron * * * * * for bar-close. R2 OHLCV_DATA bucket. TRADE_SERVICE → trade-worker for strategy events. ALERT_WEBHOOK_URL for L2 alert delivery. Dashboard binds PYNE_SERVICE + PYNE_API_KEY.",
       "cron": "* * * * *",
       "isPublic": true,
       "smartPlacement": true,
@@ -298,7 +308,7 @@
       "category": "storage",
       "description": "R2 bucket for storing generated PDF trade reports. Written by trade-worker (post-trade) and report-worker (cron), read by dashboard for download links.",
       "tags": ["r2", "storage", "reports", "pdf"],
-      "llmContext": "R2 bucket for PDF trade reports. Written by trade-worker (saveReportToR2 \u2014 per-trade report on successful execution via ctx.waitUntil) and report-worker (generateAndStoreReport \u2014 twice-daily portfolio summaries, keys: reports/daily-{timestamp}.pdf). Read by dashboard for user download links. Binding name: REPORTS_BUCKET. Content type: application/pdf.",
+      "llmContext": "R2 PDF reports. trade-worker saveReportToR2 via safeWaitUntil; report-worker generateAndStoreReport (SAFE_R2_KEY_RE reports/*.pdf). Binding REPORTS_BUCKET.",
       "bindingName": "REPORTS_BUCKET",
       "usedBy": ["workers/report-worker", "workers/trade-worker"]
     },
@@ -331,7 +341,7 @@
       "category": "config",
       "description": "KV namespace for configuration storage. Used by 7 workers for feature flags, kill switch, exchange config, secrets, and runtime settings.",
       "tags": ["kv", "config", "feature-flags", "settings"],
-      "llmContext": "Shared configuration KV \u2014 the most widely used binding (7 workers). Key namespaces: kill_switch (global trading disable), webhook:tradingview:ip_check_enabled and webhook:tradingview:allowed_ips (IP validation), trade:watermark:* (trailing stop tracking by agent-worker), global:* (general settings via d1-worker api/settings), agent:* (agent config overrides), email:* (coin pattern, action pattern, quantity multiplier for email-worker signal parsing). Session rate limiting state (hoox createRateLimiter uses CONFIG_KV). KVKeys exported from @hoox-sh/hoox-shared/kvKeys provides typed key constants. Used by: hoox, d1-worker, trade-worker, agent-worker, telegram-worker, email-worker, dashboard.",
+      "llmContext": "Shared CONFIG_KV. Keys: kill_switch, webhook:tradingview:ip_*, telegram:allowed_chat_ids (optional notify union), trade:watermark:*, agent:* (legacy provider keys if env secrets unset), email patterns, rate-limit fallback keys. Prefer wrangler secrets for AI keys over KV. Typed via packages/shared kvKeys.",
       "bindingName": "CONFIG_KV",
       "usedBy": [
         "workers/agent-worker",
@@ -350,7 +360,7 @@
       "category": "session",
       "description": "KV namespace for httpOnly cookie session state. Used exclusively by hoox gateway with 24-hour TTL.",
       "tags": ["kv", "session", "auth"],
-      "llmContext": "Session state KV for hoox gateway. Stores httpOnly cookie sessions with 24-hour TTL (expirationTtl set on write). Session data includes API key binding, rate limit state, and auth metadata. Accessed exclusively by hoox via sessionManager.",
+      "llmContext": "SESSIONS_KV for hoox. Session keys are SHA-256 digests of the webhook API key (prefix sess:), not raw secrets. TTL ~1h via sessionManager.",
       "bindingName": "SESSIONS_KV",
       "usedBy": ["workers/hoox-worker"]
     },
@@ -372,7 +382,7 @@
       "category": "queue",
       "description": "Cloudflare Queue for async trade execution. Producer: hoox (POST /webhook). Consumer: trade-worker (queue handler). Provides backpressure, retry with exponential backoff (max 5, delays: 0s/30s/1m/5m/15m), and dead-letter queue on exhaustion.",
       "tags": ["queue", "async", "failover", "retry", "backpressure"],
-      "llmContext": "Trade execution queue \u2014 the primary async processing pipeline. hoox produces TradeQueueMessage (requestId, exchange, action, symbol, quantity, price, leverage) via sendTradeToQueue. trade-worker consumes in queue() handler with retry logic: max 5 attempts with exponential backoff [0s, 30s, 1m, 5m, 15m], msg.retry({delaySeconds}), automatic DLQ after exhaustion. Failed trades logged to D1 system_logs table and notification sent via telegram-worker. Provides backpressure handling for burst signal scenarios.",
+      "llmContext": "Trade execution queue — the primary async processing pipeline. hoox produces TradeQueueMessage (requestId, exchange, action, symbol, quantity, price, leverage) via sendTradeToQueue. trade-worker consumes in queue() handler with retry logic: max 5 attempts with exponential backoff [0s, 30s, 1m, 5m, 15m], msg.retry({delaySeconds}), automatic DLQ after exhaustion. Failed trades logged to D1 system_logs table and notification sent via telegram-worker. Provides backpressure handling for burst signal scenarios.",
       "bindingName": "TRADE_QUEUE",
       "producer": "workers/hoox-worker",
       "consumer": "workers/trade-worker"
@@ -382,12 +392,42 @@
       "label": "IdempotencyStore (Durable Object)",
       "kind": "infrastructure",
       "category": "coordination",
-      "description": "Durable Object for signal idempotency. Ensures each trading signal is processed exactly once \u2014 crucial for webhook reliability with TradingView retries.",
-      "tags": ["durable-object", "idempotency", "deduplication", "webhook"],
-      "llmContext": "Idempotency Durable Object in hoox gateway. Prevents duplicate trade processing when TradingView retries webhook delivery. Each signal identified by idempotency key (derived from signal content), stored in DO durable storage. checkIdempotency() returns true if key already processed. DO class exported from workers/hoox-worker/src/index.ts as export { IdempotencyStore }. Single DO instance with consistent routing based on idempotency key. Critical for webhook reliability \u2014 without this, retried webhooks would execute duplicate trades.",
+      "description": "SQLite-backed Durable Object for two-phase trade idempotency (reserve → commit/release). Migration tag v1.",
+      "tags": [
+        "durable-object",
+        "idempotency",
+        "two-phase",
+        "deduplication",
+        "webhook"
+      ],
+      "llmContext": "IdempotencyStore DO (hoox). Methods: reserve (pending), commit (success), release (hard/soft failure). Sharded idFromName(idemp-shard-N) for N=0..15; keys stored inside shards. Fail-closed if binding missing. Export: IdempotencyStore + RateLimiterStore from hoox index. Migration v1 new_sqlite_classes.",
       "bindingName": "IDEMPOTENCY_STORE",
       "className": "IdempotencyStore",
       "usedBy": ["workers/hoox-worker"]
+    },
+    "do:RATE_LIMITER": {
+      "id": "infra:do:RATE_LIMITER",
+      "label": "RateLimiterStore (Durable Object)",
+      "kind": "infrastructure",
+      "category": "coordination",
+      "description": "SQLite-backed Durable Object for atomic multi-isolate trade rate limits. Migration tag v2.",
+      "tags": ["durable-object", "rate-limit", "atomic", "session", "webhook"],
+      "llmContext": "RateLimiterStore DO (hoox RATE_LIMITER binding). checkAndIncrement per session key with blockConcurrencyWhile. Default 10 req / 60s. Without binding, gateway falls back to CONFIG_KV get-then-put or in-memory. Migration v2 new_sqlite_classes: [\"RateLimiterStore\"]. Health: bindings.rateLimiter configured|missing.",
+      "bindingName": "RATE_LIMITER",
+      "className": "RateLimiterStore",
+      "usedBy": ["workers/hoox-worker"]
+    },
+    "do:EXCHANGE_CONNECTION_MANAGER": {
+      "id": "infra:do:EXCHANGE_CONNECTION_MANAGER",
+      "label": "ExchangeConnectionManager (Durable Object)",
+      "kind": "infrastructure",
+      "category": "coordination",
+      "description": "Trade-worker Durable Object for exchange WebSocket lifecycle (connect/reconnect/alarms). Order placement remains REST-only.",
+      "tags": ["durable-object", "websocket", "exchange", "rest-preferred"],
+      "llmContext": "ExchangeConnectionManager DO (trade-worker EXCHANGE_CONNECTION_MANAGER binding). connectToExchange and setAlarm use safeWaitUntil. Live order path forces REST (use_websocket ignored for placement).",
+      "bindingName": "EXCHANGE_CONNECTION_MANAGER",
+      "className": "ExchangeConnectionManager",
+      "usedBy": ["workers/trade-worker"]
     },
     "ai:WORKERS_AI": {
       "id": "infra:ai:WORKERS_AI",
@@ -396,7 +436,7 @@
       "category": "ai",
       "description": "Cloudflare Workers AI binding. Used by 3 workers: hoox (signal content validation), agent-worker (risk assessment, multi-provider routing), telegram-worker (message summarization).",
       "tags": ["ai", "inference", "llm", "workers-ai"],
-      "llmContext": "Workers AI inference binding \u2014 primary AI provider in the multi-provider chain (workers-ai \u2192 openai \u2192 anthropic \u2192 google). Used by: hoox (signal content validation, lightweight inference), agent-worker (risk assessment as primary \u2014 ProviderManager defaults to workers-ai with model map for routing, also supports embeddings via runEmbedding), telegram-worker (message summarization via Workers AI before sending Telegram notifications). Also accessible via agent-worker's POST /agent/test-model and POST /agent/chat endpoints.",
+      "llmContext": "Workers AI inference binding — primary AI provider in the multi-provider chain (workers-ai → openai → anthropic → google). Used by: hoox (signal content validation, lightweight inference), agent-worker (risk assessment as primary — ProviderManager defaults to workers-ai with model map for routing, also supports embeddings via runEmbedding), telegram-worker (message summarization via Workers AI before sending Telegram notifications). Also accessible via agent-worker's POST /agent/test-model and POST /agent/chat endpoints.",
       "bindingName": "AI",
       "usedBy": [
         "workers/agent-worker",
@@ -422,7 +462,7 @@
       "category": "analytics",
       "description": "Cloudflare Analytics Engine dataset. Receives time-series events exclusively from analytics-worker. Queryable via SQL API for dashboard and reporting.",
       "tags": ["analytics-engine", "time-series", "metrics", "observability"],
-      "llmContext": "Analytics Engine dataset for time-series metric storage. Single writer: analytics-worker (writeDataPoint writes blobs + doubles + indexes per event type). Event types: api-call (worker, endpoint, latencyMs, success \u2014 most frequent), trade (exchange, symbol, action, quantity, result), worker-perf (worker, requests, errors, duration), signal (source, type, symbol, confidence), notification (type, target, success). Queryable via Cloudflare SQL API (REST POST with bearer token, requires CLOUDFLARE_API_TOKEN + CLOUDFLARE_ACCOUNT_ID). SQL queries built via buildQuery helper: getTradeMetrics, getTradesByExchange, getTradeSuccessRate, getWorkerPerformance, getApiCallStats, getSignalOutcomes.",
+      "llmContext": "Analytics Engine dataset for time-series metric storage. Single writer: analytics-worker (writeDataPoint writes blobs + doubles + indexes per event type). Event types: api-call (worker, endpoint, latencyMs, success — most frequent), trade (exchange, symbol, action, quantity, result), worker-perf (worker, requests, errors, duration), signal (source, type, symbol, confidence), notification (type, target, success). Queryable via Cloudflare SQL API (REST POST with bearer token, requires CLOUDFLARE_API_TOKEN + CLOUDFLARE_ACCOUNT_ID). SQL queries built via buildQuery helper: getTradeMetrics, getTradesByExchange, getTradeSuccessRate, getWorkerPerformance, getApiCallStats, getSignalOutcomes.",
       "bindingName": "ANALYTICS_ENGINE",
       "usedBy": ["workers/analytics-worker"]
     },
@@ -433,7 +473,7 @@
       "category": "rendering",
       "description": "Cloudflare Browser Rendering REST API. Used exclusively by report-worker to convert HTML reports to A4 PDFs with printBackground and custom margins.",
       "tags": ["browser-rendering", "pdf", "report"],
-      "llmContext": "Browser Rendering REST API for serverless PDF generation. Used exclusively by report-worker's generatePdf() function. API: POST https://api.cloudflare.com/client/v4/{account}/browser-rendering/pdf, Bearer token auth (CF_API_TOKEN_BINDING). Request body: { html: string, options: { format: 'A4', printBackground: true, margin: { top/bottom/left/right: '1cm' } } }. Not accessed via service binding \u2014 called as external REST API. Returns ArrayBuffer PDF. Requires account-level API token with Browser Rendering permissions. Triggered twice daily via cron (06:00/18:00 UTC) or on-demand via GET /report endpoint.",
+      "llmContext": "Browser Rendering REST API for serverless PDF generation. Used exclusively by report-worker's generatePdf() function. API: POST https://api.cloudflare.com/client/v4/{account}/browser-rendering/pdf, Bearer token auth (CF_API_TOKEN_BINDING). Request body: { html: string, options: { format: 'A4', printBackground: true, margin: { top/bottom/left/right: '1cm' } } }. Not accessed via service binding — called as external REST API. Returns ArrayBuffer PDF. Requires account-level API token with Browser Rendering permissions. Triggered twice daily via cron (06:00/18:00 UTC) or on-demand via GET /report endpoint.",
       "bindingName": "BROWSER",
       "usedBy": ["workers/report-worker"]
     },
@@ -444,7 +484,7 @@
       "category": "service-binding",
       "description": "Cloudflare Service Binding to telegram-worker. Used by 5 workers to send notifications, alerts, and report delivery via Telegram Bot API.",
       "tags": ["service-binding", "telegram", "notification", "inter-worker"],
-      "llmContext": "Service binding to telegram-worker for sending notifications. Target endpoint: POST /webhook (primary) or POST /process (legacy). Called by: hoox (kill switch alerts, signal confirmation), trade-worker (trade execution notifications), agent-worker (risk alerts, trailing stop triggers), report-worker (PDF report delivery with signed URL), web3-wallet-worker (wallet initialization confirmation). Fire-and-forget via ctx.waitUntil. NotificationPayload: { message: string, chatId?: string } \u2014 uses TG_CHAT_ID_BINDING if chatId omitted.",
+      "llmContext": "Service binding to telegram-worker. Prefer POST /alert (mesh) or /webhook. Outbound chat allowlist enforced on telegram-worker; gateway also fail-closes public notify chatIds. Omit chatId to use TG_CHAT_ID_BINDING. Background delivery via safeWaitUntil.",
       "bindingName": "TELEGRAM_SERVICE",
       "usedBy": [
         "workers/agent-worker",
@@ -476,7 +516,7 @@
       "category": "service-binding",
       "description": "Cloudflare Service Binding to d1-worker. Used by 4 workers for centralized database operations.",
       "tags": ["service-binding", "d1", "database", "inter-worker"],
-      "llmContext": "Service binding to d1-worker for centralized D1 database access. Provides table-allowlist-validated SQL execution (allowed tables: trade_signals, trades, positions, balances, system_logs, trade_requests, trade_responses). Endpoints: POST /query (single SQL), POST /batch (atomic multi-statement), GET/POST /api/settings, GET /api/balances, GET /api/positions, GET /api/logs. All endpoints except /health require internal auth. Called by: trade-worker (trade persistence, balance tracking), report-worker (portfolio summary for PDF reports), dashboard (data read for UI rendering), agent-worker (position monitoring for AI risk assessment).",
+      "llmContext": "Service binding to d1-worker. Prefer named /rpc/* for mutations and list reads (list-signals, list-system-logs, list-open-positions). Free-form /query is SELECT-only. Dashboard REST: balances, positions, logs, settings. Internal auth required.",
       "bindingName": "D1_SERVICE",
       "usedBy": [
         "workers/agent-worker",
@@ -512,61 +552,61 @@
     {
       "source": "workers/hoox-worker",
       "target": "workers/trade-worker",
-      "description": "Trading signal: POST /webhook \u2192 validate webhook + check kill_switch + check IP allowlist + deduplicate via IdempotencyStore DO + check rate limit \u2192 produce TradeQueueMessage to TRADE_QUEUE \u2192 trade-worker consumes from queue handler with exponential backoff retry (max 5)",
+      "description": "Trading signal: POST /webhook → API key (timing-safe) + kill_switch + IP allowlist + hashed session + RateLimiterStore/KV rate limit + IdempotencyStore reserve → queue and/or TRADE_SERVICE → commit/release. Notify parallel with chatId allowlist. trade-worker queue concurrency=3.",
       "flowType": "signal-ingestion"
     },
     {
       "source": "workers/trade-worker",
       "target": "workers/d1-worker",
-      "description": "Trade data persistence: executeTrade \u2192 on success, write trade record + update positions + log to system_logs via d1-worker POST /query (INSERT/UPDATE) with X-Internal-Auth-Key. Reported via DbLogger request/response log pairs.",
+      "description": "Trade persistence via named RPC (/rpc/insert-trade, /rpc/upsert-position, /rpc/insert-system-log) and reads via /rpc/list-signals, /rpc/list-system-logs, /rpc/list-open-positions (not free-form /query for hot paths). Background writes use safeWaitUntil.",
       "flowType": "trade-persistence"
     },
     {
       "source": "workers/trade-worker",
       "target": "workers/telegram-worker",
-      "description": "Trade notification: executeTrade \u2192 on success or failure, call telegram-worker POST /process (legacy) or POST /webhook with NotificationPayload { message, chatId? } via TELEGRAM_SERVICE service binding",
+      "description": "Trade notification: executeTrade → on success or failure, call telegram-worker POST /process (legacy) or POST /webhook with NotificationPayload { message, chatId? } via TELEGRAM_SERVICE service binding",
       "flowType": "notification"
     },
     {
       "source": "workers/trade-worker",
       "target": "workers/analytics-worker",
-      "description": "Trade analytics: executeTrade \u2192 trackAnalytics(env, '/track/api-call', { worker: 'trade-worker', endpoint, latencyMs, success }) for every /webhook and /process call. Fire-and-forget via ctx.waitUntil.",
+      "description": "Trade analytics: trackAnalytics to analytics-worker for /webhook and /process via safeWaitUntil (not bare waitUntil).",
       "flowType": "analytics"
     },
     {
       "source": "workers/agent-worker",
       "target": "workers/d1-worker",
-      "description": "Position monitoring: runHousekeeping \u2192 reads open positions from D1 via D1_SERVICE binding (POST /query: SELECT * FROM positions WHERE status = 'OPEN'). Checks trailing stops from CONFIG_KV (prefix: trade:watermark:).",
+      "description": "Position monitoring: runHousekeeping reads open positions via D1_SERVICE GET /api/dashboard/positions (or list-open-positions RPC). Trailing stops in CONFIG_KV trade:watermark:*.",
       "flowType": "position-read"
     },
     {
       "source": "workers/agent-worker",
       "target": "workers/trade-worker",
-      "description": "Risk adjustment: processRoutine \u2192 AI risk assessment \u2192 if adjustment needed, calls trade-worker POST /webhook via TRADE_SERVICE binding with X-Internal-Auth-Key. Close orders via sendCloseOrder.",
+      "description": "Risk adjustment: processRoutine → AI risk assessment → if adjustment needed, calls trade-worker POST /webhook via TRADE_SERVICE binding with X-Internal-Auth-Key. Close orders via sendCloseOrder.",
       "flowType": "risk-adjustment"
     },
     {
       "source": "workers/agent-worker",
       "target": "workers/telegram-worker",
-      "description": "Risk alert: runHousekeeping/processRoutine \u2192 on risk threshold breach or trailing stop triggered, calls telegram-worker POST /webhook with alert message via TELEGRAM_SERVICE binding. Fire-and-forget.",
+      "description": "Risk alert: runHousekeeping/processRoutine → on risk threshold breach or trailing stop triggered, calls telegram-worker POST /webhook with alert message via TELEGRAM_SERVICE binding. Fire-and-forget.",
       "flowType": "notification"
     },
     {
       "source": "workers/email-worker",
       "target": "workers/trade-worker",
-      "description": "Email signal: Mailgun webhook POST /webhook \u2192 HMAC-SHA256 signature validation \u2192 parseEmailSignal (JSON or plaintext regex extraction) \u2192 forward parsed EmailSignal to trade-worker POST /webhook via TRADE_SERVICE binding with X-Internal-Auth-Key header",
+      "description": "Email signal: Mailgun webhook POST /webhook → HMAC-SHA256 signature validation → parseEmailSignal (JSON or plaintext regex extraction) → forward parsed EmailSignal to trade-worker POST /webhook via TRADE_SERVICE binding with X-Internal-Auth-Key header",
       "flowType": "signal-ingestion"
     },
     {
       "source": "workers/email-worker",
       "target": "workers/analytics-worker",
-      "description": "Email analytics: on signal forward (success or failure), trackAnalytics(env, '/track/signal', { source: 'email-worker', type, symbol, confidence }). Fire-and-forget via ctx.waitUntil.",
+      "description": "Email analytics: trackAnalytics /track/signal via safeWaitUntil on success/failure.",
       "flowType": "analytics"
     },
     {
       "source": "workers/d1-worker",
       "target": "workers/analytics-worker",
-      "description": "DB analytics: on every POST /query and POST /batch execution, trackAnalytics(env, '/track/api-call', { worker: 'd1-worker', endpoint, latencyMs, success }). Fire-and-forget via ctx.waitUntil.",
+      "description": "DB analytics: trackAnalytics for /query and /batch (and RPC) via safeWaitUntil.",
       "flowType": "analytics"
     },
     {
@@ -578,25 +618,25 @@
     {
       "source": "workers/web3-wallet-worker",
       "target": "workers/telegram-worker",
-      "description": "Web3 notification: on wallet initialization, calls telegram-worker POST /webhook with wallet address notification via TELEGRAM_SERVICE service binding. Fire-and-forget via ctx.waitUntil.",
+      "description": "Web3 notification: wallet init/swap notify via TELEGRAM_SERVICE with safeWaitUntil.",
       "flowType": "notification"
     },
     {
       "source": "workers/web3-wallet-worker",
       "target": "workers/analytics-worker",
-      "description": "Web3 analytics: after wallet init, trackAnalytics(env, '/track/api-call', { worker: 'web3-wallet-worker', endpoint: '/', latencyMs, success }). Fire-and-forget via ctx.waitUntil.",
+      "description": "Web3 analytics: trackAnalytics via safeWaitUntil after init/swap paths.",
       "flowType": "analytics"
     },
     {
       "source": "workers/report-worker",
       "target": "workers/telegram-worker",
-      "description": "Report delivery: generateAndStoreReport \u2192 on PDF stored in R2, calls telegram-worker POST /process via TELEGRAM_SERVICE binding with markdown message including signed report URL. Fire-and-forget via ctx.waitUntil.",
+      "description": "Report delivery: generateAndStoreReport → TELEGRAM_SERVICE (omit chatId by default; optional REPORT_TELEGRAM_CHAT_ID). safeWaitUntil.",
       "flowType": "notification"
     },
     {
       "source": "workers/dashboard",
       "target": "workers/d1-worker",
-      "description": "Dashboard data read: Next.js server components call d1-worker service binding (GET /api/balances, GET /api/positions, GET /api/settings, GET /api/logs, POST /query) for dashboard page rendering and API routes. Passes X-Internal-Auth-Key via env.D1_SERVICE binding.",
+      "description": "Dashboard data: D1_SERVICE for balances/positions/settings/logs; prefers fixed APIs. Passes X-Internal-Auth-Key.",
       "flowType": "dashboard-read"
     },
     {
@@ -674,7 +714,7 @@
     {
       "id": "signal-pipeline",
       "label": "Signal Processing Pipeline",
-      "description": "The core trading signal flow: hoox receives webhooks \u2192 deduplicate via IdempotencyStore DO \u2192 produce to TRADE_QUEUE \u2192 trade-worker consumes with retry \u2192 execute on Binance/MEXC/Bybit \u2192 persist to D1 \u2192 notify via telegram \u2192 track via analytics-worker. Includes infrastructure nodes that enable this flow (queue, DO, D1 database).",
+      "description": "The core trading signal flow: hoox receives webhooks → deduplicate via IdempotencyStore DO → produce to TRADE_QUEUE → trade-worker consumes with retry → execute on Binance/MEXC/Bybit → persist to D1 → notify via telegram → track via analytics-worker. Includes infrastructure nodes that enable this flow (queue, DO, D1 database).",
       "nodeIds": [
         "workspace:workers/hoox-worker",
         "workspace:workers/trade-worker",
@@ -689,7 +729,7 @@
     {
       "id": "ai-system",
       "label": "AI & Risk Management",
-      "description": "Autonomous AI risk management subsystem: agent-worker (configurable cron 1\u20131440 min) reads positions from D1, assesses risk via Workers AI (with multi-provider fallback: workers-ai \u2192 openai \u2192 anthropic \u2192 google), adjusts positions via trade-worker, sends alerts via telegram-worker. Uses Vectorize index for RAG context retrieval. Embeddings generated via Workers AI.",
+      "description": "Autonomous AI risk management subsystem: agent-worker (configurable cron 1–1440 min) reads positions from D1, assesses risk via Workers AI (with multi-provider fallback: workers-ai → openai → anthropic → google), adjusts positions via trade-worker, sends alerts via telegram-worker. Uses Vectorize index for RAG context retrieval. Embeddings generated via Workers AI.",
       "nodeIds": [
         "workspace:workers/agent-worker",
         "workspace:workers/telegram-worker",

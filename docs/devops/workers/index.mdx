@@ -16,15 +16,15 @@ Worker sources live as **git submodules** under `workers/` in [hoox-sh/hoox](htt
 
 | Worker | Role | Source |
 | ------ | ---- | ------ |
-| [hoox (Gateway)](/docs/devops/workers/hoox) | Public webhook ingress, WAF/auth, Durable Object idempotency, queue/service dispatch | [hoox-worker](https://github.com/hoox-sh/hoox-worker) |
-| [trade-worker](/docs/devops/workers/trade-worker) | Exchange REST execution (Binance / Bybit / MEXC), test trading, D1 fills | [trade-worker](https://github.com/hoox-sh/trade-worker) |
+| [hoox (Gateway)](/docs/devops/workers/hoox) | Public webhook ingress, WAF/auth, two-phase DO idempotency + rate-limit DO, notify chatId allowlist, queue/service dispatch | [hoox-worker](https://github.com/hoox-sh/hoox-worker) |
+| [trade-worker](/docs/devops/workers/trade-worker) | Exchange REST execution (Binance / Bybit / MEXC), queue concurrency, named D1 RPCs, test trading | [trade-worker](https://github.com/hoox-sh/trade-worker) |
 | [web3-wallet-worker](/docs/devops/workers/web3-wallet-worker) | On-chain wallet identity (ethers.js); bridge toward DeFi settlement | [web3-wallet-worker](https://github.com/hoox-sh/web3-wallet-worker) |
 
 ## Data & intelligence
 
 | Worker | Role | Source |
 | ------ | ---- | ------ |
-| [d1-worker](/docs/devops/workers/d1-worker) | SQL proxy (table allowlist), dashboard stats, settings KV | [d1-worker](https://github.com/hoox-sh/d1-worker) |
+| [d1-worker](/docs/devops/workers/d1-worker) | SQL proxy + named `/rpc/list-*` / insert RPCs, dashboard stats, settings KV | [d1-worker](https://github.com/hoox-sh/d1-worker) |
 | [agent-worker](/docs/devops/workers/agent-worker) | Configurable cron (1–1440 min) risk, trailing stops, multi-provider AI, kill switch | [agent-worker](https://github.com/hoox-sh/agent-worker) |
 | [analytics-worker](/docs/devops/workers/analytics-worker) | Analytics Engine fan-in (trades, signals, latency, heartbeats) | [analytics-worker](https://github.com/hoox-sh/analytics-worker) |
 | [report-worker](/docs/devops/workers/report-worker) | Browser Rendering PDFs → R2, telegram delivery | [report-worker](https://github.com/hoox-sh/report-worker) |
@@ -39,7 +39,7 @@ Worker sources live as **git submodules** under `workers/` in [hoox-sh/hoox](htt
 
 | Worker | Role | Source |
 | ------ | ---- | ------ |
-| [telegram-worker](/docs/devops/workers/telegram-worker) | Alerts, bot commands, RAG copilot | [telegram-worker](https://github.com/hoox-sh/telegram-worker) |
+| [telegram-worker](/docs/devops/workers/telegram-worker) | Alerts, bot commands, outbound/inbound chat allowlists, RAG | [telegram-worker](https://github.com/hoox-sh/telegram-worker) |
 | [email-worker](/docs/devops/workers/email-worker) | Mailgun / email signal parsing → trade-worker | [email-worker](https://github.com/hoox-sh/email-worker) |
 | [dashboard](/docs/devops/workers/dashboard) | Next.js ops console (OpenNext, public) | monorepo `workers/dashboard` |
 

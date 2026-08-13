@@ -30,14 +30,16 @@ The `d1-worker` binds directly to the production SQLite database (`trade-data-db
     "@hoox-sh/hoox-shared/health": "../../packages/shared/src/health.ts",
     "@hoox-sh/hoox-shared/types/router": "../../packages/shared/src/types/router.ts",
   },
-  "compatibility_date": "2026-04-17",
+  "compatibility_date": "2026-06-08",
   "compatibility_flags": ["nodejs_compat"],
   "placement": {
     "mode": "smart",
   },
   "observability": {
     "enabled": true,
-    "head_sampling_rate": 1,
+    "head_sampling_rate": 0.1,
+    "logs": { "enabled": true, "head_sampling_rate": 1 },
+    "traces": { "enabled": true, "head_sampling_rate": 0.01 },
   },
   "d1_databases": [
     {
@@ -72,10 +74,39 @@ The `d1-worker` binds directly to the production SQLite database (`trade-data-db
 
 Every endpoint is secured via `requireInternalAuth` and expects the `X-Internal-Auth-Key` header.
 
-### A. Execute Single SQL Query
+### A. Named RPC (preferred for hot paths)
+
+Prefer fixed-template RPCs over free-form SQL. All require internal **read** or **write** auth as indicated.
+
+| Method | Path | Auth | Notes |
+| ------ | ---- | ---- | ----- |
+| `GET`/`POST` | `/rpc/list-signals` | Read | `limit` (default 10, max 100), `offset` |
+| `GET`/`POST` | `/rpc/list-system-logs` | Read | `limit` (default 20, max 100), `offset` |
+| `GET`/`POST` | `/rpc/list-open-positions` | Read | Optional `exchange` filter (sanitized id) |
+| `POST` | `/rpc/insert-trade` | Write | Bound insert |
+| `POST` | `/rpc/upsert-position` | Write | REPLACE positions row |
+| `POST` | `/rpc/insert-signal` | Write | trade_signals |
+| `POST` | `/rpc/insert-system-log` | Write | system_logs |
+
+Example open positions:
+
+```http
+POST /rpc/list-open-positions
+X-Internal-Auth-Key: <read key>
+Content-Type: application/json
+
+{ "exchange": "binance" }
+```
+
+Response includes both `results` and `positions` arrays for compatibility with reconcile/dashboard clients.
+
+---
+
+### B. Execute Single SQL Query (SELECT-only free-form)
 
 - **Endpoint**: `/query`
 - **Method**: `POST`
+- **Notes**: **SELECT only**. Free-form writes are rejected — use named `/rpc/*` mutations.
 - **JSON Payload**:
   ```json
   {
@@ -97,18 +128,10 @@ Every endpoint is secured via `requireInternalAuth` and expects the `X-Internal-
     ]
   }
   ```
-- **Write Success Response (200 OK)** (INSERT/UPDATE/DELETE/REPLACE):
-  ```json
-  {
-    "success": true,
-    "lastRowId": 123,
-    "changes": 1
-  }
-  ```
 
 ---
 
-### B. Execute Transactional Batch Operations
+### C. Execute Transactional Batch Operations
 
 Allows running multiple statements atomically in a single network trip, reducing latency.
 

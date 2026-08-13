@@ -140,7 +140,9 @@ dashboard → d1-worker, agent-worker, pyne-worker
 pyne-worker → trade-worker   (TRADE_SERVICE + X-Internal-Auth-Key)
 ```
 
-**Infrastructure:** D1 (SQLite at edge), R2 (S3-compatible, zero-egress), KV (sub-ms config), DO (idempotency), Queues (async backpressure), Workers AI (5 providers), Vectorize (RAG), Analytics Engine, Browser Rendering.
+**Infrastructure:** D1 (SQLite at edge; prefer named `/rpc/*`), R2 (zero-egress), KV (config), Durable Objects on hoox (`IdempotencyStore` two-phase + `RateLimiterStore` atomic rate limits), Queues (async + concurrency), Workers AI, Vectorize, Analytics Engine, Browser Rendering.
+
+**Security mesh (v0.13+):** notify chat allowlists (`TELEGRAM_ALLOWED_CHAT_IDS` / `AUTHORIZED_CHAT_IDS`), `safeWaitUntil` for background work, REST-only trade orders, env-first agent API keys. Deploy notes: `workers/hoox-worker/DEPLOY.md`.
 
 **Smart Placement** enabled on trade, d1, telegram, web3-wallet, email, analytics (30-60% latency reduction).
 
@@ -156,9 +158,11 @@ pyne-worker → trade-worker   (TRADE_SERVICE + X-Internal-Auth-Key)
 
 ## Code Graph
 
-`graph.json` (2.5MB) — query only, never load fully. `graph-metadata.json` (44KB) — safe to load fully.
+`graph.json` (large) — query only, never load fully. `graph-metadata.json` — architecture layer (workers, infra, data-flows); safe to load fully. After mesh/security changes:
 
 ```bash
+bun scripts/extract-graph.ts   # → graph.json, graph.dot, refresh dynamic fields in graph-metadata.json
+
 # Quick worker overview
 bun -e "const g=require('./graph.json'); g.nodes.filter(n=>n.kind==='worker').forEach(w=>console.log(w.label,'| public:',w.isPublic,'| cron:',w.cron||'-','| eps:',w.entryPoint))"
 

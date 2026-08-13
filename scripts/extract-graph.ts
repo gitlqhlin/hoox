@@ -1529,7 +1529,20 @@ interface ArchitectureMetadata {
 }
 
 /**
- * Read dynamic worker data from wrangler.jsonc (cron, smart placement, services).
+ * Resolve wrangler config path: prefer live wrangler.jsonc, fall back to
+ * wrangler.jsonc.example (submodules often ship only the example in git).
+ */
+function resolveWranglerConfigPath(workerRelPath: string): string | null {
+  const live = join(ROOT, workerRelPath, "wrangler.jsonc");
+  if (existsSync(live)) return live;
+  const example = join(ROOT, workerRelPath, "wrangler.jsonc.example");
+  if (existsSync(example)) return example;
+  return null;
+}
+
+/**
+ * Read dynamic worker data from wrangler.jsonc / .example
+ * (cron, smart placement, services, durable object class names).
  */
 function readDynamicWorkerData(workspaces: WorkspaceInfo[]): Map<
   string,
@@ -1538,6 +1551,7 @@ function readDynamicWorkerData(workspaces: WorkspaceInfo[]): Map<
     smartPlacement: boolean;
     isPublic: boolean;
     services: string[];
+    durableObjectClasses: string[];
   }
 > {
   const data = new Map<
@@ -1547,16 +1561,21 @@ function readDynamicWorkerData(workspaces: WorkspaceInfo[]): Map<
       smartPlacement: boolean;
       isPublic: boolean;
       services: string[];
+      durableObjectClasses: string[];
     }
   >();
 
   // Known public workers
-  const publicWorkers = new Set(["workers/hoox-worker", "workers/dashboard"]);
+  const publicWorkers = new Set([
+    "workers/hoox-worker",
+    "workers/dashboard",
+    "workers/pyne-worker",
+  ]);
 
   for (const ws of workspaces) {
     if (ws.type !== "worker") continue;
-    const wranglerPath = join(ROOT, ws.relativePath, "wrangler.jsonc");
-    if (!existsSync(wranglerPath)) continue;
+    const wranglerPath = resolveWranglerConfigPath(ws.relativePath);
+    if (!wranglerPath) continue;
 
     try {
       const content = readFileSync(wranglerPath, "utf-8");
@@ -1582,10 +1601,37 @@ function readDynamicWorkerData(workspaces: WorkspaceInfo[]): Map<
         }
       }
 
-      data.set(ws.relativePath, { cron, smartPlacement, isPublic, services });
+      // Durable Object classes (from bindings + migrations)
+      const durableObjectClasses = new Set<string>();
+      const doBindings = config.durable_objects?.bindings;
+      if (Array.isArray(doBindings)) {
+        for (const b of doBindings) {
+          if (typeof b?.class_name === "string") {
+            durableObjectClasses.add(b.class_name);
+          }
+        }
+      }
+      if (Array.isArray(config.migrations)) {
+        for (const mig of config.migrations) {
+          for (const cls of mig?.new_sqlite_classes || []) {
+            if (typeof cls === "string") durableObjectClasses.add(cls);
+          }
+          for (const cls of mig?.new_classes || []) {
+            if (typeof cls === "string") durableObjectClasses.add(cls);
+          }
+        }
+      }
+
+      data.set(ws.relativePath, {
+        cron,
+        smartPlacement,
+        isPublic,
+        services,
+        durableObjectClasses: [...durableObjectClasses].sort(),
+      });
     } catch (err) {
       console.warn(
-        `  ⚠️  Failed to read dynamic data from ${ws.relativePath}/wrangler.jsonc: ${err}`
+        `  ⚠️  Failed to read dynamic data from ${ws.relativePath}: ${err}`
       );
     }
   }
@@ -1709,13 +1755,37 @@ function enhanceWithArchitectureLayer(
   (graph as Graph & { communities?: unknown[] }).communities =
     archData.communities;
 
-  // 6. Add architecture layer metadata
+  // 6. Cross-check DO classes from wrangler vs hand-authored infra nodes
+  const documentedDoClasses = new Set<string>();
+  for (const infra of Object.values(archData.infrastructure)) {
+    if (infra.className) documentedDoClasses.add(infra.className);
+  }
+  const discoveredDoClasses = new Set<string>();
+  for (const dyn of dynamicWorkerData.values()) {
+    for (const cls of dyn.durableObjectClasses) discoveredDoClasses.add(cls);
+  }
+  const missingDoDocs = [...discoveredDoClasses].filter(
+    (c) => !documentedDoClasses.has(c)
+  );
+  if (missingDoDocs.length > 0) {
+    console.warn(
+      `  ⚠️  Durable Object class(es) in wrangler but not in graph-metadata.json infrastructure: ${missingDoDocs.join(", ")}`
+    );
+  }
+
+  // 7. Add architecture layer metadata
   (graph.metadata as Record<string, unknown>).architectureLayer = {
-    version: "1.0.0",
+    version: "1.1.0",
     description:
-      "Architecture-level graph data for AI/LLM consumption. Includes worker nodes with semantic metadata, infrastructure nodes, service binding edges, data flow edges, and community groups.",
+      "Architecture-level graph data for AI/LLM consumption. Includes worker nodes with semantic metadata, infrastructure nodes (incl. IdempotencyStore + RateLimiterStore DOs), service binding edges, data flow edges, and community groups. Reflects mesh security hardening (two-phase idempotency, named D1 RPCs, safeWaitUntil, chat allowlists).",
     llmUsageGuide:
-      "Use this graph to understand the Hoox trading system architecture. Worker nodes have 'llmContext' fields with natural language descriptions. Infrastructure nodes describe bindings. Data flow edges show how signals move through the system. Community groups cluster related nodes.",
+      "Use this graph to understand the Hoox trading system architecture. Prefer worker llmContext for security-critical behavior (allowlists, DO reserve/commit/release, named /rpc/* over free-form /query). Infrastructure nodes describe bindings. Data-flow edges show the signal pipeline. After code changes: bun scripts/extract-graph.ts (regenerates graph.json, graph.dot, refreshes dynamic fields in graph-metadata.json).",
+    securityNotes: [
+      "hoox: two-phase IdempotencyStore + RateLimiterStore DOs; TELEGRAM_ALLOWED_CHAT_IDS fail-closed for notify",
+      "trade-worker: REST-only orders; store idempotency after success; list RPCs for D1 reads",
+      "d1-worker: prefer /rpc/list-* and /rpc/insert-*; free-form /query is SELECT-only",
+      "Background work: safeWaitUntil (WaitUntilHost works for fetch ctx and DO state)",
+    ],
     edgeTypes: {
       imports: "Code-level import dependency",
       extends: "TypeScript class/interface extension",
@@ -1798,8 +1868,8 @@ function regenerateMetadataFile(
     workerMeta.isPublic = dyn.isPublic;
 
     // Derive entryPoints from wrangler triggers + existing hand-authored routes
-    const wranglerPath = join(ROOT, wsPath, "wrangler.jsonc");
-    if (existsSync(wranglerPath)) {
+    const wranglerPath = resolveWranglerConfigPath(wsPath);
+    if (wranglerPath) {
       try {
         const content = readFileSync(wranglerPath, "utf-8");
         const config = JSON.parse(stripJsoncComments(content));
@@ -1822,7 +1892,7 @@ function regenerateMetadataFile(
           workerMeta.entryPoints = [...existingEntryPoints];
         }
       } catch {
-        // Silently skip if wrangler.jsonc is unparseable
+        // Silently skip if wrangler config is unparseable
       }
     }
   }
@@ -1882,6 +1952,7 @@ function regenerateMetadataFile(
 async function main() {
   console.log("╔══════════════════════════════════════════════════════╗");
   console.log("║   Hoox Monorepo Function & Relationship Graph       ║");
+  console.log("║   (AST + architecture layer v1.1 — security mesh)   ║");
   console.log("╚══════════════════════════════════════════════════════╝\n");
 
   console.log("📁 Discovering workspaces...");
