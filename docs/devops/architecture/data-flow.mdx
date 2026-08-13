@@ -23,31 +23,39 @@ sequenceDiagram
     autonumber
     actor TV as Signal Source (TradingView®)
     participant GW as hoox Gateway
-    participant DO as IdempotencyStore (Durable Object)
+    participant RL as RateLimiterStore
+    participant DO as IdempotencyStore (reserve/commit/release)
     participant TW as trade-worker
-    participant D1 as d1-worker
+    participant D1 as d1-worker (named RPCs)
     participant TG as telegram-worker
     participant AE as analytics-worker
 
-    TV->>GW: POST /webhook (Ingest raw JSON signal)
-    Note over GW: Extract Trace ID & check KV Rate Limiter
-    GW->>DO: lockTransaction(traceId) (SQLite atomic mutex check)
-    alt Mutex Lock Denied (Trace ID Already Logged)
-        DO-->>GW: Fail (Conflict: Duplicate Request)
-        GW-->>TV: 409 Conflict (Duplicate Request)
-    else Mutex Lock Granted (Unique Request)
-        DO->>GW: Lock Acquired (Success)
-        GW->>TW: Service Binding invoke: POST /webhook (X-Internal-Auth-Key)
-        Note over TW: Fetch encrypted Secrets & calculate HMAC-SHA256 signature
-        TW->>D1: Service Binding invoke: POST /query (Write "TRADE_PENDING" row)
-        TW->>TW: Send Order to Centralized Exchange API
-        Note over TW: Exchange fills order & returns status details
-        TW->>D1: Service Binding invoke: POST /query (Update Status to "Filled")
-        TW->>TG: Service Binding invoke: POST /alert (Format alert template)
-        TG-->>TV: Dispatch Telegram Push Alert to User's phone
-        TW-->>GW: Return Executed Order JSON
-        GW->>AE: Service Binding invoke: POST /track (Log latency & status metrics)
-        GW-->>TV: 200 OK (Filled order metadata)
+    TV->>GW: POST /webhook (JSON + apiKey)
+    Note over GW: Kill switch · IP allowlist · 64 KiB · timing-safe apiKey
+    GW->>RL: checkAndIncrement (atomic DO; KV/memory fallback)
+    alt Rate limited
+        GW-->>TV: 429 RATE_LIMITED
+    else Under limit
+        GW->>DO: reserve(idempotencyKey) → pending
+        alt Duplicate or in-flight
+            DO-->>GW: ok=false
+            GW-->>TV: 409 Conflict
+        else New reservation
+            GW->>TW: Service Binding POST /webhook (X-Internal-Auth-Key)
+            Note over TW: Secrets + HMAC-SHA256 REST order (not WS order path)
+            TW->>TW: Place order on exchange API
+            TW->>D1: /rpc/insert-trade · /rpc/upsert-position (safeWaitUntil)
+            TW->>TG: POST /webhook or /process (chatId allowlist)
+            TW->>AE: /track/* via safeWaitUntil
+            TW-->>GW: trade result JSON
+            alt success=true
+                GW->>DO: commit(key)
+                GW-->>TV: 200 OK
+            else success=false or transport error
+                GW->>DO: release(key)
+                Note over GW: Failed attempt free to retry
+            end
+        end
     end
 ```
 

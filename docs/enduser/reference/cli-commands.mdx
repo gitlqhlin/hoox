@@ -8,11 +8,11 @@ title: "CLI Commands Reference"
 description: "Comprehensive CLI directory detailing ~30 command groups, 60+ subcommands, global flags, and positional options for the hoox binary."
 ---
 
-The `@hoox-sh/hoox-cli` tool (**0.11.x**) manages the entire monorepo development, provisioning, deployment, monitoring, and self-healing pipelines. This reference provides the complete command tree, positional arguments, optional flags, and concrete examples for all command groups. The binary is also available as **`hx`**.
+The `@hoox-sh/hoox-cli` tool (**0.13.x**) manages the entire monorepo development, provisioning, deployment, monitoring, and self-healing pipelines. This reference provides the complete command tree, positional arguments, optional flags, and concrete examples for all command groups. The binary is also available as **`hx`**.
 
 Install: `bun add -g @hoox-sh/hoox-cli`. Recommended bootstrap: `hoox onboard`. Prefer CLI commands over raw Wrangler for day-to-day ops.
 
-**Current defaults (0.11.x):** monorepo auto-detect + remember (run `hx` from any cwd), Linear Rail banner (`◆ H · O · O · X`), quieter `check setup` secrets UX, setup gates on incomplete init/empty workers, secret sync modes (`--system` / `--required`), `hoox pyne` for **pyne-worker**, operator security plane (`doctor --security`, `tunnel check`). Global UX: `--no-color` / `NO_COLOR` / `TERM=dumb`, completion footers, “did you mean …”, sectioned help. Historical release notes: [v0.9.0](#historical-v090-output-polish) · [v0.8.0](#historical-v080-refactor).
+**Current defaults (0.13.x):** ships with mesh security hardening (`@hoox-sh/hoox-shared@1.4.0` + worker submodules) — two-phase gateway idempotency, `RateLimiterStore`, chatId allowlists, named D1 list RPCs, mesh-wide `safeWaitUntil`. CLI surface still includes monorepo auto-detect + remember (run `hx` from any cwd), Linear Rail banner (`◆ H · O · O · X`), quieter `check setup` secrets UX, setup gates, secret sync modes (`--system` / `--required`), `hoox pyne` for **pyne-worker**, operator security plane (`doctor --security`, `tunnel check`). Global UX: `--no-color` / `NO_COLOR` / `TERM=dumb`, completion footers, “did you mean …”, sectioned help. Historical release notes: [v0.9.0](#historical-v090-output-polish) · [v0.8.0](#historical-v080-refactor).
 
 ---
 
@@ -330,7 +330,7 @@ hoox check health
 
 ## Historical: v0.9.0 Output Polish
 
-> **Historical notes** from the v0.9.0 release (retained for upgrade context). Current CLI is **0.11.x** — Linear Rail is the default banner style; monorepo remember and quieter secrets checks landed later.
+> **Historical notes** from the v0.9.0 release (retained for upgrade context). Current CLI is **0.13.x** — Linear Rail is the default banner style; monorepo remember and quieter secrets checks landed later; mesh security hardening ships with 0.13.
 
 The v0.9.0 release polished the output framework. **No new commands and no breaking changes** — every command picks up the improvements automatically through the shared formatters. The new primitives are also available to plugin authors via the package's public exports.
 

@@ -48,10 +48,13 @@ Here is an architectural map of how each service functions in the Hoox monorepo.
 ## 🔒 4. Durable Objects (Distributed Coordination & Idempotency)
 
 - **Concept**: Single-threaded, in-memory compute isolates containing persistent local storage, ensuring that exactly one instance of an object runs globally.
-- **Hoox Implementation**: Drives the Gateway's **Idempotency Engine** inside `workers/hoox-worker`.
+- **Hoox Implementation** (gateway `workers/hoox-worker`):
+  - **`IdempotencyStore`** (`IDEMPOTENCY_STORE`, migration `v1`) — two-phase **reserve / commit / release** so in-flight retries cannot double-dispatch and failed attempts can retry. Fail-closed if the binding is missing.
+  - **`RateLimiterStore`** (`RATE_LIMITER`, migration `v2`) — atomic multi-isolate trade rate limits (default 10 / 60s) with KV/memory fallback when unbound.
+  - **`ExchangeConnectionManager`** (trade-worker) — connection coordination; order placement stays **REST-only**.
 - **Why it Matters**:
-  - When TradingView® fires multiple retries for the same alert (due to a transient network timeout), Durable Objects intercept the request, acquire an atomic mutex lock, and evaluate the trade's unique hash.
-  - Prevents disastrous duplicate trades (e.g. accidentally buying the same spot position twice) during moments of high market congestion.
+  - TradingView® retries after timeouts hit a single-threaded SQLite mutex, not an eventually consistent KV flag.
+  - Rate limits stay correct across concurrent isolates without a shared in-memory counter.
 
 ---
 

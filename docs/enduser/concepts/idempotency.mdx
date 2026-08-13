@@ -9,7 +9,7 @@ title: "idempotency"
 
 # 🔒 Idempotency & Durable Objects
 
-How Hoox utilizes Cloudflare Durable Objects to guarantee exactly-once execution and prevent catastrophic duplicate orders during network dropouts.
+How Hoox uses Cloudflare Durable Objects for **at-most-once acceptance** at the gateway (two-phase reserve/commit/release) so webhook retries cannot double-dispatch orders during network dropouts.
 
 ---
 
@@ -37,92 +37,81 @@ Without idempotency, a typical signal failure sequence looks like this:
 
 ## 🛡️ The Hoox Solution: Durable Objects Mutex Locking
 
-To enforce exactly-once execution, Hoox implements an **atomic dedup lock** inside `workers/hoox-worker` utilizing **Cloudflare Durable Objects**.
+To enforce at-most-once acceptance within the TTL, Hoox implements an **atomic two-phase dedup** inside `workers/hoox-worker` utilizing **Cloudflare Durable Objects**.
 
 A Durable Object is a unique, single-threaded compute isolate managed by Cloudflare that maintains its own highly optimized, in-memory state and persistent on-disk SQLite storage. Because access to a specific Durable Object instance is single-threaded, it acts as an absolute **distributed lock** (mutex).
 
-### The Idempotency Workflow
+### The Idempotency Workflow (two-phase)
 
 ```text
 [Incoming Webhook Payload]
          │
          ▼
-[Extract Trace ID / Mutex Key]
-         │
+[Resolve key: Idempotency-Key | body.idempotencyKey | auto fingerprint]
+         │  auto = trade:{ex}:{sym}:{action}:{qty}:{live|test}:{minuteBucket}
          ▼
-[Ping Dedicated Durable Object Isolate]
+[IdempotencyStore DO — fail-closed if binding missing]
          │
  ┌───────┴──────────────────────────────────────────┐
- │ Single-Threaded Mutex Lock Acquired              │
- │                                                  │
- │ Check local SQLite dedup log:                    │
- │ "Has Trace ID '9b1deb4d...' been seen?"          │
+ │ Phase 1: reserve(key) under blockConcurrencyWhile│
+ │  · committed / pending in TTL → reject (409)     │
+ │  · new → store status=pending, schedule alarm    │
  └───────┬──────────────────────────────────────────┘
          │
-         ├─► [YES: Duplicate Detected] ─────────────────────┐
-         │                                                 │
-         │                                                 ▼
-         │                                     [Silent Dropping of Request]
-         │                                                 │
-         │                                                 ▼
-         │                                     [Return 409 Conflict Response]
+         ├─► [Duplicate / in-flight] ──► 409 Conflict (no exchange call)
          │
-         └─► [NO: Unique Transaction] ─────────────────────┐
-                                                           │
-                                                           ▼
-                                               [Record ID in SQLite Log]
-                                                           │
-                                                           ▼
-                                               [Process Pipeline Execution]
-                                                           │
-                                                           ▼
-                                               [Set TTL-based DO Alarm]
+         └─► [Reserved] ──► queue and/or trade-worker
+                                    │
+                    ┌───────────────┴───────────────┐
+                    ▼                               ▼
+            true success                    soft-fail / hard error
+            (order path OK)                 (incl. HTTP 2xx success:false)
+                    │                               │
+                    ▼                               ▼
+            Phase 2: commit(key)            Phase 2: release(key)
+            (blocks retries for TTL)        (retry may reserve again)
 ```
 
 ---
 
 ## 🔍 The Dedup & Cleanup Algorithm
 
-### 1. Trace ID Generation
+### 1. Key resolution
 
-When a trade signal is fired, it must include a unique transaction signature.
+Preference order:
 
-- For TradingView® webhooks, this is automatically generated as a combination of alert parameters and timestamps.
-- If a client does not supply a transaction ID, the Hoox Gateway dynamically hashes the symbol, exchange, action, and timestamp to create a unique **Idempotency Key**.
+1. Body `idempotencyKey` or HTTP `Idempotency-Key` header (max 256 chars) — use this for cross-minute uniqueness.
+2. Auto fingerprint: `trade:{exchange}:{symbol}:{action}:{quantity}:{live|test}:{minuteBucket}` so intentional same-size trades in a later minute are not blocked for the full TTL. Live and test modes never share a key.
 
-### 2. Atomic Evaluation
+### 2. Atomic two-phase evaluation
 
-Before executing any order routing:
+Before any queue or service dispatch:
 
 <ol>
   <li>
-    The gateway routes the request to the namespace-mapped Durable Object using
-    the transaction ID as the binding key.
+    The gateway shards to an <code>IdempotencyStore</code> instance from the key.
+    Missing <code>IDEMPOTENCY_STORE</code> binding → <strong>fail-closed</strong>{" "}
+    (<code>503</code> / <code>IDEMPOTENCY_UNAVAILABLE</code>).
   </li>
   <li>
-    The Durable Object checks its internal state. Since DOs are single-threaded,
-    there is <strong>zero risk of race conditions</strong>—if two identical HTTP
-    requests hit Cloudflare simultaneously, they are processed sequentially
-    inside the DO.
+    <strong>reserve</strong>: under single-threaded DO execution, pending or
+    committed keys in TTL return duplicate; new keys become{" "}
+    <code>pending</code> so concurrent retries cannot double-dispatch.
   </li>
   <li>
-    If the ID exists in the DO's SQLite log, the DO immediately intercepts the
-    request and throws a <code>409 Conflict</code> exception, stopping the
-    pipeline before hitting exchange APIs.
+    On pipeline <strong>success</strong>: <strong>commit</strong> so further
+    retries stay blocked for the TTL.
   </li>
   <li>
-    If unique, it registers the ID, saves the current timestamp, and returns a
-    lock approval.
+    On soft-fail (<code>success: false</code> even with HTTP 2xx) or hard
+    error: <strong>release</strong> so a later retry can reserve again.
   </li>
 </ol>
 
 ### 3. Automatic TTL & Storage Alarms
 
-To prevent the Durable Object's persistent storage from growing indefinitely and consuming unnecessary memory:
-
-- The DO registers an **atomic alarm** scheduled for 24 hours in the future.
-- When the alarm fires, the DO runs an automatic garbage collection script that purges old IDs from its local storage.
-- This ensures that while you are 100% protected against duplicates during network dropouts, your storage footprint remains lightweight.
+- Default window is on the order of **minutes** (configured TTL); alarms reclaim expired keys so storage does not grow without bound.
+- Sharded object names keep hot keys from serializing the entire gateway behind one DO instance.
 
 ### 4. Cold-Start Resilience
 

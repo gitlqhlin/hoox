@@ -12,9 +12,26 @@ description: "Comprehensive security testing infrastructure, auth hardening, and
 
 Security work spans three layers:
 
-1. **Code Hardening** — Fixing auth vulnerabilities (fail-closed middleware, timing-safe comparisons)
+1. **Code Hardening** — Fail-closed middleware, timing-safe comparisons, mesh controls
 2. **Security Testing** — Auth bypass tests, fuzz tests, header verification
 3. **CI/CD Scanning** — Dependency auditing, secret detection, CodeQL analysis
+
+### Gateway mesh hardening (v0.13+)
+
+Applied on the public webhook path **before** exchange dispatch:
+
+| Control | Behavior |
+| ------- | -------- |
+| **Two-phase idempotency** | `IdempotencyStore`: **reserve** (pending) → dispatch → **commit** on true success / **release** on soft-fail or error. Missing DO → **fail-closed** `503`. |
+| **Atomic rate limit** | `RateLimiterStore` DO (`RATE_LIMITER`, migration `v2`); KV/memory fallback. Default 10 req / 60s → `429`. |
+| **Body cap** | **64 KiB** hard limit on webhook bodies. |
+| **Timing-safe webhook auth** | `timingSafeEqual` / async variant for `apiKey`. |
+| **Notify chat allowlist** | `TELEGRAM_ALLOWED_CHAT_IDS` / `AUTHORIZED_CHAT_IDS` — unlisted `chatId` rejected (fail-closed when configured). |
+| **Named D1 RPCs** | Hot paths use fixed SQL templates (`list-signals`, `list-system-logs`, `list-open-positions`, insert/upsert RPCs) instead of free-form `/query`. |
+| **safeWaitUntil** | Mesh-wide helper so background D1/analytics/notify work is not dropped on isolate exit (including DO lifecycle on trade-worker). |
+| **REST-only orders** | Exchange order placement stays REST; WS DO is not the order path. |
+
+Deploy notes (DO migrations `v1`/`v2`, allowlist secrets): `workers/hoox-worker/DEPLOY.md`. Concepts: [Idempotency](/docs/enduser/concepts/idempotency) · worker profile: [hoox gateway](/docs/devops/workers/hoox).
 
 ---
 

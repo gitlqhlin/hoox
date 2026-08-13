@@ -22,7 +22,7 @@ This document details the step-by-step installation, bootstrapping, and validati
 
 The recommended entry point is **`hoox onboard`** (alias: `hx onboard`). It chains `init` (configuration) and `setup` (infrastructure) into a single command. Running `hoox` / `hx` with no arguments on an uninitialized workspace auto-launches `onboard` (or `onboard --resume` when `.wizard-state.json` exists).
 
-**Setup gates (0.11.x):** onboard will **not** run setup if `init` was cancelled or never wrote `wrangler.jsonc`. Setup also aborts when worker trees are still missing after the submodule clone attempt, and requires Cloudflare® auth (`wrangler login` or `CLOUDFLARE_API_TOKEN` + `CLOUDFLARE_ACCOUNT_ID`).
+**Setup gates (0.11+ / current 0.13.x):** onboard will **not** run setup if `init` was cancelled or never wrote `wrangler.jsonc`. Setup also aborts when worker trees are still missing after the submodule clone attempt, and requires Cloudflare® auth (`wrangler login` or `CLOUDFLARE_API_TOKEN` + `CLOUDFLARE_ACCOUNT_ID`).
 
 To start the system bootstrap, run the one-shot wizard from the monorepo root
 (the CLI remembers that path so later `hx` calls work from any directory):

@@ -128,7 +128,7 @@ Applied on the webhook critical path **before** dispatch:
 | **Auth** | Body `apiKey` compared with `timingSafeEqual` against `WEBHOOK_API_KEY_BINDING`. Missing/invalid → `403` (no key material in responses). |
 | **Rate limit** | Atomic `RateLimiterStore` DO when `RATE_LIMITER` bound; else KV / in-memory. Session-keyed, default **10 req / 60s**. Exceeded → `429` `code: "RATE_LIMITED"`. |
 | **Notify chat allowlist** | `TELEGRAM_ALLOWED_CHAT_IDS` / `AUTHORIZED_CHAT_IDS` (+ optional KV). Unconfigured or non-listed `chatId` → notify rejected (fail-closed). |
-| **Idempotency** | Durable Object `IdempotencyStore`. Prefers body `idempotencyKey` or `Idempotency-Key` header; otherwise auto fingerprint `trade:{exchange}:{symbol}:{action}:{quantity}:{live\|test}:{minuteBucket}` (per-minute bucket so intentional same-size trades later are not blocked). Duplicates → `409`. |
+| **Idempotency** | Durable Object `IdempotencyStore` **two-phase**: `reserve` (pending) → dispatch → `commit` on true success / `release` on soft-fail or error. Fail-closed if binding missing (`503`). Prefers body `idempotencyKey` or `Idempotency-Key` header; else auto fingerprint `trade:{exchange}:{symbol}:{action}:{quantity}:{live\|test}:{minuteBucket}`. Duplicates / in-flight → `409`. |
 
 ---
 

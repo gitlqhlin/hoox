@@ -21,33 +21,43 @@ sequenceDiagram
     autonumber
     actor Trigger as Signal Source (TradingView® / Email / Telegram)
     participant GW as hoox Gateway (Public WAF + V8 Isolate)
-    participant DO as Durable Object (Idempotency Lock)
+    participant RL as RateLimiterStore (Durable Object)
+    participant DO as IdempotencyStore (two-phase)
     participant Q as Cloudflare® Queue (Asynchronous Backup)
     participant TW as trade-worker (Execution Engine)
     participant CEX as Exchange API (Bybit / Binance / MEXC)
-    participant D1 as D1 Database (Edge-SQLite)
-    participant TG as telegram-worker (Notifications)
+    participant D1 as d1-worker (named RPCs)
+    participant TG as telegram-worker (chatId allowlist)
 
-    Trigger->>GW: HTTP POST /webhook (JSON payload with Auth Passkey)
-    GW->>DO: Lock Idempotency Key (Verify Trace ID)
-    alt Already Processed (Duplicate Request)
-        DO-->>GW: Fail: Duplicate Intercepted
-        GW-->>Trigger: 409 Conflict (Duplicate Request)
-    else Unique Request (Success Path)
-        DO->>GW: Lock Acquired
-        GW->>TW: Service Binding invoke (Fast Path)
-        alt Direct Edge Call Succeeds
-            TW->>CEX: Send Signed HMAC-SHA256 REST API Order
-            CEX-->>TW: Order Executed (Fill Status + Details)
-            TW->>D1: Write Transaction Record to SQLite Table
-            TW->>TG: Service Binding invoke (Alert Notification)
-            TG-->>Trigger: Send telegram alert to user mobile
-            TW-->>GW: Return Executed JSON Payload
-            GW-->>Trigger: 200 OK (Fill Result)
-        else Direct Edge Call Fails (Exchange Offline / Rate Limited)
-            GW->>Q: Enqueue Trade Payload (Guaranteed Delivery)
-            GW-->>Trigger: 202 Accepted (Status: Enqueued)
-            Note over Q, TW: Queue worker retries execution w/ exponential backoff
+    Trigger->>GW: HTTP POST /webhook (JSON + apiKey)
+    Note over GW: Kill switch · IP allowlist · 64 KiB body · timing-safe auth
+    GW->>RL: checkAndIncrement (session / 10 per 60s)
+    alt Rate exceeded
+        RL-->>GW: Deny
+        GW-->>Trigger: 429 RATE_LIMITED
+    else Under limit
+        GW->>DO: reserve(key) → pending
+        alt Duplicate / in-flight
+            DO-->>GW: reserved=false
+            GW-->>Trigger: 409 Conflict
+        else New key
+            DO-->>GW: reserved=true
+            GW->>TW: Service Binding POST /webhook
+            alt Trade success
+                TW->>CEX: Signed REST order (HMAC-SHA256)
+                CEX-->>TW: Fill / status
+                TW->>D1: Named RPC insert-trade / upsert-position
+                TW->>TG: Notify (allowlisted chatId only)
+                TW-->>GW: success=true
+                GW->>DO: commit(key)
+                GW-->>Trigger: 200 OK
+            else Soft-fail (HTTP 2xx, success=false) or hard error
+                GW->>DO: release(key) so retries can proceed
+                opt Queue failover
+                    GW->>Q: Enqueue for retry
+                    GW-->>Trigger: 202 Accepted
+                end
+            end
         end
     end
 ```
@@ -87,14 +97,26 @@ When a signal hits your public endpoint, the **`hoox` gateway** interceptor imme
     the pipeline aborts immediately to protect your capital.
   </li>
   <li>
-    <strong>Rate Limiting</strong>: Verifies that signal frequency does not
-    exceed safe execution thresholds (default: 10 orders/minute).
+    <strong>Rate Limiting</strong>: Atomic{" "}
+    <code>RateLimiterStore</code> Durable Object when bound (else KV /
+    in-memory). Default: <strong>10 requests / 60s</strong> per session.
+    Exceeded → <code>429</code>.
   </li>
   <li>
-    <strong>Idempotency Check</strong>: Locks a unique transaction trace ID
-    using a <strong>SQLite-backed Durable Object</strong>. If the DO detects
-    that the exact same signal hash was already processed, it drops the request
-    to prevent double-ordering.
+    <strong>Two-phase idempotency</strong>:{" "}
+    <code>IdempotencyStore</code> <strong>reserves</strong> the key as{" "}
+    <code>pending</code> before dispatch, <strong>commits</strong> only on
+    true success, and <strong>releases</strong> on soft-fail or error so
+    retries can proceed. Missing DO is <strong>fail-closed</strong> (
+    <code>503</code>). Duplicates → <code>409</code>. Prefer a client{" "}
+    <code>idempotencyKey</code> / <code>Idempotency-Key</code> header; auto
+    fingerprints include a per-minute time bucket. See{" "}
+    <a href="/docs/enduser/concepts/idempotency">Idempotency</a>.
+  </li>
+  <li>
+    <strong>Notify chat allowlist</strong>: Telegram{" "}
+    <code>chatId</code> must be listed when allowlists are configured
+    (fail-closed for unlisted IDs).
   </li>
 </ol>
 
@@ -122,8 +144,9 @@ The `trade-worker` loads your encrypted API credentials from Cloudflare Secrets,
 
 Upon receipt of the order response (e.g. `Filled`, `Partial`, or `Rejected`), Hoox updates your ledger:
 
-- **D1 SQLite Database**: Writes transaction logs, filled prices, execution fees, and order IDs to your D1 database.
-- **R2 Log Offloading**: Offloads full JSON request-response packets to your secure R2 storage bucket to keep D1 database footprints compact.
+- **D1 via named RPCs**: Hot-path writes use fixed templates (`/rpc/insert-trade`, `/rpc/upsert-position`, `/rpc/insert-system-log`) and reads use `/rpc/list-signals`, `/rpc/list-system-logs`, `/rpc/list-open-positions` — not free-form `/query` for trading paths.
+- **Background work**: Persistence and analytics ride `safeWaitUntil` so the isolate does not drop work when the response returns.
+- **R2 Log Offloading**: Offloads full JSON request-response packets to R2 to keep D1 compact.
 
 ---
 

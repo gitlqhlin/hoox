@@ -56,7 +56,7 @@ graph TB
         DB[("D1 SQLite Database")]:::storage
         R2[("R2 Logs & PDF Bucket")]:::storage
         VEC[("Vectorize RAG Index")]:::storage
-        DO{{"🔒 Durable Objects mutex"}}:::compute
+        DO{{"🔒 Idempotency + RateLimiter DOs"}}:::compute
         Q{{"📨 Queues Queue"}}:::compute
         BR{{"🌐 Browser Rendering Chrome"}}:::compute
     end
