@@ -25,6 +25,11 @@ Before rolling out updates to Cloudflare® live edge networks:
   hoox test
   ```
 - **Exchange Credentials Check**: Ensure you have created dedicated exchange API keys with **Withdrawal permissions turned OFF (disabled)** to enforce least-privilege security.
+- **Gateway DO migrations**: `hoox` wrangler must declare `IDEMPOTENCY_STORE` (`v1`) and `RATE_LIMITER` / `RateLimiterStore` (`v2`). Deploy applies migrations; no fake resource IDs.
+- **Notify chat allowlists** (names only — never commit values):
+  - hoox: `TELEGRAM_ALLOWED_CHAT_IDS` (or alias `AUTHORIZED_CHAT_IDS`)
+  - telegram-worker: `AUTHORIZED_CHAT_IDS`, `TG_CHAT_ID_BINDING`, `TELEGRAM_SECRET_TOKEN`, `TG_BOT_TOKEN_BINDING`
+- **Post-hardening gateway checklist**: [`workers/hoox-worker/DEPLOY.md`](https://github.com/hoox-sh/hoox/blob/main/workers/hoox-worker/DEPLOY.md)
 
 ---
 

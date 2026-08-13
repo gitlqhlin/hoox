@@ -4,7 +4,7 @@
  */
 
 /**
- * Production helpers around ExecutionContext.waitUntil.
+ * Production helpers around ExecutionContext / DurableObjectState.waitUntil.
  *
  * Floating / rejected background promises are a common Workers footgun:
  * the isolate may exit before work finishes, and rejections can go unhandled.
@@ -12,14 +12,22 @@
  *
  * Never destructure `waitUntil` off `ctx` — it loses `this` and throws
  * "Illegal invocation" at runtime.
+ *
+ * Accepts any object with waitUntil so the same helper works for both
+ * fetch ExecutionContext and DurableObjectState (DO lifecycle).
  */
+
+/** Minimal surface shared by ExecutionContext and DurableObjectState. */
+export type WaitUntilHost = {
+  waitUntil(promise: Promise<unknown>): void;
+};
 
 /**
  * Schedule background work that must not affect the HTTP response.
  * Captures rejections so they never become unhandled promise rejections.
  */
 export function safeWaitUntil(
-  ctx: ExecutionContext,
+  ctx: WaitUntilHost,
   promise: Promise<unknown>,
   onError?: (err: unknown) => void
 ): void {
@@ -41,7 +49,7 @@ export function safeWaitUntil(
  * Uses allSettled so one failure does not cancel siblings.
  */
 export function waitUntilAll(
-  ctx: ExecutionContext,
+  ctx: WaitUntilHost,
   promises: ReadonlyArray<Promise<unknown>>,
   onError?: (err: unknown) => void
 ): void {

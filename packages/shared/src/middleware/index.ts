@@ -42,7 +42,7 @@ export {
   DEFAULT_MAX_JSON_BODY_BYTES,
   type ParseJsonBodyOptions,
 } from "./validate";
-export { safeWaitUntil, waitUntilAll } from "./wait-until";
+export { safeWaitUntil, waitUntilAll, type WaitUntilHost } from "./wait-until";
 export {
   corsHeaders,
   resolveCorsOptions,

@@ -50,7 +50,7 @@ Hoox is an edge-deployed cryptocurrency trading system built on Cloudflare® Wor
 
 | Layer             | Components                                                                   |
 | ----------------- | ---------------------------------------------------------------------------- |
-| **Gateway**       | `hoox` (webhook entrypoint, DO idempotency, KV-backed rate limiting)         |
+| **Gateway**       | `hoox` (webhook entrypoint, DO idempotency + DO rate limiter, notify allowlist) |
 | **Execution**     | `trade-worker` (multi-exchange), `web3-wallet-worker` (DeFi)                 |
 | **Intelligence**  | `agent-worker` (AI risk manager, configurable 1–1440 min cron, multi-provider AI gateway)       |
 | **Data**          | `d1-worker` (centralized D1 database service)                                |
@@ -89,7 +89,8 @@ pyne-worker (cron /run) → trade-worker (mesh internal auth on live forward)
 | **Queue**             | `trade-execution`  | `TRADE_QUEUE`        | hoox (producer), trade-worker (consumer)          |
 | **Vectorize**         | `my-rag-index`     | `VECTORIZE_INDEX`    | hoox, trade-worker, telegram-worker               |
 | **Analytics Engine**  | `hoox-analytics`   | (REST API)           | analytics-worker (cross-worker data collection)   |
-| **Durable Objects**   | `IdempotencyStore` | `IDEMPOTENCY_STORE`  | hoox (SQLite-backed, TTL+alarm cleanup)           |
+| **Durable Objects**   | `IdempotencyStore` | `IDEMPOTENCY_STORE`  | hoox (SQLite-backed, TTL+alarm cleanup, migration `v1`) |
+| **Durable Objects**   | `RateLimiterStore` | `RATE_LIMITER`       | hoox (atomic trade rate limits, migration `v2`)   |
 | **Browser Rendering** | —                  | (REST API)           | report-worker (PDF generation via CF API)         |
 | **AI**                | —                  | `AI`                 | hoox, trade-worker, telegram-worker, agent-worker |
 | **Smart Placement**   | —                  | (wrangler config)    | hoox, trade, agent, d1, telegram, report          |
@@ -172,6 +173,7 @@ hoox clone my-hoox-app
 | `TG_CHAT_ID_BINDING`      | telegram-worker                     | `wrangler secret put` | Optional     | Default Telegram chat ID               |
 | `TELEGRAM_SECRET_TOKEN`   | telegram-worker                     | `wrangler secret put` | Optional     | Telegram webhook secret                |
 | `AUTHORIZED_CHAT_IDS`     | telegram-worker                     | `wrangler secret put` | Required (webhook); recommended (alert allowlist) | Comma-separated chat IDs; webhook fail-closed when unset; `/alert` restricts to list or `TG_CHAT_ID_BINDING` |
+| `TELEGRAM_ALLOWED_CHAT_IDS` | hoox                              | `wrangler secret put` | Required for notify | Comma-separated chat IDs for public webhook notify (fail-closed when unset); alias `AUTHORIZED_CHAT_IDS` |
 | `WALLET_PK_SECRET`        | web3-wallet-worker                  | `wrangler secret put` | Optional     | Wallet private key                     |
 | `WALLET_MNEMONIC_SECRET`  | web3-wallet-worker                  | `wrangler secret put` | Optional     | Wallet mnemonic phrase                 |
 | `EMAIL_HOST`              | email-worker                        | `wrangler secret put` | Optional     | Email IMAP host                        |
@@ -660,15 +662,19 @@ wrangler vectorize create my-rag-index --dimensions=768 --metric=cosine
 
 ### 6.7 Durable Objects Migration
 
-The `hoox` worker requires a Durable Object migration:
+The `hoox` worker requires Durable Object migrations (`v1` + `v2`):
 
 ```jsonc
-// Already defined in workers/hoox-worker/wrangler.jsonc
+// Already defined in workers/hoox-worker/wrangler.jsonc(.example)
 "durable_objects": {
   "bindings": [
     {
       "name": "IDEMPOTENCY_STORE",
       "class_name": "IdempotencyStore"
+    },
+    {
+      "name": "RATE_LIMITER",
+      "class_name": "RateLimiterStore"
     }
   ]
 },
@@ -676,11 +682,15 @@ The `hoox` worker requires a Durable Object migration:
   {
     "tag": "v1",
     "new_sqlite_classes": ["IdempotencyStore"]
+  },
+  {
+    "tag": "v2",
+    "new_sqlite_classes": ["RateLimiterStore"]
   }
 ]
 ```
 
-This is automatically applied on first deploy.
+Applied automatically on `wrangler deploy` / `hoox deploy worker hoox`. New tags run once per account/script. `RATE_LIMITER` is required for atomic multi-isolate rate limits; without the binding, the gateway falls back to `CONFIG_KV` / in-memory.
 
 ---
 

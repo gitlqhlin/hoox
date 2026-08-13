@@ -46,6 +46,11 @@ const manifests: Record<string, WorkerManifest> = {
         description: "Inter-worker auth key",
       },
       HA_TOKEN_BINDING: { type: "secret", description: "Home Assistant token" },
+      TELEGRAM_ALLOWED_CHAT_IDS: {
+        type: "secret",
+        description:
+          "Comma-separated chat IDs for webhook notify (fail-closed when unset); alias AUTHORIZED_CHAT_IDS",
+      },
     },
     services: [
       {
@@ -72,6 +77,7 @@ const manifests: Record<string, WorkerManifest> = {
       queues: { producer: ["trade-execution"] },
       durableObjects: [
         { name: "IDEMPOTENCY_STORE", className: "IdempotencyStore" },
+        { name: "RATE_LIMITER", className: "RateLimiterStore" },
       ],
     },
     middleware: [
@@ -169,6 +175,11 @@ const manifests: Record<string, WorkerManifest> = {
       TELEGRAM_SECRET_TOKEN: {
         type: "secret",
         description: "Webhook verification token",
+      },
+      AUTHORIZED_CHAT_IDS: {
+        type: "secret",
+        description:
+          "Comma-separated chat IDs; inbound webhook fail-closed when unset; outbound /alert allowlist",
       },
     },
     services: [],

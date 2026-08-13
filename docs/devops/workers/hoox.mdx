@@ -73,6 +73,7 @@ The gateway's `wrangler.jsonc` defines its private service binding links and res
   "durable_objects": {
     "bindings": [
       { "name": "IDEMPOTENCY_STORE", "class_name": "IdempotencyStore" },
+      { "name": "RATE_LIMITER", "class_name": "RateLimiterStore" },
     ],
   },
   "migrations": [
@@ -80,9 +81,15 @@ The gateway's `wrangler.jsonc` defines its private service binding links and res
       "tag": "v1",
       "new_sqlite_classes": ["IdempotencyStore"],
     },
+    {
+      "tag": "v2",
+      "new_sqlite_classes": ["RateLimiterStore"],
+    },
   ],
 }
 ```
+
+`wrangler deploy` applies new migration tags once. Binding `RATE_LIMITER` is required for atomic multi-isolate trade-path rate limits; without it the gateway falls back to `CONFIG_KV` / in-memory.
 
 ---
 
@@ -93,6 +100,7 @@ For security, build-time credentials are never stored in plain text. They are bo
 - **`WEBHOOK_API_KEY_BINDING`**: The shared secret expected in the JSON body field `apiKey` on `POST /webhook` (and `POST /`). **Fail-closed** — if unset, all webhook requests return `403`.
 - **`INTERNAL_KEY_BINDING`**: Shared service-to-service key sent as `X-Internal-Auth-Key` when calling trade-worker / telegram-worker.
 - **`OPERATOR_API_KEY`** (preferred) or legacy **`INTERNAL_API_KEY`**: Bearer token for the operator management plane (`/v1/*`). Fail-closed when unset.
+- **`TELEGRAM_ALLOWED_CHAT_IDS`**: Comma-separated numeric chat IDs allowed on webhook **notify** payloads. **Fail-closed** when unset (notify rejected). Alias: `AUTHORIZED_CHAT_IDS`. Optional union with `CONFIG_KV` key `telegram:allowed_chat_ids` (JSON array). Align with telegram-worker `AUTHORIZED_CHAT_IDS`.
 
 ### Local Development Mocking (`.dev.vars`)
 
@@ -102,6 +110,8 @@ When running tests or starting local Wrangler dev, create a gitignored `.dev.var
 WEBHOOK_API_KEY_BINDING=dev_webhook_auth_passkey
 INTERNAL_KEY_BINDING=dev_shared_internal_security_key
 OPERATOR_API_KEY=dev_operator_bearer_token
+TELEGRAM_ALLOWED_CHAT_IDS=123456789
+# AUTHORIZED_CHAT_IDS=123456789
 ```
 
 ---
@@ -116,7 +126,8 @@ Applied on the webhook critical path **before** dispatch:
 | **IP allowlist** | When `webhook:tradingview:ip_check_enabled` is true (default), `CF-Connecting-IP` must be in the built-in TradingView® set or `webhook:tradingview:allowed_ips` JSON array. Missing IP → `403`. |
 | **Body size** | Hard cap **64 KiB** (Content-Length early reject + stream read). Oversized → `413`. |
 | **Auth** | Body `apiKey` compared with `timingSafeEqual` against `WEBHOOK_API_KEY_BINDING`. Missing/invalid → `403` (no key material in responses). |
-| **Rate limit** | KV-backed counter keyed by stable session (apiKey), default **10 req / 60s**. Exceeded → `429` `code: "RATE_LIMITED"`. |
+| **Rate limit** | Atomic `RateLimiterStore` DO when `RATE_LIMITER` bound; else KV / in-memory. Session-keyed, default **10 req / 60s**. Exceeded → `429` `code: "RATE_LIMITED"`. |
+| **Notify chat allowlist** | `TELEGRAM_ALLOWED_CHAT_IDS` / `AUTHORIZED_CHAT_IDS` (+ optional KV). Unconfigured or non-listed `chatId` → notify rejected (fail-closed). |
 | **Idempotency** | Durable Object `IdempotencyStore`. Prefers body `idempotencyKey` or `Idempotency-Key` header; otherwise auto fingerprint `trade:{exchange}:{symbol}:{action}:{quantity}:{live\|test}:{minuteBucket}` (per-minute bucket so intentional same-size trades later are not blocked). Duplicates → `409`. |
 
 ---
@@ -190,7 +201,8 @@ Applied on the webhook critical path **before** dispatch:
       "queue": "configured",
       "trade": "configured",
       "telegram": "configured",
-      "idempotency": "configured"
+      "idempotency": "configured",
+      "rateLimiter": "configured"
     }
   }
   ```

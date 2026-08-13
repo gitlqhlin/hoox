@@ -73,6 +73,8 @@ export function validateWranglerJsonc(
       !name.endsWith("_SECRET") &&
       !name.startsWith("CLOUDFLARE_") &&
       name !== "TELEGRAM_SECRET_TOKEN" &&
+      name !== "TELEGRAM_ALLOWED_CHAT_IDS" &&
+      name !== "AUTHORIZED_CHAT_IDS" &&
       name !== "MAILGUN_API_KEY" &&
       name !== "EMAIL_SCAN_SUBJECT" &&
       name !== "DASHBOARD_USER" &&
