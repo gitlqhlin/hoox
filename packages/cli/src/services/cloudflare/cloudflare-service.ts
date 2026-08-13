@@ -5,6 +5,7 @@
 
 import path from "node:path";
 import { ConfigService } from "../config/index.js";
+import { resolveWorkerWranglerConfig } from "../secrets/index.js";
 import { sanitizeWranglerOutput } from "../../utils/wrangler-output.js";
 import type {
   WranglerResult,
@@ -12,6 +13,11 @@ import type {
   DevResult,
   VersionEntry,
 } from "./types.js";
+
+/** Logical monorepo worker key → directory under workers/ (same as setup). */
+const WORKER_FS_DIR: Record<string, string> = {
+  hoox: "hoox-worker",
+};
 
 /**
  * CloudflareService wraps the `wrangler` CLI via Bun.spawn for all
@@ -552,10 +558,27 @@ export class CloudflareService {
   }
 
   /**
+   * Filesystem path for a logical worker name (e.g. hoox → workers/hoox-worker).
+   * Aligns with SecretsService / setup workerFsDir so secret put never uses
+   * the monorepo root meta-wrangler as config.
+   */
+  private resolveWorkerDirForSecrets(workerName: string): string {
+    const dirName = WORKER_FS_DIR[workerName] ?? workerName;
+    // Accept either logical name or path like workers/trade-worker
+    const relative = workerName.includes("/")
+      ? workerName
+      : path.join("workers", dirName);
+    return this.resolveWorkerPath(relative);
+  }
+
+  /**
    * Sets a secret for a worker via `wrangler secret put`.
    *
    * **Security**: the secret value is piped through stdin (never passed as a
    * CLI argument) to prevent exposure in `ps` output and shell history.
+   *
+   * Always passes `-c <worker-config>` and runs with cwd = worker dir so
+   * wrangler does not pick up the monorepo root meta-`wrangler.jsonc`.
    */
   async secretPut(
     workerName: string,
@@ -563,15 +586,28 @@ export class CloudflareService {
     value: string
   ): Promise<WranglerResult<string>> {
     try {
-      const proc = Bun.spawn(
-        ["wrangler", "secret", "put", secretName, "--name", workerName],
-        {
-          cwd: this.cwd,
-          stdout: "pipe",
-          stderr: "pipe",
-          stdin: "pipe",
-        }
-      );
+      const workerPath = this.resolveWorkerDirForSecrets(workerName);
+      const { configPath, deployName } =
+        await resolveWorkerWranglerConfig(workerPath);
+      const deployWorkerName = deployName ?? workerName;
+
+      const args = [
+        "wrangler",
+        "secret",
+        "put",
+        secretName,
+        "-c",
+        configPath,
+        "--name",
+        deployWorkerName,
+      ];
+
+      const proc = Bun.spawn(args, {
+        cwd: workerPath,
+        stdout: "pipe",
+        stderr: "pipe",
+        stdin: "pipe",
+      });
 
       // Pipe the secret value through stdin — never via CLI args.
       await proc.stdin.write(value + "\n");

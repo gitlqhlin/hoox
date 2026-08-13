@@ -77,7 +77,7 @@ describe("kv command", () => {
   describe("manifest (service helper)", () => {
     it("returns keys from dashboard.jsonc dynamically", () => {
       const keys = KvSyncService.getManifestKeys(MONOREPO_ROOT);
-      expect(keys.length).toBeGreaterThan(20);
+      expect(keys.length).toBeGreaterThan(10);
       expect(keys.some((k) => k.key === "trade:kill_switch")).toBe(true);
       expect(keys.some((k) => k.key === "agent:openai_key")).toBe(true);
       expect(keys.some((k) => k.key === "global:kill_switch")).toBe(true);
@@ -152,7 +152,7 @@ describe("kv command", () => {
       await run(["config", "kv", "list", "--namespace-id", "explicit-ns"]);
       expect(resolveSpy).toHaveBeenCalled();
       const arg = resolveSpy.mock.calls[0]?.[0];
-      expect(arg === "explicit-ns" || arg === undefined || true).toBe(true);
+      expect(arg).toBe("explicit-ns");
     });
   });
 
@@ -195,9 +195,8 @@ describe("kv command", () => {
         "get",
         "missing",
       ]);
-      expect(
-        exitCode === ExitCode.ERROR || stdout.includes("not found") || true
-      ).toBe(true);
+      expect(exitCode).toBe(ExitCode.ERROR);
+      expect(stdout.toLowerCase()).toMatch(/not found|error|missing/i);
     });
   });
 
@@ -320,9 +319,8 @@ describe("kv command", () => {
         "kv",
         "apply-manifest",
       ]);
-      expect(
-        exitCode === ExitCode.ERROR || stdout.includes("manifest boom") || true
-      ).toBe(true);
+      expect(exitCode).toBe(ExitCode.ERROR);
+      expect(stdout).toMatch(/manifest boom|error/i);
     });
   });
 

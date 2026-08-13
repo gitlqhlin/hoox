@@ -734,10 +734,10 @@ describe("CloudflareService", () => {
         stderr: new Blob([""]),
         exited: Promise.resolve(0),
         stdin: {
-          write: mock((data: string) => {
+          write: mock(async (data: string) => {
             stdinWritten = data;
           }),
-          end: mock(() => {
+          end: mock(async () => {
             stdinEnded = true;
           }),
         },
@@ -750,20 +750,41 @@ describe("CloudflareService", () => {
       });
       (Bun as unknown as Record<string, unknown>).spawn = spawnMock;
 
-      const service = new CloudflareService();
-      const result = await service.secretPut(
-        "my-worker",
-        "API_KEY",
-        "super-secret-value"
-      );
+      // Worker-scoped config: secretPut resolves wrangler.jsonc under workers/
+      const origFile = Bun.file.bind(Bun);
+      (Bun as any).file = (p: string | URL) => {
+        const s = String(p);
+        if (s.includes("wrangler.jsonc") || s.includes("wrangler.toml")) {
+          return {
+            exists: async () => true,
+            text: async () => JSON.stringify({ name: "my-worker" }),
+          };
+        }
+        return origFile(p as string);
+      };
 
-      expect(result.ok).toBe(true);
-      // The secret value should NEVER appear in CLI args
-      const argsJoined = lastSpawnCmd.join(" ");
-      expect(argsJoined).not.toContain("super-secret-value");
-      // stdin should receive the secret value
-      expect(stdinWritten).toBe("super-secret-value\n");
-      expect(stdinEnded).toBe(true);
+      try {
+        const service = new CloudflareService();
+        const result = await service.secretPut(
+          "my-worker",
+          "API_KEY",
+          "super-secret-value"
+        );
+
+        expect(result.ok).toBe(true);
+        // The secret value should NEVER appear in CLI args
+        const argsJoined = lastSpawnCmd.join(" ");
+        expect(argsJoined).not.toContain("super-secret-value");
+        // Must pin worker config (-c) so root meta-wrangler is not used
+        expect(lastSpawnCmd).toContain("-c");
+        expect(lastSpawnCmd).toContain("--name");
+        expect(lastSpawnCmd).toContain("my-worker");
+        // stdin should receive the secret value
+        expect(stdinWritten).toBe("super-secret-value\n");
+        expect(stdinEnded).toBe(true);
+      } finally {
+        (Bun as any).file = origFile;
+      }
     });
 
     it("secretDelete calls wrangler secret delete", async () => {

@@ -659,18 +659,24 @@ export async function runInitCommand(
         });
 
         if (p.isCancel(collected)) {
+          // Do not advance the wizard or write partial secrets
           return;
         }
 
         collectedSecrets[key] = {};
         for (const [secretName] of secretEntries) {
           const val = collected[secretName];
-          collectedSecrets[key][secretName] =
-            typeof val === "string" ? val : "";
+          if (p.isCancel(val) || typeof val !== "string") {
+            p.cancel("Setup cancelled.");
+            process.exitCode = 0;
+            return;
+          }
+          collectedSecrets[key][secretName] = val;
         }
       }
     }
 
+    // Only persist secrets and continue when collection finished fully
     engine.execute({ secrets: collectedSecrets });
     await saveState(engine);
   }
