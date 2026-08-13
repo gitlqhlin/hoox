@@ -66,6 +66,32 @@ describe("registerOnboardCommand", () => {
     SetupService.prototype.checkAuth = checkAuth as typeof origAuth;
   }
 
+  /**
+   * Onboard gates setup on wrangler.jsonc existing after init. Happy-path
+   * tests must simulate a successful init write; cancel tests force false.
+   */
+  function withConfigReady(
+    exists: boolean,
+    fn: () => Promise<void>
+  ): Promise<void> {
+    const origFile = Bun.file.bind(Bun);
+    (Bun as unknown as { file: typeof Bun.file }).file = (
+      path: string | URL
+    ) => {
+      const p = String(path);
+      if (p === "wrangler.jsonc" || p.endsWith("/wrangler.jsonc")) {
+        return {
+          exists: async () => exists,
+          text: async () => (exists ? "{}" : ""),
+        } as ReturnType<typeof Bun.file>;
+      }
+      return origFile(path as string);
+    };
+    return fn().finally(() => {
+      (Bun as unknown as { file: typeof Bun.file }).file = origFile;
+    });
+  }
+
   it("registers onboard with init + setup flags and aliases", () => {
     const program = new Command();
     registerOnboardCommand(program);
@@ -87,46 +113,48 @@ describe("registerOnboardCommand", () => {
   it("chains runInitCommand then SetupService.runAll with skip flags", async () => {
     mockSetup();
 
-    const program = new Command();
-    program.exitOverride();
-    program.option("--json");
-    program.option("--quiet");
-    program.option("-y, --yes");
-    registerOnboardCommand(program);
+    await withConfigReady(true, async () => {
+      const program = new Command();
+      program.exitOverride();
+      program.option("--json");
+      program.option("--quiet");
+      program.option("-y, --yes");
+      registerOnboardCommand(program);
 
-    await program.parseAsync(
-      [
-        "onboard",
-        "--token",
-        "cfut_test",
-        "--account",
-        "acct_test",
-        "--skip-dashboard",
-        "--skip-db",
-        "--quiet",
-      ],
-      { from: "user" }
-    );
+      await program.parseAsync(
+        [
+          "onboard",
+          "--token",
+          "cfut_test",
+          "--account",
+          "acct_test",
+          "--skip-dashboard",
+          "--skip-db",
+          "--quiet",
+        ],
+        { from: "user" }
+      );
 
-    expect(runInitMock).toHaveBeenCalledTimes(1);
-    const [opts, , nonInteractive] = runInitMock.mock.calls[0] as [
-      Record<string, unknown>,
-      unknown,
-      boolean,
-    ];
-    expect(nonInteractive).toBe(true);
-    expect(opts.token).toBe("cfut_test");
-    expect(opts.account).toBe("acct_test");
-    expect(checkAuth).toHaveBeenCalledTimes(1);
-    expect(runAll).toHaveBeenCalledTimes(1);
-    const setupOpts = (
-      runAll.mock.calls as unknown as Array<[Record<string, unknown>]>
-    )[0]?.[0];
-    expect(setupOpts?.skipDashboard).toBe(true);
-    expect(setupOpts?.skipDb).toBe(true);
-    // Token/account mirrored into env for setup
-    expect(process.env.CLOUDFLARE_API_TOKEN).toBe("cfut_test");
-    expect(process.env.CLOUDFLARE_ACCOUNT_ID).toBe("acct_test");
+      expect(runInitMock).toHaveBeenCalledTimes(1);
+      const [opts, , nonInteractive] = runInitMock.mock.calls[0] as [
+        Record<string, unknown>,
+        unknown,
+        boolean,
+      ];
+      expect(nonInteractive).toBe(true);
+      expect(opts.token).toBe("cfut_test");
+      expect(opts.account).toBe("acct_test");
+      expect(checkAuth).toHaveBeenCalledTimes(1);
+      expect(runAll).toHaveBeenCalledTimes(1);
+      const setupOpts = (
+        runAll.mock.calls as unknown as Array<[Record<string, unknown>]>
+      )[0]?.[0];
+      expect(setupOpts?.skipDashboard).toBe(true);
+      expect(setupOpts?.skipDb).toBe(true);
+      // Token/account mirrored into env for setup
+      expect(process.env.CLOUDFLARE_API_TOKEN).toBe("cfut_test");
+      expect(process.env.CLOUDFLARE_ACCOUNT_ID).toBe("acct_test");
+    });
   });
 
   it("does not run setup when init sets a non-zero exitCode", async () => {
@@ -198,21 +226,23 @@ describe("registerOnboardCommand", () => {
   it("aborts setup when Cloudflare auth check fails", async () => {
     mockSetup(undefined, false);
 
-    const program = new Command();
-    program.exitOverride();
-    program.option("--json");
-    program.option("--quiet");
-    program.option("-y, --yes");
-    registerOnboardCommand(program);
+    await withConfigReady(true, async () => {
+      const program = new Command();
+      program.exitOverride();
+      program.option("--json");
+      program.option("--quiet");
+      program.option("-y, --yes");
+      registerOnboardCommand(program);
 
-    await program.parseAsync(
-      ["onboard", "--token", "t", "--account", "a", "--quiet"],
-      { from: "user" }
-    );
+      await program.parseAsync(
+        ["onboard", "--token", "t", "--account", "a", "--quiet"],
+        { from: "user" }
+      );
 
-    expect(checkAuth).toHaveBeenCalledTimes(1);
-    expect(runAll).not.toHaveBeenCalled();
-    expect(process.exitCode).toBe(1);
+      expect(checkAuth).toHaveBeenCalledTimes(1);
+      expect(runAll).not.toHaveBeenCalled();
+      expect(process.exitCode).toBe(1);
+    });
   });
 
   it("sets exitCode when setup reports failure", async () => {
@@ -225,18 +255,20 @@ describe("registerOnboardCommand", () => {
     );
 
     process.exitCode = 0;
-    const program = new Command();
-    program.exitOverride();
-    program.option("--json");
-    program.option("--quiet");
-    program.option("-y, --yes");
-    registerOnboardCommand(program);
+    await withConfigReady(true, async () => {
+      const program = new Command();
+      program.exitOverride();
+      program.option("--json");
+      program.option("--quiet");
+      program.option("-y, --yes");
+      registerOnboardCommand(program);
 
-    await program.parseAsync(
-      ["onboard", "--token", "t", "--account", "a", "--quiet"],
-      { from: "user" }
-    );
-    expect(process.exitCode).toBe(1);
-    expect(runAll).toHaveBeenCalledTimes(1);
+      await program.parseAsync(
+        ["onboard", "--token", "t", "--account", "a", "--quiet"],
+        { from: "user" }
+      );
+      expect(process.exitCode).toBe(1);
+      expect(runAll).toHaveBeenCalledTimes(1);
+    });
   });
 });

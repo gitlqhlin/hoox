@@ -32,20 +32,26 @@
       "enabled": true,
       "path": "workers/hoox-worker",
       "vars": {},
-      // Mesh: INTERNAL_KEY_BINDING, WEBHOOK_API_KEY_BINDING
+      // Mesh + gateway: webhook auth, operator plane, notify allowlist
       "secrets": [
         "INTERNAL_KEY_BINDING",
-        "WEBHOOK_API_KEY_BINDING"
+        "WEBHOOK_API_KEY_BINDING",
+        "OPERATOR_API_KEY",
+        "TELEGRAM_ALLOWED_CHAT_IDS",
+        "HA_TOKEN_BINDING"
       ]
     },
     "agent-worker": {
       "enabled": true,
       "path": "workers/agent-worker",
       "vars": {},
-      // Mesh: AGENT_INTERNAL_KEY, INTERNAL_KEY_BINDING
+      // Mesh + optional LLM provider secrets (prefer env over CONFIG_KV)
       "secrets": [
         "AGENT_INTERNAL_KEY",
-        "INTERNAL_KEY_BINDING"
+        "INTERNAL_KEY_BINDING",
+        "OPENAI_API_KEY",
+        "ANTHROPIC_API_KEY",
+        "GOOGLE_API_KEY"
       ]
     },
     "analytics-worker": {
@@ -77,10 +83,14 @@
       "enabled": true,
       "path": "workers/telegram-worker",
       "vars": {},
-      // Mesh: INTERNAL_KEY_BINDING; integration: bot token
+      // Mesh: INTERNAL_KEY_BINDING; integration: bot + chat allowlists
       "secrets": [
         "INTERNAL_KEY_BINDING",
-        "TG_BOT_TOKEN_BINDING"
+        "TELEGRAM_INTERNAL_KEY_BINDING",
+        "TG_BOT_TOKEN_BINDING",
+        "TG_CHAT_ID_BINDING",
+        "TELEGRAM_SECRET_TOKEN",
+        "AUTHORIZED_CHAT_IDS"
       ]
     },
     "web3-wallet-worker": {
@@ -107,9 +117,10 @@
       "enabled": true,
       "path": "workers/report-worker",
       "vars": {},
-      // Mesh: INTERNAL_KEY_BINDING
+      // Mesh: INTERNAL_KEY_BINDING; optional chat override for PDFs
       "secrets": [
-        "INTERNAL_KEY_BINDING"
+        "INTERNAL_KEY_BINDING",
+        "REPORT_TELEGRAM_CHAT_ID"
       ]
     },
     "pyne-worker": {

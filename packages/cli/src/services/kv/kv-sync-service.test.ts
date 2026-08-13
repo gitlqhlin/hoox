@@ -402,7 +402,7 @@ describe("KvSyncService", () => {
 
       expect(manifest.namespace).toBe("CONFIG_KV");
       expect(Array.isArray(manifest.keys)).toBe(true);
-      expect(manifest.keys.length).toBeGreaterThan(20);
+      expect(manifest.keys.length).toBeGreaterThan(10);
     });
 
     it("includes keys from dashboard.jsonc manifests", () => {
@@ -413,9 +413,14 @@ describe("KvSyncService", () => {
       expect(keyNames).toContain("trade:kill_switch");
       expect(keyNames).toContain("agent:openai_key");
       expect(keyNames).toContain("global:kill_switch");
-      expect(keyNames).toContain("routing:default_exchange");
+      expect(keyNames).toContain("webhook:queue_mode");
+      expect(keyNames).toContain("telegram:allowed_chat_ids");
       expect(keyNames).toContain("email:coin_pattern");
       expect(keyNames).toContain("exchange:mexc:enabled");
+      expect(keyNames).toContain("wallet:config");
+      // Pruned dead fields must not reappear
+      expect(keyNames).not.toContain("routing:default_exchange");
+      expect(keyNames).not.toContain("bot:enabled");
     });
 
     it("marks secret keys with secret=true", () => {
