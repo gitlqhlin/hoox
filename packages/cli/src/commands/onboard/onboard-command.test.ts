@@ -75,20 +75,19 @@ describe("registerOnboardCommand", () => {
     fn: () => Promise<void>
   ): Promise<void> {
     const origFile = Bun.file.bind(Bun);
-    (Bun as unknown as { file: typeof Bun.file }).file = (
-      path: string | URL
-    ) => {
+    // Loose cast: test mock only needs exists()/text() for wrangler.jsonc
+    (Bun as any).file = (path: string | URL) => {
       const p = String(path);
       if (p === "wrangler.jsonc" || p.endsWith("/wrangler.jsonc")) {
         return {
           exists: async () => exists,
           text: async () => (exists ? "{}" : ""),
-        } as ReturnType<typeof Bun.file>;
+        };
       }
       return origFile(path as string);
     };
     return fn().finally(() => {
-      (Bun as unknown as { file: typeof Bun.file }).file = origFile;
+      (Bun as any).file = origFile;
     });
   }
 
