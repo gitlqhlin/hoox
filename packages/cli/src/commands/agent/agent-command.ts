@@ -45,7 +45,7 @@ interface ProviderDef {
 const PROVIDERS: ProviderDef[] = [
   {
     name: "Workers AI",
-    model: "@cf/meta/llama-3.1-8b-instruct",
+    model: "@cf/meta/llama-3.1-8b-instruct-fp8",
     envVar: "CLOUDFLARE_API_TOKEN",
   },
   { name: "OpenAI", model: "gpt-4o", envVar: "OPENAI_API_KEY" },

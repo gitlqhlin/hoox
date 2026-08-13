@@ -239,7 +239,7 @@ export interface KvKeySnapshot {
 export interface ModelHealth {
   /** Provider name, e.g. "Workers AI", "OpenAI", "Anthropic", "Google", "Azure" */
   name: string;
-  /** Provider-specific model identifier, e.g. "@cf/meta/llama-3.1-8b-instruct" */
+  /** Provider-specific model identifier, e.g. "@cf/meta/llama-3.1-8b-instruct-fp8" */
   model: string;
   /** Operational state */
   status: "online" | "degraded" | "offline";

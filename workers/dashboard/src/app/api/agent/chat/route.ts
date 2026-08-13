@@ -52,12 +52,16 @@ export async function POST(request: NextRequest) {
         }
         selectedModel =
           config.modelMap?.[config.defaultProvider] ||
-          "@cf/meta/llama-3.1-8b-instruct";
+          "@cf/meta/llama-3.1-8b-instruct-fp8";
       }
     }
 
     if (!selectedModel) {
-      selectedModel = "@cf/meta/llama-3.1-8b-instruct";
+      selectedModel = "@cf/meta/llama-3.1-8b-instruct-fp8";
+    }
+    // Deprecated Workers AI ids still stored in agent:config (error 5028)
+    if (selectedModel === "@cf/meta/llama-3.1-8b-instruct") {
+      selectedModel = "@cf/meta/llama-3.1-8b-instruct-fp8";
     }
 
     if (stream && env.AI) {

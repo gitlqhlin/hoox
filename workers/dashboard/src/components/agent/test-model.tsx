@@ -102,7 +102,7 @@ export function TestModel() {
             <Input
               value={model}
               onChange={(e) => setModel(e.target.value)}
-              placeholder="e.g., @cf/meta/llama-3.1-8b-instruct"
+              placeholder="e.g., @cf/meta/llama-3.1-8b-instruct-fp8"
               disabled={loading}
             />
             <FieldDescription>Leave empty for default model</FieldDescription>

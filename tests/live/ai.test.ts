@@ -44,7 +44,7 @@ const hasCloudflareEnv = hasLiveEnv("CLOUDFLARE_ACCOUNT_ID");
       try {
         const result = await cfApi<{ response: string }>(
           "POST",
-          `/accounts/${config.accountId}/ai/run/@cf/meta/llama-3.1-8b-instruct`,
+          `/accounts/${config.accountId}/ai/run/@cf/meta/llama-3.1-8b-instruct-fp8`,
           {
             messages: [
               {
@@ -230,7 +230,7 @@ const hasCloudflareEnv = hasLiveEnv("CLOUDFLARE_ACCOUNT_ID");
       try {
         const result = await cfApi<{ response: string }>(
           "POST",
-          `/accounts/${config.accountId}/ai/run/@cf/meta/llama-3.1-8b-instruct`,
+          `/accounts/${config.accountId}/ai/run/@cf/meta/llama-3.1-8b-instruct-fp8`,
           {
             messages: [
               { role: "system", content: "You are a trading assistant." },

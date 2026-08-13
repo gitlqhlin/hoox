@@ -40,7 +40,7 @@ export async function GET(_request: NextRequest) {
         const start = Date.now();
         try {
           if (provider.name === "workers-ai" && env.AI) {
-            await env.AI.run("@cf/meta/llama-3.1-8b-instruct", {
+            await env.AI.run("@cf/meta/llama-3.1-8b-instruct-fp8", {
               messages: [{ role: "user", content: "hi" }],
               max_tokens: 1,
             });

@@ -13,7 +13,7 @@ export async function GET(_request: NextRequest) {
   try {
     const models = {
       "workers-ai": [
-        { id: "@cf/meta/llama-3.1-8b-instruct", taskType: "chat" },
+        { id: "@cf/meta/llama-3.1-8b-instruct-fp8", taskType: "chat" },
         { id: "@cf/meta/llama-3.2-11b-vision-instruct", taskType: "vision" },
         {
           id: "@cf/deepseek-ai/deepseek-r1-distill-qwen-32b",
