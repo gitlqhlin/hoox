@@ -82,10 +82,15 @@ export const DASHBOARD_SECTION_PREFIX: Record<string, string> = {
   global: "global:",
   webhook: "webhook:",
   routing: "routing:",
+  /** Gateway notify allowlist (telegram:allowed_chat_ids via field override). */
+  notify: "telegram:",
+  /** @deprecated Prefer webhook for TradingView IP settings. */
   security: "webhook:",
   trade: "trade:",
   agent: "agent:",
   bot: "bot:",
+  /** Telegram AI summary prefs → bot:* (not analytics ai:). */
+  bot_ai: "bot:",
   email: "email:",
   /** Email worker dashboard uses section id `signal` for parse patterns. */
   signal: "email:",
@@ -102,8 +107,19 @@ export const DASHBOARD_SECTION_PREFIX: Record<string, string> = {
   fees: "trade:",
   providers: "agent:",
   models: "agent:",
+  /** Analytics Engine (analytics-worker) — not gateway global: */
   ai: "ai:",
+  tracking: "ai:",
+  query: "ai:",
   report: "report:",
+  schedule: "report:",
+  rendering: "report:",
+  storage: "report:",
+  delivery: "report:",
+  endpoints: "report:",
+  wallet: "wallet:",
+  dex: "wallet:",
+  wallet_security: "wallet:",
   pyne: "pyne:",
   pyne_alerts: "pyne:",
 };
@@ -119,6 +135,8 @@ export const DASHBOARD_FIELD_KV_OVERRIDES: Record<string, string> = {
   "webhook:tradingview_ip_check_enabled":
     "webhook:tradingview:ip_check_enabled",
   "webhook:tradingview_allowed_ips": "webhook:tradingview:allowed_ips",
+  "webhook:queue_mode": "webhook:queue_mode",
+  "notify:allowed_chat_ids": "telegram:allowed_chat_ids",
   "exchanges:binance_enabled": "exchange:binance:enabled",
   "exchanges:mexc_enabled": "exchange:mexc:enabled",
   "exchanges:bybit_enabled": "exchange:bybit:enabled",
@@ -130,21 +148,24 @@ export const DASHBOARD_FIELD_KV_OVERRIDES: Record<string, string> = {
  * - providers/models: edited via `agent:config` (see agent-config-fields.ts)
  * - cron: wrangler trigger schedule, not KV
  * - behavior: not read as flat behavior:* keys by the agent worker
+ * - endpoints: documentation-only in report-worker dashboard.jsonc
  */
 export const DASHBOARD_SECTIONS_NOT_FLAT_KV: ReadonlySet<string> = new Set([
   "providers",
   "models",
   "cron",
   "behavior",
+  "endpoints",
 ]);
 
 /**
  * Sections that are not editable as flat or agent:config fields
- * (no worker consumer yet).
+ * (no worker consumer yet / docs only).
  */
 export const DASHBOARD_SECTIONS_UI_SKIP: ReadonlySet<string> = new Set([
   "cron",
   "behavior",
+  "endpoints",
 ]);
 
 /** True when a section should map to flat CONFIG_KV get/set / apply-manifest. */

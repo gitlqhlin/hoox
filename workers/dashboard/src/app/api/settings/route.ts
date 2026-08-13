@@ -19,11 +19,11 @@ import {
 } from "@hoox-sh/hoox-shared";
 import {
   buildKVKey,
+  formFieldKeysFromKvKey,
   isFlatKvSectionKey,
   stripWorkerPrefix,
   workerForKVKey,
   READ_PREFIXES,
-  PREFIX_TO_WORKER,
 } from "@/lib/settings/prefixes";
 
 export const dynamic = "force-dynamic";
@@ -84,9 +84,10 @@ async function listSettingsFromKV(env: DashboardEnv): Promise<AllSettings> {
 
   const normalized: AllSettings = {};
   for (const [key, value] of Object.entries(settings)) {
-    const worker = workerForKVKey(key);
-    if (!worker) continue;
-    const cleanKey = stripWorkerPrefix(key, worker);
+    const primaryWorker = workerForKVKey(key);
+    const cleanKey = primaryWorker
+      ? stripWorkerPrefix(key, primaryWorker)
+      : key;
 
     // Expand agent:config JSON into providers:*/models:*/risk:* field keys
     if (key === AGENT_CONFIG_KV_KEY || cleanKey === "config") {
@@ -122,11 +123,24 @@ async function listSettingsFromKV(env: DashboardEnv): Promise<AllSettings> {
     }
 
     if (
-      typeof value === "string" ||
-      typeof value === "number" ||
-      typeof value === "boolean"
+      typeof value !== "string" &&
+      typeof value !== "number" &&
+      typeof value !== "boolean"
     ) {
-      (normalized[worker] ??= {})[cleanKey] = value;
+      continue;
+    }
+
+    // Map KV keys to form field keys (composite + bare) across owning workers
+    // (e.g. trade:kill_switch → trade-worker + agent-worker risk:kill_switch).
+    const formKeys = formFieldKeysFromKvKey(key);
+    if (formKeys.length === 0) {
+      if (primaryWorker) {
+        (normalized[primaryWorker] ??= {})[cleanKey] = value;
+      }
+      continue;
+    }
+    for (const { worker, fieldKey } of formKeys) {
+      (normalized[worker] ??= {})[fieldKey] = value;
     }
   }
   return normalized;

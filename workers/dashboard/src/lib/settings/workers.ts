@@ -85,7 +85,7 @@ export const DEFAULT_WORKER_LIST: readonly WorkerListEntry[] = [
   {
     name: "report-worker",
     displayName: "Report Worker",
-    defaultPrefix: "cron:",
+    defaultPrefix: "report:",
     enabled: true,
   },
   {

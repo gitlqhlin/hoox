@@ -19,6 +19,8 @@ import {
   KV_TRADE_KILL_SWITCH,
   KV_WEBHOOK_IP_CHECK_ENABLED,
   KV_WEBHOOK_ALLOWED_IPS,
+  KV_WEBHOOK_QUEUE_MODE,
+  KV_TELEGRAM_ALLOWED_CHAT_IDS,
   KV_EMAIL_COIN_PATTERN,
   KV_EMAIL_ACTION_PATTERN,
   KV_AGENT_OPENAI_KEY,
@@ -105,6 +107,21 @@ describe("dashboard-manifest", () => {
     expect(buildDashboardKvKey("hoox", "webhook:tradingview_allowed_ips")).toBe(
       "webhook:tradingview:allowed_ips"
     );
+    expect(buildDashboardKvKey("hoox", "webhook:queue_mode")).toBe(
+      "webhook:queue_mode"
+    );
+    expect(buildDashboardKvKey("hoox", "notify:allowed_chat_ids")).toBe(
+      "telegram:allowed_chat_ids"
+    );
+    expect(buildDashboardKvKey("analytics-worker", "ai:enabled")).toBe(
+      "ai:enabled"
+    );
+    expect(
+      buildDashboardKvKey(
+        "web3-wallet-worker",
+        "wallet_security:require_confirmation"
+      )
+    ).toBe("wallet:require_confirmation");
     expect(buildDashboardKvKey("trade-worker", "trade:max_position_size")).toBe(
       "trade:max_position_size"
     );
@@ -181,6 +198,8 @@ describe("dashboard-manifest", () => {
       KV_TRADE_TRAILING_STOP_PERCENT,
       KV_WEBHOOK_IP_CHECK_ENABLED,
       KV_WEBHOOK_ALLOWED_IPS,
+      KV_WEBHOOK_QUEUE_MODE,
+      KV_TELEGRAM_ALLOWED_CHAT_IDS,
       KV_EMAIL_COIN_PATTERN,
       KV_EMAIL_ACTION_PATTERN,
       KV_AGENT_OPENAI_KEY,
