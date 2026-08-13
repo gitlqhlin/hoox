@@ -320,13 +320,16 @@ export class CloudflareService {
     const resolvedPath = this.resolveWorkerPath(workerPath);
 
     try {
+      // inherit I/O so logs are visible and pipe buffers cannot stall wrangler
       Bun.spawn(["wrangler", "dev", "--port", String(devPort)], {
         cwd: resolvedPath,
-        stdout: "pipe",
-        stderr: "pipe",
+        stdout: "inherit",
+        stderr: "inherit",
+        stdin: "inherit",
       });
 
       // Dev runs indefinitely — return immediately with the known port.
+      // Caller owns lifecycle (Ctrl+C in the inherited terminal stops wrangler).
       return { ok: true, value: { port: devPort } };
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
@@ -571,8 +574,8 @@ export class CloudflareService {
       );
 
       // Pipe the secret value through stdin — never via CLI args.
-      proc.stdin.write(value + "\n");
-      proc.stdin.end();
+      await proc.stdin.write(value + "\n");
+      await proc.stdin.end();
 
       const stdout = await new Response(proc.stdout).text();
       const stderr = await new Response(proc.stderr).text();

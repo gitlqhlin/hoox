@@ -96,13 +96,10 @@ async function handleInit(
           });
         }
         if (p.isCancel(value)) {
-          // User aborted (Ctrl+C / Esc). Do NOT leave a half-written
-          // .env.local behind — clean up so `hoox config env init` can be
-          // re-run cleanly. Recovery: just run `hoox config env init` again.
-          if (await existingEnv.exists()) {
-            await Bun.write(".env.local", "");
-          }
-          p.cancel("Setup cancelled. No partial .env.local was written.");
+          // Values are still only in memory — leave any existing .env.local
+          // intact. Writing "" here previously wiped secrets after the user
+          // confirmed overwrite, then cancelled mid-wizard.
+          p.cancel("Setup cancelled. Existing .env.local was not modified.");
           return;
         }
         collected[def.name] = typeof value === "string" ? value : "";

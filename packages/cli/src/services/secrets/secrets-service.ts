@@ -432,7 +432,14 @@ export class SecretsService {
       if (eqIdx < 1) continue;
 
       const key = trimmed.substring(0, eqIdx).trim();
-      const value = trimmed.substring(eqIdx + 1).trim();
+      let value = trimmed.substring(eqIdx + 1).trim();
+      // Match EnvService: strip surrounding quotes so secrets are not uploaded with quotes
+      if (
+        (value.startsWith('"') && value.endsWith('"')) ||
+        (value.startsWith("'") && value.endsWith("'"))
+      ) {
+        value = value.slice(1, -1);
+      }
       map.set(key, value);
     }
     return map;
@@ -484,8 +491,8 @@ export class SecretsService {
       stderr: "pipe",
     });
 
-    proc.stdin.write(value + "\n");
-    proc.stdin.end();
+    await proc.stdin.write(value + "\n");
+    await proc.stdin.end();
 
     const exitCode = await proc.exited;
     if (exitCode !== 0) {

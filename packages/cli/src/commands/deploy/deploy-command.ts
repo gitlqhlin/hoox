@@ -118,11 +118,15 @@ async function promptRebuildDecision(buildInfo: {
     ],
   });
 
-  if (choice === undefined || choice === "cancel") {
+  // Clack cancel is a symbol — not the string "cancel" option value
+  if (isCancel(choice) || choice === undefined || choice === "cancel") {
     return "cancel";
   }
 
-  return choice as "rebuild" | "deploy";
+  if (choice === "rebuild" || choice === "deploy") {
+    return choice;
+  }
+  return "cancel";
 }
 
 /**
@@ -225,10 +229,19 @@ async function deployAll(
   const tasks = allItems.map((name) => ({
     title: name,
     run: async (): Promise<DeployResult> => {
-      if (name === "dashboard") {
-        return await deployDashboard(cf, forceRebuildDashboard, true, autoMode);
+      const result =
+        name === "dashboard"
+          ? await deployDashboard(cf, forceRebuildDashboard, true, autoMode)
+          : await deploySingle(configService, cf, name, env);
+      // runRichTasks only marks failure on throw — soft DeployResult
+      // failures must throw so summary shows FAILED and exitCode is set.
+      if (!result.success) {
+        throw new CLIError(
+          result.error ?? `${name} deploy failed`,
+          ExitCode.ERROR
+        );
       }
-      return await deploySingle(configService, cf, name, env);
+      return result;
     },
     details: (r: DeployResult): Record<string, string> => {
       if (!r.success) return { error: r.error ?? "unknown" };
@@ -252,7 +265,15 @@ async function deployAll(
   });
 
   // Preserve the legacy DeployResult[] contract for callers.
-  return richResults.map((r) => r.value!).filter(Boolean);
+  // Failed tasks have no value (thrown); synthesize failed DeployResults.
+  return richResults.map((r) => {
+    if (r.value) return r.value;
+    return {
+      worker: r.title,
+      success: false,
+      error: r.error ?? "deploy failed",
+    } satisfies DeployResult;
+  });
 }
 
 /**
@@ -922,10 +943,8 @@ EXAMPLES:
               `\n${theme.heading("Deployment Plan (dry-run)")}\n`
             );
             process.stdout.write(`${theme.dim("─".repeat(50))}\n`);
-            process.stdout.write(
-              `Workers to deploy (${ordered.length + unknown.length}):\n`
-            );
-            for (const w of [...ordered, ...unknown]) {
+            process.stdout.write(`Workers to deploy (${ordered.length}):\n`);
+            for (const w of ordered) {
               process.stdout.write(`  ${theme.dim("○")} ${w}\n`);
             }
 
@@ -1072,9 +1091,12 @@ EXAMPLES:
           process.stdout.write(
             `\n${theme.heading("Summary:")} ${succeeded}/${ordered.length} deployed`
           );
-          if (failed > 0)
+          if (failed > 0) {
             process.stdout.write(` ${theme.error(`(${failed} failed)`)}\n`);
-          else process.stdout.write(` ${theme.success(" ✓")}\n\n`);
+            process.exitCode = ExitCode.ERROR;
+          } else {
+            process.stdout.write(` ${theme.success(" ✓")}\n\n`);
+          }
         },
         { service: "deploy" }
       )

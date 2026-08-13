@@ -13,8 +13,9 @@
  */
 
 import { Command } from "commander";
-import { select } from "@clack/prompts";
+import { select, isCancel } from "@clack/prompts";
 import path from "node:path";
+import { existsSync, statSync } from "node:fs";
 import { ConfigService } from "../../services/config/index.js";
 import { CloudflareService } from "../../services/cloudflare/index.js";
 import { PrerequisitesService } from "../../services/prerequisites/index.js";
@@ -139,6 +140,9 @@ EXAMPLES:
                   },
                 ],
               });
+              if (isCancel(choice)) {
+                return;
+              }
               if (choice === "native" || choice === "docker") {
                 runtime = choice;
                 await configService.setDevRuntime(runtime);
@@ -381,9 +385,11 @@ EXAMPLES:
             process.cwd(),
             "workers/dashboard"
           );
-          const dashboardDir = Bun.file(dashboardPath);
-
-          if (!(await dashboardDir.exists())) {
+          // Bun.file().exists() is unreliable for directories — use fs.stat
+          if (
+            !existsSync(dashboardPath) ||
+            !statSync(dashboardPath).isDirectory()
+          ) {
             formatError(
               new CLIError(
                 `Dashboard directory not found: ${dashboardPath}`,

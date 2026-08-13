@@ -493,7 +493,9 @@ describe("env command", () => {
 
       const { cap } = await runEnv(["init"]);
       try {
-        expect(cancelMessages.some((m) => /No partial/i.test(m))).toBe(true);
+        expect(
+          cancelMessages.some((m) => /not modified|cancelled/i.test(m))
+        ).toBe(true);
       } finally {
         cap.restore();
       }
