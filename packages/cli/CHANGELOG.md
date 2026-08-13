@@ -5,6 +5,26 @@ This project adheres loosely to [Semantic Versioning](https://semver.org/).
 
 ## Unreleased
 
+## [0.13.0] — 2026-08-13
+
+### Added
+
+- **Workers mesh security hardening** (ships with current worker submodules + `@hoox-sh/hoox-shared@1.4.0`):
+  - Gateway two-phase idempotency (reserve / commit / release), sharded DO keys, fail-closed missing DO
+  - Atomic rate-limit Durable Object (`RATE_LIMITER`) with KV/memory fallback
+  - Telegram notify chatId allowlists (hoox + telegram-worker), 64 KiB body caps
+  - Named D1 RPCs: list-signals, list-system-logs, list-open-positions
+  - Env-first AI provider secrets on agent-worker; Google key via header
+  - Mesh-wide `safeWaitUntil` (including DO lifecycle on trade-worker)
+  - report-worker body gate, chatId policy, auth fail-closed tests
+  - Deploy checklist: `workers/hoox-worker/DEPLOY.md` (DO migrations v1/v2 + allowlist secrets)
+
+### Changed
+
+- Parallel KV bulk gets (`kvGetMany`), dashboard parallel settings/secrets probes
+- Trade HTTP idempotency stores only after success; REST-only order placement
+- Time-bucketed auto fingerprints; softer trade log sampling
+
 ## [0.11.9] — 2026-08-11
 
 ### Fixed
