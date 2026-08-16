@@ -35,22 +35,42 @@ import {
 } from "@/components/ui/empty";
 import { Image, Upload, Sparkles } from "lucide-react";
 import { toast } from "sonner";
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
-/** Allow only http(s) and data:image/* for preview src (blocks javascript: etc.). */
-function isSafeImageSrc(url: string): boolean {
+/**
+ * Normalize to a scheme-safe image URL, or null.
+ * Allows http(s), blob: (createObjectURL), and data:image/*;base64,.
+ */
+export function parseSafeImageSrc(url: string): string | null {
   const trimmed = url.trim();
-  if (!trimmed) return false;
+  if (!trimmed) return null;
   if (trimmed.startsWith("data:image/")) {
-    // Reject data:image/...;base64 with embedded HTML-ish payload prefixes
-    return /^data:image\/[a-zA-Z0-9.+-]+;base64,/.test(trimmed);
+    return /^data:image\/[a-zA-Z0-9.+-]+;base64,/.test(trimmed)
+      ? trimmed
+      : null;
   }
   try {
     const parsed = new URL(trimmed);
-    return parsed.protocol === "https:" || parsed.protocol === "http:";
+    if (
+      parsed.protocol === "https:" ||
+      parsed.protocol === "http:" ||
+      parsed.protocol === "blob:"
+    ) {
+      return parsed.href;
+    }
   } catch {
-    return false;
+    // not an absolute URL
   }
+  return null;
+}
+
+function isPreviewableSrc(src: string): boolean {
+  return (
+    src.startsWith("https://") ||
+    src.startsWith("http://") ||
+    src.startsWith("blob:") ||
+    src.startsWith("data:image/")
+  );
 }
 
 export function VisionUpload() {
@@ -63,6 +83,23 @@ export function VisionUpload() {
   const [model, setModel] = useState("@cf/meta/llama-3.2-11b-vision-instruct");
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState<string | null>(null);
+  const blobPreviewRef = useRef<string | null>(null);
+
+  const revokeBlobPreview = () => {
+    if (blobPreviewRef.current) {
+      URL.revokeObjectURL(blobPreviewRef.current);
+      blobPreviewRef.current = null;
+    }
+  };
+
+  useEffect(() => {
+    return () => {
+      if (blobPreviewRef.current) {
+        URL.revokeObjectURL(blobPreviewRef.current);
+        blobPreviewRef.current = null;
+      }
+    };
+  }, []);
 
   const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -75,39 +112,52 @@ export function VisionUpload() {
       toast.error("Image must be under 10 MB");
       return;
     }
+    revokeBlobPreview();
+    const objectUrl = URL.createObjectURL(file);
+    blobPreviewRef.current = objectUrl;
     const reader = new FileReader();
     reader.onloadend = () => {
       const base64 = reader.result as string;
-      if (typeof base64 !== "string" || !isSafeImageSrc(base64)) {
+      if (typeof base64 !== "string" || !parseSafeImageSrc(base64)) {
+        revokeBlobPreview();
+        setPreviewUrl(null);
         toast.error("Could not read image file");
         return;
       }
       setImageBase64(base64);
-      setPreviewUrl(base64);
+      setPreviewUrl(objectUrl);
       setImageUrl("");
       setResult(null);
+    };
+    reader.onerror = () => {
+      revokeBlobPreview();
+      setPreviewUrl(null);
+      toast.error("Could not read image file");
     };
     reader.readAsDataURL(file);
   };
 
   const handleUrlChange = (url: string) => {
+    revokeBlobPreview();
     setImageUrl(url);
-    const trimmed = url.trim();
-    // Only preview when the URL is a safe image scheme (http/https).
-    setPreviewUrl(trimmed && isSafeImageSrc(trimmed) ? trimmed : null);
+    setPreviewUrl(parseSafeImageSrc(url));
     setImageBase64(null);
     setResult(null);
   };
 
   const clearImage = () => {
+    revokeBlobPreview();
     setImageUrl("");
     setImageBase64(null);
     setPreviewUrl(null);
     setResult(null);
   };
 
+  const safePreviewSrc = previewUrl ? parseSafeImageSrc(previewUrl) : null;
+  const showPreview = !!safePreviewSrc && isPreviewableSrc(safePreviewSrc);
+
   const analyzeImage = async () => {
-    if (!previewUrl || !isSafeImageSrc(previewUrl)) {
+    if (!safePreviewSrc || !isPreviewableSrc(safePreviewSrc)) {
       toast.error("Please provide a valid image URL or file");
       return;
     }
@@ -192,11 +242,11 @@ export function VisionUpload() {
               className="cursor-pointer"
             />
           </div>
-          {previewUrl && isSafeImageSrc(previewUrl) && (
+          {showPreview && safePreviewSrc && (
             <div className="overflow-hidden rounded-lg border">
-              {/* Safe schemes only (http/https/data:image); validated above */}
+              {/* Prefix-checked after URL parse: http(s) / blob: / data:image */}
               <img
-                src={previewUrl}
+                src={safePreviewSrc}
                 alt="Preview"
                 className="max-h-[300px] w-full object-contain"
                 referrerPolicy="no-referrer"
@@ -208,7 +258,7 @@ export function VisionUpload() {
               />
             </div>
           )}
-          {previewUrl && isSafeImageSrc(previewUrl) && (
+          {showPreview && (
             <Button
               variant="ghost"
               size="sm"

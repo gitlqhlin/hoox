@@ -446,12 +446,12 @@ export function SetupWizard({ dialog }: SetupWizardProps) {
   }, []);
 
   useEffect(() => {
-    runChecks();
+    void runChecks();
   }, [runChecks]);
 
   // ── Detect Cloudflare account ID from wrangler.jsonc ────────────────────
   useEffect(() => {
-    (async () => {
+    void (async () => {
       try {
         const file = Bun.file("wrangler.jsonc");
         if (await file.exists()) {
@@ -481,7 +481,7 @@ export function SetupWizard({ dialog }: SetupWizardProps) {
 
   // ── Restore wizard session from disk on mount ───────────────────────────
   useEffect(() => {
-    (async () => {
+    void (async () => {
       try {
         const f = Bun.file(WIZARD_SESSION_PATH);
         if (!(await f.exists())) return;
@@ -742,7 +742,7 @@ export function SetupWizard({ dialog }: SetupWizardProps) {
     if (key.name === "left") handleBack();
     if (key.name === "escape") handleBack();
     if (key.name === "tab" && key.shift) handleBack();
-    if (key.name === "r" && step === 0) runChecks();
+    if (key.name === "r" && step === 0) void runChecks();
   });
 
   // ── Validation indicator for a field ─────────────────────────────────────
@@ -1185,7 +1185,7 @@ export function SetupWizard({ dialog }: SetupWizardProps) {
                 bold
                 onMouseUp={() => {
                   setDeployLog("");
-                  handleDeploy();
+                  void handleDeploy();
                 }}
               >
                 {"  [ Retry Deploy ]  "}
@@ -1226,10 +1226,12 @@ export function SetupWizard({ dialog }: SetupWizardProps) {
             </box>
             <box paddingTop={2} justifyContent="center">
               <text
-                fg={deploying ? Colors.dim : Colors.accent}
-                bg={deploying ? Colors.border : Colors.card}
+                fg={Colors.accent}
+                bg={Colors.card}
                 bold
-                onMouseUp={deploying ? undefined : handleDeploy}
+                onMouseUp={() => {
+                  void handleDeploy();
+                }}
               >
                 {"  [ Deploy Now ]  "}
               </text>
