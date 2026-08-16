@@ -161,6 +161,7 @@
               {
                 "group": "Core Concepts",
                 "pages": [
+                  "docs/enduser/concepts/ecosystem",
                   "docs/enduser/concepts/how-hoox-works",
                   "docs/enduser/concepts/edge-architecture",
                   "docs/enduser/concepts/cloudflare-services",
@@ -173,6 +174,7 @@
                 "group": "Guides",
                 "pages": [
                   "docs/enduser/guides/local-development",
+                  "docs/enduser/guides/screenshots",
                   "docs/enduser/guides/tui",
                   "docs/enduser/guides/database-ops",
                   "docs/enduser/guides/secrets-security",
@@ -180,7 +182,9 @@
                   "docs/enduser/guides/manage-infra",
                   "docs/enduser/guides/deploy-workers",
                   "docs/enduser/guides/repair",
-                  "docs/enduser/guides/monitor-trading"
+                  "docs/enduser/guides/monitor-trading",
+                  "docs/enduser/guides/pyne-live-trading",
+                  "docs/enduser/guides/axis-and-hoox"
                 ]
               },
               {

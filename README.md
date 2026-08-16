@@ -156,6 +156,18 @@ hoox check health
 
 The same stack, three surfaces. CLI for automation and CI, TUI for terminal operations, dashboard for visual monitoring and risk.
 
+<p align="center">
+  <img src="docs/images/gifs/tui-view-switch.gif" alt="HOOX TUI switching views" width="820" />
+</p>
+
+| Surface       | Tour                                                                                                                                                           |
+| ------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **CLI**       | [help tour](docs/images/gifs/cli-help-tour.gif) · [deploy --help](docs/images/cli/help-deploy.png)                                                             |
+| **TUI**       | [view switch](docs/images/gifs/tui-view-switch.gif) · [wizard](docs/images/tui/setup-wizard-step-02-api-keys.png) · [dashboard](docs/images/tui/dashboard.png) |
+| **Dashboard** | [nav](docs/images/gifs/dashboard-nav.gif) · [setup](docs/images/dashboard/setup.png)                                                                           |
+
+Full set (every view, command group, and page): [docs.hoox.sh → Interface gallery](https://docs.hoox.sh/docs/enduser/guides/screenshots) · files in [`docs/images/`](docs/images/).
+
 ### CLI
 
 The primary operator interface. Running `hoox` with no arguments launches the interactive menu; `hoox tui` opens the full OpenTUI operations center.

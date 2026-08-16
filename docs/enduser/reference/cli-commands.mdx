@@ -10,6 +10,16 @@ description: "Comprehensive CLI directory detailing ~30 command groups, 60+ subc
 
 The `@hoox-sh/hoox-cli` tool (**0.13.x**) manages the entire monorepo development, provisioning, deployment, monitoring, and self-healing pipelines. This reference provides the complete command tree, positional arguments, optional flags, and concrete examples for all command groups. The binary is also available as **`hx`**.
 
+<Frame caption="hoox deploy --help">
+  <img src="/docs/images/cli/help-deploy.png" alt="Terminal showing hoox deploy help" />
+</Frame>
+
+<Frame caption="Help tour: version, logs, TUI, doctor">
+  <img src="/docs/images/gifs/cli-help-tour.gif" alt="Animated CLI help screens" />
+</Frame>
+
+Per-group stills: [Interface gallery](/docs/enduser/guides/screenshots#cli).
+
 Install: `bun add -g @hoox-sh/hoox-cli`. Recommended bootstrap: `hoox onboard`. Prefer CLI commands over raw Wrangler for day-to-day ops.
 
 **Current defaults (0.13.x):** ships with mesh security hardening (`@hoox-sh/hoox-shared@1.4.0` + worker submodules) — two-phase gateway idempotency, `RateLimiterStore`, chatId allowlists, named D1 list RPCs, mesh-wide `safeWaitUntil`. CLI surface still includes monorepo auto-detect + remember (run `hx` from any cwd), Linear Rail banner (`◆ H · O · O · X`), quieter `check setup` secrets UX, setup gates, secret sync modes (`--system` / `--required`), `hoox pyne` for **pyne-worker**, operator security plane (`doctor --security`, `tunnel check`). Global UX: `--no-color` / `NO_COLOR` / `TERM=dumb`, completion footers, “did you mean …”, sectioned help. Historical release notes: [v0.9.0](#historical-v090-output-polish) · [v0.8.0](#historical-v080-refactor).
