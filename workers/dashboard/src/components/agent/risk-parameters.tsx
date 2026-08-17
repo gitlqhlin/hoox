@@ -41,7 +41,7 @@ export function RiskParameters() {
 
   useEffect(() => {
     const controller = new AbortController();
-    (async () => {
+    void (async () => {
       try {
         const res = await fetch("/api/agent/config", {
           signal: controller.signal,

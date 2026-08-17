@@ -1293,7 +1293,7 @@ export function SettingsView({ dialog }: SettingsViewProps = {}) {
     // Import mode overrides
     if (importing) {
       if (key.name === "return" || key.name === "enter") {
-        handleImportConfirm();
+        void handleImportConfirm();
         return;
       }
       if (key.name === "escape") {
@@ -1394,19 +1394,19 @@ export function SettingsView({ dialog }: SettingsViewProps = {}) {
         if (key.name === "space" || key.name === "return") {
           switch (activeItem) {
             case 0:
-              handleClearCache();
+              void handleClearCache();
               break;
             case 1:
-              handleExportData();
+              void handleExportData();
               break;
             case 2:
-              handleImportData();
+              void handleImportData();
               break;
             case 3:
-              handleCheckSetup();
+              void handleCheckSetup();
               break;
             case 4:
-              handleRunAutoRepair();
+              void handleRunAutoRepair();
               break;
           }
         }

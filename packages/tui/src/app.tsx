@@ -41,11 +41,7 @@ import {
   toastReconnectedMode,
 } from "./components/ui/connection-toasts";
 import { getRendererRef } from "./hooks";
-import {
-  DialogProvider,
-  useDialog,
-  type DialogHandle,
-} from "./components/ui/dialog";
+import { DialogProvider, useDialog } from "./components/ui/dialog";
 import {
   getViewFactory,
   getViewShortcutMap,
@@ -132,7 +128,7 @@ function AppRootInner({ safeMode = false }: { safeMode?: boolean }) {
   // Shared restoreSession validates all 16 ViewIds (unknown → dashboard).
   useEffect(() => {
     let cancelled = false;
-    (async () => {
+    void (async () => {
       const session = await restoreSession();
       if (cancelled) return;
 
@@ -170,7 +166,7 @@ function AppRootInner({ safeMode = false }: { safeMode?: boolean }) {
     }
     let cancelled = false;
 
-    (async () => {
+    void (async () => {
       const store = useServiceStore.getState();
       const conn = resolveTuiConnectionEnv();
       await tuiDevLog.info("connection", "startup data load begin", {

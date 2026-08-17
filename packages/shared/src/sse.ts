@@ -141,7 +141,7 @@ export function subscribeSSE<T>(
   };
 
   // Start the SSE loop (don't await — it runs forever)
-  run();
+  void run();
 
   return {
     abort: () => {

@@ -91,7 +91,7 @@ export function UsageTable({
   useEffect(() => {
     if (isControlled) return;
     const controller = new AbortController();
-    (async () => {
+    void (async () => {
       try {
         const res = await fetch("/api/agent/usage", {
           signal: controller.signal,

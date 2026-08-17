@@ -109,7 +109,7 @@ global.fetch = ((input: RequestInfo | URL, init?: RequestInit) => {
 //
 // We mock both the package name AND the WASM loader file to ensure
 // coverage regardless of how bun resolves the module.
-mock.module("yoga-layout", () => ({
+void mock.module("yoga-layout", () => ({
   default: {
     Node: {
       create: () => createMockNode(),
@@ -118,7 +118,7 @@ mock.module("yoga-layout", () => ({
 }));
 
 // Also mock the WASM loader entry point that causes the fetch() error
-mock.module("yoga-layout/dist/binaries/yoga-wasm-base64-esm.js", () => ({
+void mock.module("yoga-layout/dist/binaries/yoga-wasm-base64-esm.js", () => ({
   default: {
     Node: {
       create: () => createMockNode(),
@@ -180,7 +180,7 @@ function createMockNode() {
 // the minimum surface the existing tests rely on; richer storage
 // stubbing is provided separately by `workers/hoox-worker/test/mocks/cloudflare-workers.ts`
 // for tests that opt in.
-mock.module("cloudflare:workers", () => ({
+void mock.module("cloudflare:workers", () => ({
   DurableObject: class MockDurableObject {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     ctx: any;

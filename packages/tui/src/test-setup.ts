@@ -65,7 +65,7 @@ try {
 //   - The Temporal Dead Zone race condition is avoided because we've
 //     already pre-loaded @opentui/core above
 
-mock.module("@opentui/core/testing", () => {
+void mock.module("@opentui/core/testing", () => {
   if (coreAvailable && realCreateTestRenderer) {
     return {
       // Spread any other exports from the real module (setRendererCapabilities,
@@ -180,7 +180,7 @@ function installCliBridgeDouble(): void {
   ];
   for (const p of paths) {
     try {
-      mock.module(p, () => cliBridgeModule);
+      void mock.module(p, () => cliBridgeModule);
     } catch {
       // Specifier may be invalid in some environments — ignore
     }
@@ -257,14 +257,14 @@ async function installNetworkDoubles(): Promise<void> {
 
   for (const p of apiPaths) {
     try {
-      mock.module(p, apiFactory);
+      void mock.module(p, apiFactory);
     } catch {
       // ignore bad specifier
     }
   }
   for (const p of ssePaths) {
     try {
-      mock.module(p, sseFactory);
+      void mock.module(p, sseFactory);
     } catch {
       // ignore
     }

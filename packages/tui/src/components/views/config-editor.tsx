@@ -626,7 +626,7 @@ export function ConfigEditor() {
           setFocusedTreeIdx((i) => Math.min(flatFiles.length - 1, i + 1));
           break;
         case "enter":
-          if (focusedFilePath) selectFile(focusedFilePath);
+          if (focusedFilePath) void selectFile(focusedFilePath);
           break;
       }
     }
@@ -643,7 +643,7 @@ export function ConfigEditor() {
     }
 
     if (key.ctrl && key.name === "s" && selectedFile) {
-      handleSave();
+      void handleSave();
     }
   });
 

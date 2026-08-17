@@ -120,7 +120,7 @@ function StatusDot({
 
 function RowActions({ url, name }: { url: string; name: string }) {
   const copyUrl = () => {
-    navigator.clipboard.writeText(url);
+    void navigator.clipboard.writeText(url);
     toast.success("URL copied to clipboard", { description: name });
   };
 

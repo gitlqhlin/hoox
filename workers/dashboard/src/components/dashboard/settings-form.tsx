@@ -229,7 +229,7 @@ export function SettingsForm() {
       }
     }
 
-    load();
+    void load();
     return () => controller.abort();
   }, []);
 

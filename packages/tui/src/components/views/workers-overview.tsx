@@ -237,7 +237,7 @@ export function WorkersOverview({ dialog }: WorkersOverviewProps = {}) {
 
     let cancelled = false;
 
-    (async () => {
+    void (async () => {
       try {
         const result = await cliBridge.monitorStatus();
         if (cancelled) return;

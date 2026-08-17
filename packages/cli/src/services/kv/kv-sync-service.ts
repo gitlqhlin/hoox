@@ -138,8 +138,8 @@ export class KvSyncService {
 
     // Pipe the value through stdin — never via CLI args (avoids leaking
     // secrets via `ps`/process cmdline/shell history).
-    proc.stdin.write(value + "\n");
-    proc.stdin.end();
+    void proc.stdin.write(value + "\n");
+    void proc.stdin.end();
 
     const [, stderr] = await Promise.all([
       new Response(proc.stdout).text(),

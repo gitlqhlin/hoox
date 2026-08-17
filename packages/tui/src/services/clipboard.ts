@@ -59,8 +59,8 @@ export async function copyViaSystemClipboard(
         stdout: "ignore",
         stderr: "ignore",
       });
-      proc.stdin.write(text);
-      proc.stdin.end();
+      void proc.stdin.write(text);
+      void proc.stdin.end();
 
       let timedOut = false;
       const timer = setTimeout(() => {
