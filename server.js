@@ -88,7 +88,6 @@ if (!API_KEY) {
 // ---------------------------------------------------------------------------
 
 const ROUTES = [
-  { prefix: "/", worker: hoox }, // gateway catch-all (must stay last for /)
   { prefix: "/trade", worker: tradeWorker },
   { prefix: "/telegram", worker: telegramWorker },
   { prefix: "/d1", worker: d1Worker },
@@ -97,6 +96,7 @@ const ROUTES = [
   { prefix: "/email", worker: emailWorker },
   { prefix: "/report", worker: reportWorker },
   { prefix: "/analytics", worker: analyticsWorker },
+  { prefix: "/", worker: hoox }, // gateway catch-all (must stay last for /)
 ];
 
 // ---------------------------------------------------------------------------
