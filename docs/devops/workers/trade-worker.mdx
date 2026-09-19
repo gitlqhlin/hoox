@@ -96,6 +96,20 @@ Operator guide: [Test Trading](/docs/enduser/guides/test-trading).
 
 ---
 
+## DEX venues (P1)
+
+Spot swaps route through `WEB3_WALLET_SERVICE` (`web3-wallet-worker`). P1 is spot-only; perps venues land in P2–P4.
+
+| Name | Chain | Kind | Toggle | Quantity | Test flag |
+| ---- | ----- | ---- | ------ | -------- | --------- |
+| `uniswap-ethereum` | ethereum | spot | `exchange:uniswap-ethereum:enabled` | `openLong` spends QUOTE (ExactIn) to buy BASE; `openShort` sells BASE | Rejected (`TEST_TRADING_UNSUPPORTED`) — mainnet-only |
+| `uniswap-arbitrum` | arbitrum | spot | `exchange:uniswap-arbitrum:enabled` | same | Rejected — mainnet-only |
+| `jupiter-solana` | solana | spot | `exchange:jupiter-solana:enabled` | same | Rejected — mainnet-only |
+
+Uniswap venues send `dexVersion: "v3"` (ETH/USDC liquidity is V3; Arbitrum's V2 router in the wallet worker is SushiSwap). Native `ETH`/`SOL` map to the wrapped mint on contract paths. Credential source is `wallet-binding` (mesh key), not CEX API secrets.
+
+---
+
 ## 🔀 2. The Provider-Based `ExchangeRouter` Pattern
 
 To support multiple centralized exchanges with different API schemas while maintaining a clean code structure, `trade-worker` implements a **Provider Composition Pattern**:

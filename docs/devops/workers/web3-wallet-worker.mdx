@@ -49,6 +49,9 @@ The `web3-wallet-worker` does not expose a public URL, communicating internally 
 - **`WALLET_MNEMONIC_SECRET`**: Encrypted 12 or 24-word HD wallet seed phrase used to derive multiple accounts.
 - **`RPC_PROVIDER_URL`**: High-availability HTTP Ethereum / EVM RPC provider (e.g., Infura, Alchemy, or QuickNode).
 - **`INTERNAL_KEY_BINDING`**: Shared key used to validate calls from internal compute nodes.
+- **`SOLANA_PRIVATE_KEY`**: Base58-encoded 32-byte seed or 64-byte Phantom secret. `wrangler secret put`; never logged.
+- **`JUPITER_API_KEY`**: `x-api-key` for `https://api.jup.ag/swap/v2`. `wrangler secret put`.
+- **`RPC_URL_SOLANA`**: Solana JSON-RPC (or KV `wallet:rpc:solana`).
 
 ### Local Development Mocking (`.dev.vars`)
 
@@ -77,7 +80,7 @@ All endpoints except `GET /health` require `X-Internal-Auth-Key` (fail-closed vi
 | `POST` | `/transfer` | ERC-20 transfer (server-side USD pricing + policy) |
 | `POST` | `/approve` | ERC-20 approve (spender whitelist + maxApprovalAmount) |
 | `GET` | `/quote` | DEX quote (read-only) |
-| `POST` | `/swap` | DEX swap via Uniswap-V2-compatible router |
+| `POST` | `/swap` | DEX swap: Uniswap V2/V3 (ethereum, arbitrum) or Jupiter Swap V2 (solana) |
 | `GET` | `/transactions` | List stored tx records (D1) |
 
 ### A. Transfer tokens
