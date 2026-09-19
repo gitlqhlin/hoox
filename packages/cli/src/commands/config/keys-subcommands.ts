@@ -39,12 +39,17 @@ const DEV_VARS_WORKER_KEYS: Record<string, string[]> = {
     "INTERNAL_KEY_BINDING",
     "TELEGRAM_INTERNAL_KEY_BINDING",
     "API_SERVICE_KEY_BINDING",
+    "WALLET_EXECUTE_KEY_BINDING",
   ],
   "report-worker": ["INTERNAL_KEY_BINDING"],
   "email-worker": ["INTERNAL_KEY_BINDING"],
   "agent-worker": ["INTERNAL_KEY_BINDING", "AGENT_INTERNAL_KEY"],
-  hoox: ["INTERNAL_KEY_BINDING", "WEBHOOK_API_KEY_BINDING"],
-  "web3-wallet-worker": ["INTERNAL_KEY_BINDING"],
+  hoox: [
+    "INTERNAL_KEY_BINDING",
+    "WEBHOOK_API_KEY_BINDING",
+    "WALLET_EXECUTE_KEY_BINDING",
+  ],
+  "web3-wallet-worker": ["INTERNAL_KEY_BINDING", "WALLET_EXECUTE_KEY_BINDING"],
   "telegram-worker": ["INTERNAL_KEY_BINDING"],
   dashboard: [
     "AGENT_INTERNAL_KEY",
@@ -135,6 +140,7 @@ Creates the following keys (aligned with setup / SYSTEM_SECRET_NAMES):
   - TELEGRAM_INTERNAL_KEY_BINDING (same as INTERNAL)
   - TRADE_INTERNAL_KEY            (same as INTERNAL)
   - API_SERVICE_KEY_BINDING       (same as INTERNAL)
+  - WALLET_EXECUTE_KEY_BINDING    (same as INTERNAL)
   - WEBHOOK_API_KEY_BINDING       (32-byte hex, distinct)
   - SESSION_SECRET                (64-byte hex, distinct)
 
@@ -160,6 +166,7 @@ EXAMPLES:
             TELEGRAM_INTERNAL_KEY_BINDING: meshKey,
             TRADE_INTERNAL_KEY: meshKey,
             API_SERVICE_KEY_BINDING: meshKey,
+            WALLET_EXECUTE_KEY_BINDING: meshKey,
             WEBHOOK_API_KEY_BINDING: generateKey(),
             SESSION_SECRET: generateKey(64),
           };

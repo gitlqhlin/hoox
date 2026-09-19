@@ -310,7 +310,10 @@ export class WizardEngine {
         Object.assign(workers[workerName].vars, integration.vars);
       }
 
-      for (const secretName of Object.keys(integration.secrets)) {
+      for (const secretName of [
+        ...Object.keys(integration.secrets),
+        ...Object.keys(integration.optionalSecrets ?? {}),
+      ]) {
         if (!workers[workerName].secrets.includes(secretName)) {
           workers[workerName].secrets.push(secretName);
         }

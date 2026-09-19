@@ -581,7 +581,9 @@ describe("init command", () => {
       // Verify wrangler.jsonc was written
       const workersJsonc = captured.writes["wrangler.jsonc"];
       expect(workersJsonc).toBeDefined();
-      expect(workersJsonc).toContain("cf-token-ni");
+      expect(workersJsonc).toContain(
+        "<USE_CLOUDFLARE_API_TOKEN_ENV_OR_WRANGLER_AUTH>"
+      );
       expect(workersJsonc).toContain("cf-account-ni");
       expect(workersJsonc).toContain("ss-ni");
       expect(workersJsonc).toContain("ni-prefix");

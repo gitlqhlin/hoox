@@ -140,6 +140,9 @@ export const DASHBOARD_FIELD_KV_OVERRIDES: Record<string, string> = {
   "exchanges:binance_enabled": "exchange:binance:enabled",
   "exchanges:mexc_enabled": "exchange:mexc:enabled",
   "exchanges:bybit_enabled": "exchange:bybit:enabled",
+  "exchanges:uniswap_ethereum_enabled": "exchange:uniswap-ethereum:enabled",
+  "exchanges:uniswap_arbitrum_enabled": "exchange:uniswap-arbitrum:enabled",
+  "exchanges:jupiter_solana_enabled": "exchange:jupiter-solana:enabled",
   "wallet:config": "wallet:config",
 };
 

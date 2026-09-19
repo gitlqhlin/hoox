@@ -97,6 +97,9 @@ export const FIELD_KV_OVERRIDES: Record<string, string> = {
   "exchanges:binance_enabled": "exchange:binance:enabled",
   "exchanges:mexc_enabled": "exchange:mexc:enabled",
   "exchanges:bybit_enabled": "exchange:bybit:enabled",
+  "exchanges:uniswap_ethereum_enabled": "exchange:uniswap-ethereum:enabled",
+  "exchanges:uniswap_arbitrum_enabled": "exchange:uniswap-arbitrum:enabled",
+  "exchanges:jupiter_solana_enabled": "exchange:jupiter-solana:enabled",
   /** Web3 single document config (not flat wallet:slippage_* keys). */
   "wallet:config": "wallet:config",
 };

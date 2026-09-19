@@ -38,7 +38,8 @@
         "WEBHOOK_API_KEY_BINDING",
         "OPERATOR_API_KEY",
         "TELEGRAM_ALLOWED_CHAT_IDS",
-        "HA_TOKEN_BINDING"
+        "HA_TOKEN_BINDING",
+        "WALLET_EXECUTE_KEY_BINDING"
       ]
     },
     "agent-worker": {
@@ -69,12 +70,13 @@
       "path": "workers/trade-worker",
       "vars": {},
       // Mesh: INTERNAL_KEY_BINDING, TELEGRAM_INTERNAL_KEY_BINDING,
-      //       API_SERVICE_KEY_BINDING (system name; also in env-service map)
+      //       API_SERVICE_KEY_BINDING, WALLET_EXECUTE_KEY_BINDING
       // Integration: exchange API keys
       "secrets": [
         "INTERNAL_KEY_BINDING",
         "TELEGRAM_INTERNAL_KEY_BINDING",
         "API_SERVICE_KEY_BINDING",
+        "WALLET_EXECUTE_KEY_BINDING",
         "EXCHANGE_KEY_BINDING",
         "EXCHANGE_SECRET_BINDING"
       ]
@@ -97,11 +99,15 @@
       "enabled": true,
       "path": "workers/web3-wallet-worker",
       "vars": {},
-      // Mesh: INTERNAL_KEY_BINDING; integration: wallet material
+      // Mesh: INTERNAL_KEY_BINDING, WALLET_EXECUTE_KEY_BINDING
+      // Integration: EVM wallet material + Solana/Jupiter (DEX P1)
       "secrets": [
         "INTERNAL_KEY_BINDING",
+        "WALLET_EXECUTE_KEY_BINDING",
         "WALLET_MNEMONIC_SECRET",
-        "WALLET_PK_SECRET"
+        "WALLET_PK_SECRET",
+        "SOLANA_PRIVATE_KEY",
+        "JUPITER_API_KEY"
       ]
     },
     "email-worker": {

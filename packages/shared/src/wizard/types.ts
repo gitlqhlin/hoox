@@ -32,7 +32,9 @@ export interface IntegratedService {
   key: string;
   label: string;
   workerName: string;
-  secrets: Record<string, string>; // name -> prompt label
+  secrets: Record<string, string>; // name -> prompt label (required)
+  /** Prompted during init; empty is allowed (setup may auto-generate). */
+  optionalSecrets?: Record<string, string>;
   vars?: Record<string, string>;
 }
 

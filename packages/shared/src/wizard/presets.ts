@@ -117,6 +117,11 @@ export const INTEGRATIONS: IntegratedService[] = [
       WALLET_MNEMONIC_SECRET: "Wallet Mnemonic Phrase",
       WALLET_PK_SECRET: "Wallet Private Key",
     },
+    optionalSecrets: {
+      SOLANA_PRIVATE_KEY:
+        "Solana private key (base58; leave empty to auto-generate)",
+      JUPITER_API_KEY: "Jupiter Swap API key (portal.jup.ag; Solana DEX)",
+    },
   },
   {
     key: "email",

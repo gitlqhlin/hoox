@@ -437,6 +437,7 @@ describe("SecretsService", () => {
             "API_SERVICE_KEY_BINDING=api-real",
             "INTERNAL_KEY_BINDING=int-real",
             "TELEGRAM_INTERNAL_KEY_BINDING=tg-int-real",
+            "WALLET_EXECUTE_KEY_BINDING=wallet-exec-real",
             "EXCHANGE_KEY_BINDING=placeholder_binance",
             "EXCHANGE_SECRET_BINDING=",
           ].join("\n") + "\n"
@@ -458,12 +459,13 @@ describe("SecretsService", () => {
         const sync = expectOk(result);
         expect(sync.ok).toBe(true);
         // trade-worker mesh map: INTERNAL + TELEGRAM_INTERNAL + API_SERVICE
-        // exchange keys are ignored under --system
+        // + WALLET_EXECUTE. Exchange keys are ignored under --system
         expect(sync.synced.sort()).toEqual(
           [
             "API_SERVICE_KEY_BINDING",
             "INTERNAL_KEY_BINDING",
             "TELEGRAM_INTERNAL_KEY_BINDING",
+            "WALLET_EXECUTE_KEY_BINDING",
           ].sort()
         );
         expect(called.map(([n]) => n).sort()).toEqual(
@@ -471,6 +473,7 @@ describe("SecretsService", () => {
             "API_SERVICE_KEY_BINDING",
             "INTERNAL_KEY_BINDING",
             "TELEGRAM_INTERNAL_KEY_BINDING",
+            "WALLET_EXECUTE_KEY_BINDING",
           ].sort()
         );
         expect(called.find(([n]) => n.startsWith("BINANCE"))).toBeUndefined();
@@ -657,6 +660,7 @@ describe("SecretsService", () => {
       expect(isSystemSecret("AGENT_INTERNAL_KEY")).toBe(true);
       expect(isSystemSecret("SESSION_SECRET")).toBe(true);
       expect(SYSTEM_SECRET_NAMES).toContain("API_SERVICE_KEY_BINDING");
+      expect(SYSTEM_SECRET_NAMES).toContain("WALLET_EXECUTE_KEY_BINDING");
     });
 
     it("excludes integration secrets", () => {

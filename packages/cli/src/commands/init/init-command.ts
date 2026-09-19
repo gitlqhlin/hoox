@@ -685,6 +685,9 @@ export async function runInitCommand(
           continue;
 
         const secretEntries = Object.entries(integration.secrets);
+        const optionalEntries = Object.entries(
+          integration.optionalSecrets ?? {}
+        );
         const groupFields: Record<string, () => Promise<string | symbol>> = {};
 
         for (const [secretName] of secretEntries) {
@@ -695,6 +698,12 @@ export async function runInitCommand(
                 if (!value) return "This secret is required";
                 return;
               },
+            });
+        }
+        for (const [secretName, label] of optionalEntries) {
+          groupFields[secretName] = () =>
+            p.password({
+              message: `${label} (optional):`,
             });
         }
 
@@ -719,6 +728,12 @@ export async function runInitCommand(
             return;
           }
           collectedSecrets[key][secretName] = val;
+        }
+        for (const [secretName] of optionalEntries) {
+          const val = collected[secretName];
+          if (typeof val === "string" && val.trim().length > 0) {
+            collectedSecrets[key][secretName] = val.trim();
+          }
         }
       }
     }

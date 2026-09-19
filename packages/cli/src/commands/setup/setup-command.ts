@@ -88,7 +88,7 @@ function showDryRun(options: Record<string, unknown>): void {
   if (!options.skipKeys) {
     steps.push("1. Generate keys → .keys/setup.env + worker .dev.vars files");
     steps.push(
-      "   - INTERNAL_KEY_BINDING / AGENT / TELEGRAM / TRADE / API_SERVICE (shared mesh)"
+      "   - INTERNAL_KEY_BINDING / AGENT / TELEGRAM / TRADE / API_SERVICE / WALLET_EXECUTE (shared mesh)"
     );
     steps.push("   - SESSION_SECRET (64-byte random hex)");
     steps.push("   - WEBHOOK_API_KEY_BINDING (32-byte random hex)");
@@ -121,7 +121,18 @@ function showDryRun(options: Record<string, unknown>): void {
       TELEGRAM_INTERNAL_KEY_BINDING: ["trade-worker"],
       API_SERVICE_KEY_BINDING: ["trade-worker", "dashboard"],
       TRADE_INTERNAL_KEY: ["dashboard"],
+      WALLET_EXECUTE_KEY_BINDING: [
+        "trade-worker",
+        "web3-wallet-worker",
+        "hoox",
+      ],
     };
+    steps.push(
+      "   - SOLANA_PRIVATE_KEY (auto-generated seed if missing) → web3-wallet-worker"
+    );
+    steps.push(
+      "   - JUPITER_API_KEY (pushed if present in .dev.vars; otherwise set later)"
+    );
     for (const [secret, workers] of Object.entries(map)) {
       steps.push(`   - ${secret} → ${workers.join(", ")}`);
     }

@@ -139,6 +139,12 @@ describe("dashboard-manifest", () => {
     expect(
       buildDashboardKvKey("trade-worker", "exchanges:binance_enabled")
     ).toBe("exchange:binance:enabled");
+    expect(
+      buildDashboardKvKey("trade-worker", "exchanges:uniswap_ethereum_enabled")
+    ).toBe("exchange:uniswap-ethereum:enabled");
+    expect(
+      buildDashboardKvKey("trade-worker", "exchanges:jupiter_solana_enabled")
+    ).toBe("exchange:jupiter-solana:enabled");
     // Unknown section keeps section:name (not bare name)
     expect(buildDashboardKvKey("agent-worker", "unknown:foo")).toBe(
       "unknown:foo"

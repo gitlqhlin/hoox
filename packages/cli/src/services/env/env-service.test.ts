@@ -10,7 +10,7 @@ describe("EnvService", () => {
   describe("getDefinitions", () => {
     it("returns all known env var definitions", () => {
       const defs = EnvService.getDefinitions();
-      expect(defs.length).toBe(37);
+      expect(defs.length).toBe(41);
       expect(defs.some((d) => d.name === "CLOUDFLARE_API_TOKEN")).toBe(true);
       expect(defs.some((d) => d.name === "API_KEY")).toBe(true);
       expect(defs.some((d) => d.name === "PYNE_API_KEY")).toBe(true);
@@ -112,6 +112,9 @@ describe("EnvService", () => {
         TELEGRAM_SECRET_TOKEN: "tg-secret",
         WALLET_MNEMONIC_SECRET: "mnemonic",
         WALLET_PK_SECRET: "pk",
+        SOLANA_PRIVATE_KEY: "sol-seed",
+        JUPITER_API_KEY: "jup-key",
+        WALLET_EXECUTE_KEY_BINDING: "wallet-exec",
         EMAIL_HOST_BINDING: "imap.example.com",
         EMAIL_USER_BINDING: "user",
         EMAIL_PASS_BINDING: "pass",
@@ -149,6 +152,18 @@ describe("EnvService", () => {
       expect(result["workers/web3-wallet-worker"]).toBeDefined();
       expect(result["workers/web3-wallet-worker"]?.WALLET_MNEMONIC_SECRET).toBe(
         "mnemonic"
+      );
+      expect(result["workers/web3-wallet-worker"]?.SOLANA_PRIVATE_KEY).toBe(
+        "sol-seed"
+      );
+      expect(result["workers/web3-wallet-worker"]?.JUPITER_API_KEY).toBe(
+        "jup-key"
+      );
+      expect(
+        result["workers/web3-wallet-worker"]?.WALLET_EXECUTE_KEY_BINDING
+      ).toBe("wallet-exec");
+      expect(result["workers/trade-worker"]?.WALLET_EXECUTE_KEY_BINDING).toBe(
+        "wallet-exec"
       );
       expect(result["workers/email-worker"]).toBeDefined();
       expect(result["workers/email-worker"]?.EMAIL_HOST_BINDING).toBe(

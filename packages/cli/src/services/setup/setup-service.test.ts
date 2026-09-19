@@ -160,6 +160,7 @@ describe("SetupService", () => {
         TELEGRAM_INTERNAL_KEY_BINDING: "e".repeat(64),
         TRADE_INTERNAL_KEY: "f".repeat(64),
         API_SERVICE_KEY_BINDING: "g".repeat(64),
+        WALLET_EXECUTE_KEY_BINDING: "h".repeat(64),
       };
       expect(Object.keys(keys).sort()).toEqual(
         [
@@ -169,6 +170,7 @@ describe("SetupService", () => {
           "SESSION_SECRET",
           "TELEGRAM_INTERNAL_KEY_BINDING",
           "TRADE_INTERNAL_KEY",
+          "WALLET_EXECUTE_KEY_BINDING",
           "WEBHOOK_API_KEY_BINDING",
         ].sort()
       );

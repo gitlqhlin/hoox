@@ -67,8 +67,14 @@ describe("registerKeysCommand (top-level, in-process)", () => {
     const tradeDev = await Bun.file("workers/trade-worker/.dev.vars").text();
     expect(tradeDev).toContain("API_SERVICE_KEY_BINDING=");
     expect(tradeDev).toContain("TELEGRAM_INTERNAL_KEY_BINDING=");
+    expect(tradeDev).toContain("WALLET_EXECUTE_KEY_BINDING=");
     const hooxDev = await Bun.file("workers/hoox-worker/.dev.vars").text();
     expect(hooxDev).toContain("WEBHOOK_API_KEY_BINDING=");
+    expect(hooxDev).toContain("WALLET_EXECUTE_KEY_BINDING=");
+    const walletDev = await Bun.file(
+      "workers/web3-wallet-worker/.dev.vars"
+    ).text();
+    expect(walletDev).toContain("WALLET_EXECUTE_KEY_BINDING=");
   });
 
   it("lists keys after generate", async () => {

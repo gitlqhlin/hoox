@@ -28,6 +28,7 @@ import {
 import { homedir } from "node:os";
 import { join } from "node:path";
 import { CloudflareService } from "../cloudflare/index.js";
+import { applyWalletRpcDefaults, ensureSolanaPrivateKey } from "./dex-setup.js";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -43,6 +44,8 @@ export interface GeneratedKeys {
   TRADE_INTERNAL_KEY: string;
   /** Mesh API service key (trade-worker + dashboard). */
   API_SERVICE_KEY_BINDING: string;
+  /** Mesh key for trade/gateway → web3-wallet-worker (falls back to INTERNAL). */
+  WALLET_EXECUTE_KEY_BINDING: string;
 }
 
 export interface SetupOptions {
@@ -136,6 +139,8 @@ const SECRET_WORKER_MAP: Record<string, readonly string[]> = {
   API_SERVICE_KEY_BINDING: ["trade-worker", "dashboard"],
   // env-service + wrangler: dashboard only (trade alias for execute auth)
   TRADE_INTERNAL_KEY: ["dashboard"],
+  // DEX P1: trade + gateway call wallet; wallet validates this key
+  WALLET_EXECUTE_KEY_BINDING: ["trade-worker", "web3-wallet-worker", "hoox"],
 };
 
 /** Which secrets each worker should get in .dev.vars. */
@@ -146,12 +151,17 @@ const DEV_VARS_WORKER_KEYS: Record<string, (keyof GeneratedKeys)[]> = {
     "INTERNAL_KEY_BINDING",
     "TELEGRAM_INTERNAL_KEY_BINDING",
     "API_SERVICE_KEY_BINDING",
+    "WALLET_EXECUTE_KEY_BINDING",
   ],
   "report-worker": ["INTERNAL_KEY_BINDING"],
   "email-worker": ["INTERNAL_KEY_BINDING"],
   "agent-worker": ["INTERNAL_KEY_BINDING", "AGENT_INTERNAL_KEY"],
-  hoox: ["INTERNAL_KEY_BINDING", "WEBHOOK_API_KEY_BINDING"],
-  "web3-wallet-worker": ["INTERNAL_KEY_BINDING"],
+  hoox: [
+    "INTERNAL_KEY_BINDING",
+    "WEBHOOK_API_KEY_BINDING",
+    "WALLET_EXECUTE_KEY_BINDING",
+  ],
+  "web3-wallet-worker": ["INTERNAL_KEY_BINDING", "WALLET_EXECUTE_KEY_BINDING"],
   "telegram-worker": ["INTERNAL_KEY_BINDING"],
   dashboard: [
     "AGENT_INTERNAL_KEY",
@@ -245,6 +255,8 @@ function loadExistingKeysFromDisk(): GeneratedKeys | null {
     if (!v) return null;
     keys[name] = v;
   }
+  keys.WALLET_EXECUTE_KEY_BINDING =
+    map.get("WALLET_EXECUTE_KEY_BINDING") ?? keys.INTERNAL_KEY_BINDING;
   return keys;
 }
 
@@ -278,6 +290,7 @@ export class SetupService {
           step: "keys",
           message: "Using existing keys from .keys/setup.env (--skip-keys)",
         });
+        this.ensureDexLocalConfig();
         return existing;
       }
       this.onProgress({
@@ -306,6 +319,7 @@ export class SetupService {
       TELEGRAM_INTERNAL_KEY_BINDING: internalKey,
       TRADE_INTERNAL_KEY: internalKey,
       API_SERVICE_KEY_BINDING: internalKey,
+      WALLET_EXECUTE_KEY_BINDING: internalKey,
     };
 
     // Ensure .keys directory exists and is private
@@ -375,7 +389,92 @@ export class SetupService {
       message: `Keys saved to ${KEYS_DIR}/setup.env + ${devVarsCount} .dev.vars files`,
     });
 
+    this.ensureDexLocalConfig();
+
     return keys;
+  }
+
+  /**
+   * DEX P1 local config that setup can fill without operator input:
+   * Solana seed (if missing) + public Arbitrum/Solana RPC URLs when empty.
+   */
+  ensureDexLocalConfig(): {
+    solanaGenerated: boolean;
+    rpcPatched: string[];
+  } {
+    const walletDir = join("workers", workerFsDir("web3-wallet-worker"));
+    mkdirSync(walletDir, { recursive: true });
+    const walletDevVars = join(walletDir, ".dev.vars");
+    const solana = ensureSolanaPrivateKey(walletDevVars);
+    if (solana.generated) {
+      this.onProgress({
+        type: "info",
+        step: "keys",
+        message:
+          "Generated SOLANA_PRIVATE_KEY (32-byte seed) in web3-wallet-worker/.dev.vars",
+      });
+    }
+    const wranglerPath = join(
+      "workers",
+      workerFsDir("web3-wallet-worker"),
+      "wrangler.jsonc"
+    );
+    const rpcPatched = applyWalletRpcDefaults(wranglerPath);
+    if (rpcPatched.length > 0) {
+      this.onProgress({
+        type: "info",
+        step: "keys",
+        message: `Defaulted empty wallet RPCs: ${rpcPatched.join(", ")}`,
+      });
+    }
+    return { solanaGenerated: solana.generated, rpcPatched };
+  }
+
+  /** Push auto-generated SOLANA_PRIVATE_KEY from .dev.vars if present. */
+  async pushDexSecrets(): Promise<SecretResult[]> {
+    const path = join(
+      "workers",
+      workerFsDir("web3-wallet-worker"),
+      ".dev.vars"
+    );
+    if (!existsSync(path)) return [];
+    const map = parseEnvFile(readFileSync(path, "utf-8"));
+    const solanaKey = map.get("SOLANA_PRIVATE_KEY")?.trim();
+    const jupiterKey = map.get("JUPITER_API_KEY")?.trim();
+    const results: SecretResult[] = [];
+    const puts: Array<[string, string]> = [];
+    if (solanaKey) puts.push(["SOLANA_PRIVATE_KEY", solanaKey]);
+    if (jupiterKey) puts.push(["JUPITER_API_KEY", jupiterKey]);
+    for (const [name, value] of puts) {
+      this.onProgress({
+        type: "secret-start",
+        step: "secrets",
+        worker: "web3-wallet-worker",
+        secret: name,
+        message: `Setting ${name} on web3-wallet-worker...`,
+      });
+      const result = await this._putSecretWithRetry(
+        "web3-wallet-worker",
+        name,
+        value
+      );
+      results.push({
+        worker: "web3-wallet-worker",
+        secret: name,
+        ok: result.ok,
+        error: result.ok ? undefined : result.error,
+      });
+      this.onProgress({
+        type: result.ok ? "secret-done" : "secret-error",
+        step: "secrets",
+        worker: "web3-wallet-worker",
+        secret: name,
+        message: result.ok
+          ? `web3-wallet-worker: ${name} set`
+          : `web3-wallet-worker: ${name} failed — ${result.error}`,
+      });
+    }
+    return results;
   }
 
   // ── D1 Schema ──────────────────────────────────────────────────────────
@@ -1558,9 +1657,10 @@ export class SetupService {
       results.secrets = [];
     } else {
       const secretResults = await this.setSecrets(keys);
-      results.secrets = secretResults;
-      const secretOk = secretResults.filter((r) => r.ok).length;
-      const secretFail = secretResults.filter((r) => !r.ok).length;
+      const dexSecretResults = await this.pushDexSecrets();
+      results.secrets = [...secretResults, ...dexSecretResults];
+      const secretOk = results.secrets.filter((r) => r.ok).length;
+      const secretFail = results.secrets.filter((r) => !r.ok).length;
       steps.push({
         step: "secrets",
         success: secretFail === 0,

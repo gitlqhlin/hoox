@@ -176,6 +176,9 @@ hoox clone my-hoox-app
 | `TELEGRAM_ALLOWED_CHAT_IDS` | hoox                              | `wrangler secret put` | Required for notify | Comma-separated chat IDs for public webhook notify (fail-closed when unset); alias `AUTHORIZED_CHAT_IDS` |
 | `WALLET_PK_SECRET`        | web3-wallet-worker                  | `wrangler secret put` | Optional     | Wallet private key                     |
 | `WALLET_MNEMONIC_SECRET`  | web3-wallet-worker                  | `wrangler secret put` | Optional     | Wallet mnemonic phrase                 |
+| `WALLET_EXECUTE_KEY_BINDING` | trade-worker, web3-wallet-worker, hoox | `hoox setup` (auto) | DEX P1 | Mesh key for wallet `/swap` (falls back to INTERNAL_KEY_BINDING) |
+| `SOLANA_PRIVATE_KEY`      | web3-wallet-worker                  | `hoox setup` (auto if unset) | Optional | Solana seed (base58). Replace with a Phantom export to use an existing wallet |
+| `JUPITER_API_KEY`         | web3-wallet-worker                  | `hoox secrets set` / init wizard | Solana DEX | Jupiter Swap V2 key from developers.jup.ag/portal |
 | `EMAIL_HOST`              | email-worker                        | `wrangler secret put` | Optional     | Email IMAP host                        |
 | `EMAIL_USER`              | email-worker                        | `wrangler secret put` | Optional     | Email username                         |
 | `EMAIL_PASS`              | email-worker                        | `wrangler secret put` | Optional     | Email password                         |

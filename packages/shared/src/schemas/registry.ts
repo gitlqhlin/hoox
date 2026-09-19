@@ -119,6 +119,10 @@ const manifests: Record<string, WorkerManifest> = {
         type: "secret",
         description: "Optional unified testnet API secret",
       },
+      WALLET_EXECUTE_KEY_BINDING: {
+        type: "secret",
+        description: "Mesh key for DEX swaps via web3-wallet-worker",
+      },
     },
     services: [
       {
@@ -130,6 +134,11 @@ const manifests: Record<string, WorkerManifest> = {
         binding: "TELEGRAM_SERVICE",
         service: "telegram-worker",
         description: "Notifications",
+      },
+      {
+        binding: "WEB3_WALLET_SERVICE",
+        service: "web3-wallet-worker",
+        description: "DEX spot swaps (Uniswap / Jupiter)",
       },
     ],
     infrastructure: {
@@ -231,6 +240,22 @@ const manifests: Record<string, WorkerManifest> = {
       WALLET_MNEMONIC_SECRET: {
         type: "secret",
         description: "Wallet mnemonic phrase",
+      },
+      WALLET_EXECUTE_KEY_BINDING: {
+        type: "secret",
+        description: "Mesh key for privileged wallet routes",
+      },
+      SOLANA_PRIVATE_KEY: {
+        type: "secret",
+        description: "Solana signing key (base58 seed or Phantom export)",
+      },
+      JUPITER_API_KEY: {
+        type: "secret",
+        description: "Jupiter Swap V2 API key",
+      },
+      RPC_URL_SOLANA: {
+        type: "plaintext",
+        description: "Solana JSON-RPC URL",
       },
     },
     services: [

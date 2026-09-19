@@ -61,6 +61,9 @@ describe("INTEGRATIONS", () => {
     expect(keys).not.toContain("bybit");
     expect(keys).not.toContain("mexc");
     expect(keys).toContain("wallet");
+    const wallet = INTEGRATIONS.find((i) => i.key === "wallet");
+    expect(wallet?.optionalSecrets?.SOLANA_PRIVATE_KEY).toBeDefined();
+    expect(wallet?.optionalSecrets?.JUPITER_API_KEY).toBeDefined();
     expect(keys).toContain("email");
     expect(keys).toContain("telegram");
     expect(keys).toContain("openai");
