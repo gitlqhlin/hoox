@@ -5,64 +5,53 @@
 
 ---
 title: "Email Signal Routing"
-description: "How to configure the email-worker parsing microservice, set up regex scanning patterns, and securely route SMTP/IMAP signals."
+description: "Route trade signals into email-worker via Mailgun, Cloudflare Email Routing, or an authenticated JSON post. There is no IMAP inbox poll."
 ---
 
-The **`email-worker`** is an ancillary input plugin that allows you to trigger automated trades via raw email alerts. While webhooks are the standard path, many legacy systems, charting platforms, or custom newsletters only distribute trade signals via email.
+The **`email-worker`** turns an inbound email or a JSON body into a trade signal and forwards it to `trade-worker`. It does **not** log into a mailbox. Cloudflare® Workers cannot open IMAP sockets, and `EMAIL_HOST`, `EMAIL_USER`, and `EMAIL_PASS` are reserved names that this worker does not read.
 
-This tutorial walks you through setting up `email-worker` credentials, configuring regex subject scanning patterns, and securely routing messages.
+Three ingress paths:
 
----
-
-## 🛜 1. Injecting Email Connection Credentials
-
-To allow `email-worker` to log into your dedicated signals inbox, inject your SMTP/IMAP mailbox credentials as encrypted Workers Secrets:
+| Path | Route | Auth |
+| --- | --- | --- |
+| Mailgun | `POST /webhook` | HMAC-SHA256. Headers `Mailgun-Signature`, `Mailgun-Timestamp`, `Mailgun-Token`. Secret `MAILGUN_API_KEY`. |
+| Cloudflare® Email Routing | the worker `email` handler | Cloudflare® delivers the message to the binding. |
+| Internal JSON | `POST /email-signal` | `X-Internal-Auth-Key` only. This route does **not** check a Mailgun signature. |
 
 ```bash
-# 1. Inject the IMAP/POP3 host address
-hoox secrets set EMAIL_HOST "imap.securemail.com"
-
-# 2. Inject the mailbox username/email address
-hoox secrets set EMAIL_USER "signals@my-trading-app.com"
-
-# 3. Inject the secure mailbox app password
-hoox secrets set EMAIL_PASS "your_app_password_here"
+hoox secrets set MAILGUN_API_KEY "your-mailgun-http-webhook-signing-key"
+hoox secrets set INTERNAL_KEY_BINDING "mesh-internal-key"
 ```
 
+Point the Mailgun route at `https://<email-worker-host>/webhook`. For Email Routing, bind the destination address to this worker in the Cloudflare® dashboard.
+
 <Warning>
-  Always use a **dedicated** email address solely for trade signals. Never use
-  your personal inbox. Additionally, configure your email provider (e.g., Gmail,
-  Fastmail) to require an **App Password** rather than your master account
-  credentials to ensure tight access control.
+  Use a dedicated Mailgun route or routing address for signals. The scheduled
+  handler only drops the in-memory pattern cache. It does not scan an inbox.
 </Warning>
 
 ---
 
 ## 🔎 2. Configuring Regex Parsing Rules in KV
 
-Once `email-worker` establishes connection, it scans the inbox on a background schedule, evaluating incoming subjects and message bodies against **Regular Expression (regex)** patterns defined in `CONFIG_KV`:
+Plain-text bodies are matched against patterns in `CONFIG_KV`. JSON bodies that already contain `exchange`, `action`, and `symbol` skip the regex.
 
 ```bash
-# A. Define the prefix pattern required in the email subject line
-hoox config kv set email:scan_subject "^TRADE SIGNAL:.*"
-
-# B. Define the regex pattern used to extract the target asset token
+# Coin symbols pulled out of a plain-text body
 hoox config kv set email:coin_pattern "(BTC|ETH|SOL|LINK|AVAX)"
 
-# C. Define the regex pattern used to resolve trade action
+# Buy / sell words in that body
 hoox config kv set email:action_pattern "(LONG|SHORT|CLOSE|BUY|SELL)"
 ```
 
 ### The Parsing Mechanism
 
-When an email is scanned:
+When a Mailgun webhook or Email Routing message arrives:
 
-1. The worker matches the subject. If the subject is `"TRADE SIGNAL: Breakout Detected"`, the check passes.
-2. The worker scans the email body using the regex patterns:
-   - Body: `"...we are entering a LONG position on SOL/USDT..."`
-   - Hitting `email:coin_pattern` resolves: **`SOL`**
-   - Hitting `email:action_pattern` resolves: **`LONG`** (translated internally to `BUY`).
-3. Automatically triggers an order via the `trade-worker` service binding.
+1. The worker reads the plain body (`body-plain` / `stripped-text` for Mailgun).
+2. If the body is JSON with `exchange`, `action`, and `symbol`, that object is the signal.
+3. Otherwise the regex keys above extract the coin and the action. `LONG` / `BUY` become `LONG`; `SHORT` / `SELL` become `SHORT`.
+4. The worker forwards the signal to `trade-worker` over the `TRADE_SERVICE` binding.
 
 ### JSON body with testnet mode
 
@@ -82,30 +71,33 @@ If the email body is structured JSON (instead of free-text), optional fields are
 
 ---
 
-## 🛡️ 3. Security Audits: SPF & DKIM Validation
+## 🛡️ 3. What actually authenticates the message
 
-To prevent malicious "spoofing" (e.g., an unauthorized sender trying to forge a trade signal to your inbox):
-
-- **Sender Validation**: The `email-worker` parses the email's headers and matches the sender's address against a safe allowlist in KV: `email:authorized_senders = ["alerts@tradingview.com"]`.
-- **DNS Verification**: The worker validates the **SPF (Sender Policy Framework)** and **DKIM (DomainKeys Identified Mail)** headers to verify that the message physically originated from the authorized domain and was not intercepted.
+Mailgun calls are rejected unless `MAILGUN_API_KEY` is set and the HMAC of `timestamp + token` matches `Mailgun-Signature`, inside a ±15 minute window. `POST /email-signal` ignores that signature and requires the mesh internal key. There is no SPF or DKIM check inside the worker, and there is no sender allowlist key.
 
 ---
 
-## 🧪 4. Testing Your Email Pipeline
+## 🧪 4. Testing the JSON path
 
-To verify that the email signal ingestion loop works perfectly:
+`POST /email-signal` is the path you can call without a Mailgun account. Replace the host and key with your local `hoox dev` port (unpinned workers start at `8800`) and mesh key:
 
-1. Compose a mock email from your authorized sender address.
-2. Subject: `TRADE SIGNAL: Cross Over`
-3. Body: `Action: SHORT, Symbol: ETHUSDT, Quantity: 0.05`
-4. Send to your dedicated inbox.
-5. In your terminal, tail the email worker's runtime logs to confirm the parse and order submission:
-   ```bash
-   hoox monitor logs email-worker
-   ```
+```bash
+curl -sS -X POST http://localhost:8800/email-signal \
+  -H "content-type: application/json" \
+  -H "X-Internal-Auth-Key: $INTERNAL_KEY_BINDING" \
+  -d '{"exchange":"bybit","action":"LONG","symbol":"BTCUSDT","quantity":0.001,"test":true}'
+```
+
+`"test": true` requests exchange testnet execution where the exchange allows it. Plain-text extraction never sets `test`. See [Test Trading](/docs/enduser/guides/test-trading).
+
+Tail the isolate while you send:
+
+```bash
+hoox monitor logs email-worker
+```
 
 ### 🔗 Next Steps
 
-|- **[Alert Troubleshooting](/docs/enduser/tutorials/tradingview-webhook#webhook-troubleshooting-runbook)** — Common TradingView® webhook errors and resolutions.
-|- **[Platform Configuration Guide](/docs/enduser/getting-started/configuration)** — Comprehensive dictionary of all 31 env keys and 16 KV key-value items.
-|- **[API Endpoint Reference](/docs/enduser/reference/api-endpoints)** — Review full REST payloads and HTTP error returns.
+- **[Alert Troubleshooting](/docs/enduser/tutorials/tradingview-webhook#webhook-troubleshooting-runbook)** — Common TradingView® webhook errors and resolutions.
+- **[Platform Configuration Guide](/docs/enduser/getting-started/configuration)** — Environment variables and KV keys.
+- **[API Endpoint Reference](/docs/enduser/reference/api-endpoints)** — Review full REST payloads and HTTP error returns.

@@ -50,7 +50,7 @@ This command performs a dependency audit and calls Cloudflare®'s APIs to provis
   </li>
   <li>
     <strong>
-      <code>rag-index</code>
+      <code>my-rag-index</code>
     </strong>{" "}
     Vectorize vector search database.
   </li>
@@ -142,8 +142,9 @@ Vectorize indexes house high-dimensional vector embeddings that power semantic s
 # A. List all Vectorize indexes
 hoox infra vectorize list
 
-# B. Create a vector index with specific dimensions (e.g. 1536 for OpenAI embeddings)
-hoox infra vectorize create rag-index --dimensions 1536 --metric cosine
+# B. Create the mesh index. CLI default dimensions are 768.
+#    Telegram and gateway RAG embed with @cf/baai/bge-base-en-v1.5 (768-d).
+hoox infra vectorize create my-rag-index --dimensions 768 --metric cosine
 ```
 
 ---

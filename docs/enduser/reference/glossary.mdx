@@ -35,6 +35,10 @@ A curated vocabulary of terms used throughout the Hoox documentation. Understand
 | **Test trading**       | Sandbox execution mode enabled by `"test": true` on a webhook/queue payload. Routes to exchange testnet hosts (Binance/Bybit); ledger status `TEST_EXECUTED`.        |
 | **TEST_EXECUTED**      | D1 trade status written for testnet fills so live reports and stats can exclude them.                                                                                 |
 | **Testnet position id**| Position primary key pattern `{exchange}-testnet-{symbol}-{side}` isolating sandbox exposure from live OPEN rows.                                                     |
+| **DEX venue**          | Spot exchange name routed through `web3-wallet-worker`: `uniswap-ethereum`, `uniswap-arbitrum`, `jupiter-solana`. Pairs use `BASE/QUOTE`. Mainnet-only.               |
+| **ExactIn**            | Swap mode that spends a fixed input amount (`quantity`) and accepts a slippage-bounded output. DEX `LONG` spends quote to buy base.                                  |
+| **SwapRouter02**       | Uniswap V3 periphery router used on Ethereum and Arbitrum (`dexVersion: "v3"`). Native ETH unwraps via `unwrapWETH9`.                                                |
+| **Jupiter Swap V2**    | Solana aggregator API (`GET /order` + `POST /execute` at `api.jup.ag/swap/v2`). Requires `JUPITER_API_KEY`.                                                          |
 
 ## Architecture & Infrastructure
 

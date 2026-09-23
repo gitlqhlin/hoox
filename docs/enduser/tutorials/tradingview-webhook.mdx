@@ -88,7 +88,7 @@ Once your script is saved and added to your chart:
 When the Moving Average crossover occurs on your chart:
 
 1. TradingView® compiles the JSON payload and POSTs it to your edge gateway.
-2. The `hoox` gateway validates the signature and routes the order to Bybit.
+2. The `hoox` gateway validates the signature and routes the order to the `exchange` in the payload (Bybit in this example; DEX venues use `BASE/QUOTE` — [DEX spot swaps](/docs/enduser/guides/dex-spot-swaps)).
 3. Check the transaction directly in your terminal:
    ```bash
    hoox monitor trades

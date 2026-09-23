@@ -17,8 +17,8 @@ Worker sources live as **git submodules** under `workers/` in [hoox-sh/hoox](htt
 | Worker | Role | Source |
 | ------ | ---- | ------ |
 | [hoox (Gateway)](/docs/devops/workers/hoox) | Public webhook ingress, WAF/auth, two-phase DO idempotency + rate-limit DO, notify chatId allowlist, queue/service dispatch | [hoox-worker](https://github.com/hoox-sh/hoox-worker) |
-| [trade-worker](/docs/devops/workers/trade-worker) | Exchange REST execution (Binance / Bybit / MEXC), queue concurrency, named D1 RPCs, test trading | [trade-worker](https://github.com/hoox-sh/trade-worker) |
-| [web3-wallet-worker](/docs/devops/workers/web3-wallet-worker) | On-chain wallet identity (ethers.js); bridge toward DeFi settlement | [web3-wallet-worker](https://github.com/hoox-sh/web3-wallet-worker) |
+| [trade-worker](/docs/devops/workers/trade-worker) | CEX REST (Binance / Bybit / MEXC) + DEX spots via `WEB3_WALLET_SERVICE`, queue, named D1 RPCs, test trading | [trade-worker](https://github.com/hoox-sh/trade-worker) |
+| [web3-wallet-worker](/docs/devops/workers/web3-wallet-worker) | EVM + Solana signing; Uniswap V3 and Jupiter Swap V2 `/swap` | [web3-wallet-worker](https://github.com/hoox-sh/web3-wallet-worker) |
 
 ## Data & intelligence
 

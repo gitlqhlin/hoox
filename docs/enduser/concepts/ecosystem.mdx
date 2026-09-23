@@ -51,7 +51,7 @@ flowchart LR
 Only **trade-worker** holds exchange keys. Paths that reach it:
 
 - HOOX gateway `POST /webhook` (TradingView / HTTP), after `WEBHOOK_API_KEY_BINDING`
-- email-worker `POST /email-signal` (Mailgun HMAC or internal JSON)
+- email-worker `POST /webhook` (Mailgun HMAC) or `POST /email-signal` (internal JSON only)
 - telegram-worker commands (allowlisted)
 - **pyne-worker** `TRADE_SERVICE` on `StrategyEvent` (`X-Internal-Auth-Key`)
 

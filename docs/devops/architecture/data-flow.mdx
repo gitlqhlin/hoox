@@ -99,7 +99,7 @@ sequenceDiagram
 
 ## 3. PDF Portfolio Report Rendering Flow
 
-Runs twice daily to automate HTML dashboard rendering, compile PDFs via Puppeteer on the edge, offload to R2 storage, and dispatch download corridors.
+Runs twice daily (08:00 and 18:00 UTC) to render an HTML report, compile a PDF through the `BROWSER` binding, store it in R2, and dispatch a download link.
 
 ```mermaid
 sequenceDiagram
@@ -110,10 +110,10 @@ sequenceDiagram
     participant R2 as R2 Object Storage Bucket
     participant TG as telegram-worker
 
-    Cron->>RP: Fire trigger: 06:00 & 18:00 UTC
+    Cron->>RP: Fire trigger: 08:00 & 18:00 UTC
     RP->>RP: Query D1 P&L history & compile HTML5 template
-    RP->>BR: POST /browser-rendering/pdf (HTML string payload)
-    Note over BR: Spin up headless Puppeteer Chrome & render viewport
+    RP->>BR: BROWSER.quickAction("pdf", html)
+    Note over BR: Browser Rendering binding returns a PDF buffer
     BR-->>RP: Return compiled PDF Buffer stream
     RP->>R2: PutObject: reports/daily-report-{timestamp}.pdf
     RP->>TG: Service Binding invoke: POST /alert (P&L report link)
@@ -211,7 +211,7 @@ sequenceDiagram
 | **SESSIONS_KV**  | `SESSIONS_KV` (Key-Value)      | Session access states and API authorization cookies.           | `hoox` Gateway                              |
 | **R2 Storage**   | `trade-reports` (S3 Bucket)    | Compiled PDF portfolio reports.                                | `report-worker`                             |
 | **R2 Storage**   | `hoox-system-logs` (S3 Bucket) | Verbose JSON exchange API payloads (REST & WebSocket logs).    | `trade-worker`                              |
-| **Vectorize**    | `my-rag-index` (Vector DB)     | Semantic chat and history vector embeddings.                   | `telegram-worker`                           |
+| **Vectorize**    | `my-rag-index` (768-d)         | Semantic chat and history vector embeddings.                   | `hoox`, `telegram-worker`                   |
 
 ### 🔗 Next Steps
 

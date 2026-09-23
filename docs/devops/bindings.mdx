@@ -73,9 +73,7 @@ This document provides a comprehensive reference for all bindings, environment v
 
 | Binding | Worker       | Database Name | Description                    |
 | ------- | ------------ | ------------- | ------------------------------ |
-| `DB`    | d1-worker    | trade-data-db | Main database for trading data |
-| `DB`    | trade-worker | trade-data-db | Database for trade operations  |
-| `DB`    | agent-worker | trade-data-db | Portfolio queries              |
+| `DB`    | d1-worker    | trade-data-db | Only worker that binds D1. trade-worker, agent-worker, report-worker, and the dashboard call it through service binding `D1_SERVICE`. |
 
 ## AI Bindings
 
@@ -106,29 +104,21 @@ Both classes are exported from `workers/hoox-worker/src/index.ts`. `wrangler dep
 
 ## Browser Rendering
 
-Report-worker uses the Cloudflare Browser Rendering **REST API** (no wrangler binding needed):
-
-```
-POST https://api.cloudflare.com/client/v4/accounts/{id}/browser-rendering/pdf
-Authorization: Bearer {CF_API_TOKEN}
-Body: { html: "...", options: { format: "A4" } }
-```
+`report-worker` declares a wrangler `browser` binding named `BROWSER` and calls `env.BROWSER.quickAction("pdf", { html, options })`. That path does not call the Browser Rendering REST API and does not need `CF_API_TOKEN`. If `BROWSER` or `REPORTS_BUCKET` is missing, the cron falls back to a text Telegram summary.
 
 ## Local Development URLs
 
-For local development with `wrangler dev`, the following service URLs are used:
+`hoox dev` pins these ports (`LOCAL_PORTS` in `packages/cli/src/commands/dev/dev-command.ts`). agent-worker, email-worker, report-worker, and analytics-worker are not pinned; they take `8800+` in enable order. Docker Compose publishes only `8787` and `8794` to the host.
 
-| Service            | Local URL             | Used By                                               |
-| ------------------ | --------------------- | ----------------------------------------------------- |
-| hoox (Gateway)     | http://localhost:8787 | Webhook clients                                       |
-| Trade Worker       | http://localhost:8789 | hoox, agent-worker, email-worker                      |
-| Telegram Worker    | http://localhost:8791 | hoox, trade-worker, agent-worker, web3-wallet, report |
-| d1-worker          | http://localhost:8792 | trade-worker, agent-worker, report, dashboard         |
-| Web3 Wallet Worker | http://localhost:8793 | trade-worker                                          |
-| dashboard          | http://localhost:8794 | Users (browser)                                       |
-| agent-worker       | http://localhost:8795 | dashboard                                             |
-| email-worker       | http://localhost:8796 | — (cron triggered)                                    |
-| report-worker      | http://localhost:8797 | — (cron triggered)                                    |
+| Service            | `hoox dev` port | Local URL             | Called by                                              |
+| ------------------ | --------------: | --------------------- | ------------------------------------------------------ |
+| hoox (Gateway)     |            8787 | http://localhost:8787 | Webhook clients                                        |
+| trade-worker       |            8788 | http://localhost:8788 | hoox, agent-worker, email-worker                       |
+| d1-worker          |            8789 | http://localhost:8789 | trade-worker, agent-worker, report-worker, dashboard   |
+| telegram-worker    |            8790 | http://localhost:8790 | hoox, trade-worker, agent-worker, web3-wallet, report  |
+| web3-wallet-worker |            8792 | http://localhost:8792 | trade-worker                                           |
+| dashboard          |            8794 | http://localhost:8794 | Browser (`hoox dev dashboard`, not a wrangler port)    |
+| pyne-worker        |            8799 | http://localhost:8799 | hoox / `hoox pyne`                                     |
 
 ## Configuration
 

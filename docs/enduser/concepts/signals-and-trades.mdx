@@ -16,7 +16,13 @@ Every signal received by the public gateway at `/webhook` must contain a valid, 
 ```typescript
 export interface WebhookSignal {
   apiKey: string; // Authentication token matching CONFIG_KV webhooks:api_key
-  exchange: "binance" | "bybit" | "mexc"; // Target exchange router
+  exchange:
+    | "binance"
+    | "bybit"
+    | "mexc"
+    | "uniswap-ethereum"
+    | "uniswap-arbitrum"
+    | "jupiter-solana"; // CEX or DEX venue
   action: "LONG" | "SHORT" | "CLOSE_LONG" | "CLOSE_SHORT"; // Position intent
   symbol: string; // Asset symbol (e.g. "BTCUSDT", "ETHUSDT")
   quantity: number; // Order size (amount of asset or contracts)
@@ -25,8 +31,8 @@ export interface WebhookSignal {
   price?: number; // Optional limit price (default: market price)
   /**
    * When true, execute on the exchange testnet/sandbox (Binance Futures
-   * testnet, Bybit testnet). MEXC has no public REST sandbox and rejects
-   * the request. Prefer dedicated BINANCE_TESTNET_* / BYBIT_TESTNET_* secrets.
+   * testnet, Bybit testnet). MEXC and DEX venues reject the request.
+   * Prefer dedicated BINANCE_TESTNET_* / BYBIT_TESTNET_* secrets.
    */
   test?: boolean;
 }
@@ -37,14 +43,14 @@ export interface WebhookSignal {
 | Parameter        | Type      | Required | Constraints                                                                           |
 | ---------------- | --------- | :------: | ------------------------------------------------------------------------------------- |
 | `apiKey`         | `string`  | **Yes**  | Must match the encrypted `webhooks:api_key` hash in your `CONFIG_KV` namespace        |
-| `exchange`       | `string`  | **Yes**  | One of: `binance`, `bybit`, `mexc` — must match a configured exchange router          |
+| `exchange`       | `string`  | **Yes**  | CEX: `binance`, `bybit`, `mexc`. DEX: `uniswap-ethereum`, `uniswap-arbitrum`, `jupiter-solana` |
 | `action`         | `string`  | **Yes**  | One of: `LONG`, `SHORT`, `CLOSE_LONG`, `CLOSE_SHORT`                                  |
-| `symbol`         | `string`  | **Yes**  | Parsed and standardized — `BTC-USDT`, `BTC_USDT`, and `btc/usdt` all become `BTCUSDT` |
+| `symbol`         | `string`  | **Yes**  | CEX: `BTCUSDT` (dashes/slashes stripped). DEX: **`BASE/QUOTE`** required (`ETH/USDC`) |
 | `quantity`       | `number`  | **Yes**  | Must be greater than zero; checked against exchange minimum order size                |
 | `leverage`       | `number`  |    No    | Range: `1` to `125` depending on exchange margin profiles; defaults to `1` (spot)     |
 | `idempotencyKey` | `string`  |    No    | If omitted, auto-generated including live/test mode so modes do not dedupe each other |
 | `price`          | `number`  |    No    | Limit price; defaults to current market price if omitted                              |
-| `test`           | `boolean` |    No    | `true` → testnet for Binance/Bybit; MEXC returns `TEST_TRADING_UNSUPPORTED`           |
+| `test`           | `boolean` |    No    | `true` → testnet for Binance/Bybit; MEXC and DEX venues return `TEST_TRADING_UNSUPPORTED` |
 
 ### Test trading
 
@@ -53,6 +59,8 @@ export interface WebhookSignal {
 | Binance  |          Yes          | `testnet.binancefuture.com`        |
 | Bybit    |          Yes          | `api-testnet.bybit.com`            |
 | MEXC     |           No          | Rejected (no public REST sandbox)  |
+| Uniswap Ethereum / Arbitrum | No | Rejected (mainnet-only) |
+| Jupiter Solana | No | Rejected (mainnet-only) |
 
 | Side effect | Live | Test (`test: true`) |
 | ----------- | ---- | ------------------- |
@@ -66,7 +74,7 @@ export interface WebhookSignal {
 
 **Credentials:** prefer `BINANCE_TESTNET_KEY_BINDING` / `BINANCE_TESTNET_SECRET_BINDING` and `BYBIT_TESTNET_*`. If unset, live bindings are used (warning logged).
 
-Full operator guide: **[Test Trading](/docs/enduser/guides/test-trading)**.
+Full operator guide: **[Test Trading](/docs/enduser/guides/test-trading)**. DEX spots: **[DEX spot swaps](/docs/enduser/guides/dex-spot-swaps)**.
 
 ---
 

@@ -37,7 +37,7 @@ The system runs **11 compute surfaces**: gateway, trade execution, AI agent, D1 
 │                                                                                                                   │
 │ ┌───────────────────────────────────────────────────────────────────────────────────────────────────────────────┐ │
 │ │                                          EXTERNAL INPUTS                                                     │ │
-│ │              TradingView Webhooks │ Email (IMAP) │ Telegram │ API                                           │ │
+│ │              TradingView Webhooks │ Email (Mailgun) │ Telegram │ API                                         │ │
 │ └───────────────────────────────────────────────────┬───────────────────────────────────────────────────────────┘ │
 │                                                      │                                                           │
 │                                                      ▼                                                           │

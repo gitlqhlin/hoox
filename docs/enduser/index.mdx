@@ -17,8 +17,8 @@ graph TD
     TV[TradingView® Alerts] -->|HTTPS Webhook| GW[hoox Gateway]
     GW -->|Service Binding| TW[trade-worker]
     GW -->|Service Binding| TGW[telegram-worker]
-    TW -->|Signed API Request| CentralizedEx[Centralized Exchanges: Binance / Bybit / MEXC]
-    TW -->|On-Chain Swap| Web3Wallet[DeFi Wallet Execution]
+    TW -->|Signed API Request| CentralizedEx[CEX: Binance / Bybit / MEXC]
+    TW -->|WEB3_WALLET_SERVICE /swap| Web3Wallet[DEX: Uniswap V3 / Jupiter]
     AW[agent-worker: Cron Risk Monitor] -->|Scale/Kill Switch| TW
 ```
 
@@ -60,6 +60,7 @@ Practical runbooks and blueprints for daily operations, local development, and s
 - **[Edge Database Operations](/docs/enduser/guides/database-ops)** — Manage global SQLite schemas, track drizzle migrations, and run D1 queries.
 - **[Secrets & Network Security](/docs/enduser/guides/secrets-security)** — Secure Cloudflare® Zero Trust corridors and encrypt sensitive API credentials.
 - **[Test Trading](/docs/enduser/guides/test-trading)** — Sandbox orders with `"test": true`, dedicated testnet secrets, and D1/dashboard isolation.
+- **[DEX spot swaps](/docs/enduser/guides/dex-spot-swaps)** — Uniswap V3 and Jupiter Swap V2 via `BASE/QUOTE` signals.
 - **[Infrastructure Management](/docs/enduser/guides/manage-infra)** — Spin up and inspect KV, Queues, R2, and Vectorize indexes in one command.
 - **[Deploying to Production](/docs/enduser/guides/deploy-workers)** — Roll out code, bind V8 isolates, and deploy Next.js dashboard consoles.
 - **[Self-Healing & Repair](/docs/enduser/guides/repair)** — Diagnose connection dropouts, rotate API keys, and run interactive system repair tools.
@@ -72,7 +73,7 @@ Follow guided, end-to-end tutorials to integrate your trade sources and notifica
 
 - **[TradingView® Webhook Integration](/docs/enduser/tutorials/tradingview-webhook)** — Write customized Pine Script™ v6 indicators that ping the Hoox webhook receiver.
 - **[Telegram Bot Setup](/docs/enduser/tutorials/telegram-bot)** — Configure real-time order alerts, P&L reports, and secure chat commands.
-- **[Email Signal Routing](/docs/enduser/tutorials/email-signals)** — Configure email parsing services to convert raw inbox alerts into edge trade executions.
+- **[Email Signal Routing](/docs/enduser/tutorials/email-signals)** — Mailgun webhook, Cloudflare® Email Routing, or authenticated JSON. No IMAP poll.
 
 ### 5. 📖 Reference Material
 
@@ -80,7 +81,7 @@ Deep specifications, schema registries, and command-line manual trees:
 
 - **[CLI Commands Index](/docs/enduser/reference/cli-commands)** — Complete options, positional arguments, and JSON flag trees for the `hoox` tool.
 - **[API Spec & REST Routes](/docs/enduser/reference/api-endpoints)** — HTTP endpoints, request payloads, response templates, and edge errors list.
-- **[Configuration Properties](/docs/enduser/getting-started/configuration)** — Comprehensive dictionary of all 31 env keys and 16 KV key-value items.
+- **[Configuration Properties](/docs/enduser/getting-started/configuration)** — Environment variables and CONFIG_KV keys.
 
 ---
 

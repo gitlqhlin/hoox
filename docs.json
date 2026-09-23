@@ -179,6 +179,7 @@
                   "docs/enduser/guides/database-ops",
                   "docs/enduser/guides/secrets-security",
                   "docs/enduser/guides/test-trading",
+                  "docs/enduser/guides/dex-spot-swaps",
                   "docs/enduser/guides/manage-infra",
                   "docs/enduser/guides/deploy-workers",
                   "docs/enduser/guides/repair",

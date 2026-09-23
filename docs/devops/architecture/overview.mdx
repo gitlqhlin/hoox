@@ -107,9 +107,9 @@ graph TB
 | **`agent-worker`**     | Risk Management  |  Cron 1–1440 min (default `*/15`)  |    No (Isolated)     | **Yes** (Account Auditing) |      Alert Logs       |
 | **`telegram-worker`**  |  Alerts & Chat   |      No      |    No (Isolated)     |  **Yes** (Telegram APIs)   |     Command Logs      |
 | **`d1-worker`**        |  SQLite Manager  |      No      |    No (Isolated)     |   **Yes** (SQLite Bound)   |     Query Latency     |
-| **`report-worker`**    |  Puppeteer PDF   | Cron `06,18` |    No (Isolated)     |  **Yes** (Rendering APIs)  |     Print Status      |
-| **`email-worker`**     |   IMAP Parsing   |  Cron `*/5`  |    No (Isolated)     |             No             |   Parse Statistics    |
-| **`web3-wallet`**      | DeFi Swap Engine |      No      |    No (Isolated)     |             No             |     Tx Sign Logs      |
+| **`report-worker`**    | Browser Rendering PDF (`BROWSER`) | Cron `08:00` and `18:00` UTC |    No (Isolated)     |  **Yes** (Rendering APIs)  |     Print Status      |
+| **`email-worker`**     | Mailgun / Email Routing / JSON | No inbox poll |    No (Isolated)     |             No             |   Parse Statistics    |
+| **`web3-wallet-worker`** | DeFi Swap Engine |      No      |    No (Isolated)     | **Yes** (RPC proxied) |     Tx Sign Logs      |
 | **`analytics-worker`** |  Observability   |      No      |    No (Isolated)     |             No             |    Metrics Dataset    |
 | **`pyne-worker`**      | Pine edge evaluate | Cron `* * * * *` | **Tooling** (`API_KEY` / `X-API-Key`) | **Yes** (evaluate path) | Evaluate / forward logs |
 | **`dashboard`**        | Next.js ops UI   |      No      | **Yes** (public)     |             No             |    UI / binding calls |

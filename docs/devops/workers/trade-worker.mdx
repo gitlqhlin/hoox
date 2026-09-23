@@ -8,7 +8,7 @@ title: "trade-worker Isolate Profile"
 description: "Comprehensive engineering specification for the Hoox Trade Execution Worker, covering multi-exchange client architectures, HMAC signing, and D1 database ledgers."
 ---
 
-The **`trade-worker`** is the execution engine of the Hoox trading platform. Deployed as a private compute isolate behind the edge firewall, this worker is responsible for calculating order parameters, executing leverage scaling, performing cryptographic HMAC-SHA256 signature calculations, placing trades on Bybit, Binance, and MEXC, and offloading transactional metrics.
+The **`trade-worker`** is the execution engine of the Hoox trading platform. Deployed as a private compute isolate behind the edge firewall, this worker is responsible for calculating order parameters, executing leverage scaling, performing cryptographic HMAC-SHA256 signature calculations, placing trades on Bybit, Binance, and MEXC, routing DEX spots (`uniswap-ethereum`, `uniswap-arbitrum`, `jupiter-solana`) through `WEB3_WALLET_SERVICE`, and offloading transactional metrics.
 
 ---
 
@@ -60,6 +60,10 @@ The `trade-worker` does not expose a public URL, communicating internally via V8
     // Optional testnet pair (preferred when payload.test === true)
     "EXCHANGE_TESTNET_KEY_BINDING",
     "EXCHANGE_TESTNET_SECRET_BINDING",
+    "WALLET_EXECUTE_KEY_BINDING",
+  ],
+  "services": [
+    { "binding": "WEB3_WALLET_SERVICE", "service": "web3-wallet-worker" },
   ],
 }
 ```
@@ -107,6 +111,8 @@ Spot swaps route through `WEB3_WALLET_SERVICE` (`web3-wallet-worker`). P1 is spo
 | `jupiter-solana` | solana | spot | `exchange:jupiter-solana:enabled` | same | Rejected — mainnet-only |
 
 Uniswap venues send `dexVersion: "v3"` (ETH/USDC liquidity is V3; Arbitrum's V2 router in the wallet worker is SushiSwap). Native `ETH`/`SOL` map to the wrapped mint on contract paths. Credential source is `wallet-binding` (mesh key), not CEX API secrets.
+
+Operator guide: [DEX spot swaps](/docs/enduser/guides/dex-spot-swaps). `hoox setup` writes `WALLET_EXECUTE_KEY_BINDING` automatically.
 
 ---
 

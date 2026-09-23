@@ -45,7 +45,13 @@ The execution engine processes two primary types of order payloads:
 
 ```typescript
 export interface CexOrderPayload {
-  exchange: "binance" | "bybit" | "mexc"; // Target exchange
+  exchange:
+    | "binance"
+    | "bybit"
+    | "mexc"
+    | "uniswap-ethereum"
+    | "uniswap-arbitrum"
+    | "jupiter-solana";
   action: "LONG" | "SHORT" | "CLOSE_LONG" | "CLOSE_SHORT"; // Position action
   symbol: string; // Standardized asset ticker (e.g. "BTCUSDT")
   quantity: number; // Order size in contracts or tokens
@@ -54,8 +60,8 @@ export interface CexOrderPayload {
   orderType?: "MARKET" | "LIMIT"; // Default: MARKET
   /**
    * When true, route the order to the exchange testnet/sandbox API
-   * (Binance Futures testnet, Bybit testnet). MEXC has no public REST
-   * sandbox and rejects with TEST_TRADING_UNSUPPORTED.
+   * (Binance Futures testnet, Bybit testnet). MEXC and DEX venues
+   * reject with TEST_TRADING_UNSUPPORTED.
    * Live trading is the default when omitted or false.
    */
   test?: boolean;
@@ -76,7 +82,10 @@ export interface CexOrderPayload {
 
 | Field    | Type      | Required | Notes                                                                 |
 | -------- | --------- | :------: | --------------------------------------------------------------------- |
-| `test`   | `boolean` |    No    | `true` → testnet host for Binance/Bybit; rejected for MEXC            |
+| `test`   | `boolean` |    No    | `true` → testnet host for Binance/Bybit; rejected for MEXC and DEX    |
+| `symbol` | `string`  | **Yes**  | CEX compact ticker or DEX `BASE/QUOTE` (`ETH/USDC`)                   |
+
+DEX venues (`uniswap-ethereum`, `uniswap-arbitrum`, `jupiter-solana`) are ExactIn spots through `web3-wallet-worker`. See [DEX spot swaps](/docs/enduser/guides/dex-spot-swaps).
 
 **Side effects when `test: true`:**
 

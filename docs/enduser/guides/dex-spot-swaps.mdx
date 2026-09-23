@@ -1,0 +1,98 @@
+<!--
+  Copyright (c) 2026 HOOX · jango-blockchained (hoox-sh)
+  SPDX-License-Identifier: CC-BY-4.0
+-->
+
+---
+title: "DEX spot swaps"
+description: "Route Uniswap V3 (Ethereum, Arbitrum) and Jupiter Swap V2 (Solana) through trade-worker signals. Setup, secrets, pair syntax, and test-flag limits."
+---
+
+Spot DEX venues use the same webhook vocabulary as CEX (`LONG` / `SHORT` / `CLOSE_*`) but execute as ExactIn swaps in `web3-wallet-worker`. Signing never leaves that isolate. Perps (GMX, Hyperliquid, Jupiter perps) are out of scope for this slice.
+
+---
+
+## Venues
+
+| `exchange` | Chain | Router | Pair syntax | `test: true` |
+| ---------- | ----- | ------ | ----------- | ------------ |
+| `uniswap-ethereum` | Ethereum | Uniswap V3 (`SwapRouter02`) | `BASE/QUOTE` (e.g. `ETH/USDC`) | Rejected |
+| `uniswap-arbitrum` | Arbitrum | Uniswap V3 (`SwapRouter02`) | `BASE/QUOTE` | Rejected |
+| `jupiter-solana` | Solana | Jupiter Swap V2 (`/order` + `/execute`) | `BASE/QUOTE` (e.g. `SOL/USDC`) | Rejected |
+
+KV toggles (dashboard **Exchanges** section, or CLI):
+
+```bash
+hoox config kv set exchange:uniswap-ethereum:enabled true
+hoox config kv set exchange:uniswap-arbitrum:enabled true
+hoox config kv set exchange:jupiter-solana:enabled true
+```
+
+Unset means enabled. `"false"` skips the venue.
+
+---
+
+## What `hoox setup` fills
+
+| Secret / var | Automatic? |
+| ------------ | ---------- |
+| `WALLET_EXECUTE_KEY_BINDING` | Yes — mesh key, same value as `INTERNAL_KEY_BINDING` |
+| `SOLANA_PRIVATE_KEY` | Yes if missing — 32-byte base58 seed. Existing Phantom exports are kept |
+| `RPC_URL_ARBITRUM` / `RPC_URL_SOLANA` | Yes if empty — public RPCs |
+| `WEB3_WALLET_SERVICE` binding on trade-worker | Yes — wrangler materialize |
+| `JUPITER_API_KEY` | **No** — [Jupiter portal](https://developers.jup.ag/portal) |
+| `WALLET_PK_SECRET` / `WALLET_MNEMONIC_SECRET` | **No** — EVM signing material |
+
+```bash
+hoox setup
+hoox secrets set web3-wallet-worker JUPITER_API_KEY   # Solana DEX only
+```
+
+Replace the generated Solana seed with a Phantom export (base58 32-byte seed or 64-byte secret) if you want an existing wallet.
+
+---
+
+## Signal shape
+
+DEX venues require **`BASE/QUOTE`** (slash). Compact CEX tickers like `ETHUSDC` are rejected.
+
+```json
+{
+  "apiKey": "your-hoox-webhook-passkey",
+  "exchange": "uniswap-ethereum",
+  "action": "LONG",
+  "symbol": "ETH/USDC",
+  "quantity": 100
+}
+```
+
+| Action | Swap |
+| ------ | ---- |
+| `LONG` / `CLOSE_SHORT` | Spend QUOTE to buy BASE (ExactIn) |
+| `SHORT` / `CLOSE_LONG` | Sell BASE for QUOTE |
+
+`quantity` is in **quote units** on buy (`LONG` of `ETH/USDC` with `100` spends 100 USDC) and **base units** on sell. Curated symbols: ETH, WETH, USDC, USDT, DAI, WBTC, SOL.
+
+Uniswap venues send `dexVersion: "v3"`. Native ETH is wrapped to WETH for the pool; native-out unwraps via `unwrapWETH9`. Solana SOL uses the wrapped mint `So111…11112`.
+
+Do **not** set `"test": true` — DEX venues are mainnet-only (`TEST_TRADING_UNSUPPORTED`).
+
+---
+
+## Auth path
+
+1. Gateway (`hoox`) authenticates the webhook as usual.
+2. `trade-worker` `ExchangeRouter` resolves the DEX venue and builds a thin `IExchangeClient`.
+3. The client POSTs `/swap` on `WEB3_WALLET_SERVICE` with `X-Internal-Auth-Key` (`WALLET_EXECUTE_KEY_BINDING` or `INTERNAL_KEY_BINDING`) and an `Idempotency-Key`.
+4. The wallet worker quotes, enforces USD caps, signs, and returns `{ txHash, id }`.
+
+Credential source is `wallet-binding` — CEX API keys are not used.
+
+---
+
+## Related
+
+- [trade-worker](/docs/devops/workers/trade-worker) — venue registry and routing
+- [web3-wallet-worker](/docs/devops/workers/web3-wallet-worker) — Uniswap V3 and Jupiter Swap V2
+- [Signals & trades](/docs/enduser/concepts/signals-and-trades) — webhook schema
+- [Test trading](/docs/enduser/guides/test-trading) — CEX sandbox vs DEX rejection

@@ -19,7 +19,7 @@
 # on the host: bun run build:shared
 # ---------------------------------------------------------------------------
 
-# YAML anchors — applied to all worker services to avoid 9× duplication.
+# YAML anchors — applied to all worker services so the base is not copied per service.
 x-worker-base: &worker-base
   build:
     context: .

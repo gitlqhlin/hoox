@@ -26,6 +26,7 @@ sequenceDiagram
     participant Q as Cloudflare® Queue (Asynchronous Backup)
     participant TW as trade-worker (Execution Engine)
     participant CEX as Exchange API (Bybit / Binance / MEXC)
+    participant WAL as web3-wallet-worker (DEX /swap)
     participant D1 as d1-worker (named RPCs)
     participant TG as telegram-worker (chatId allowlist)
 
@@ -44,8 +45,13 @@ sequenceDiagram
             DO-->>GW: reserved=true
             GW->>TW: Service Binding POST /webhook
             alt Trade success
-                TW->>CEX: Signed REST order (HMAC-SHA256)
-                CEX-->>TW: Fill / status
+                alt CEX venue
+                    TW->>CEX: Signed REST order (HMAC-SHA256)
+                    CEX-->>TW: Fill / status
+                else DEX venue
+                    TW->>WAL: POST /swap (WEB3_WALLET_SERVICE)
+                    WAL-->>TW: txHash
+                end
                 TW->>D1: Named RPC insert-trade / upsert-position
                 TW->>TG: Notify (allowlisted chatId only)
                 TW-->>GW: success=true

@@ -17,8 +17,8 @@ graph TB
     TV[TradingView® Alerts] -->|HTTPS Webhook| GW[hoox Gateway]
     GW -->|Service Binding| TW[trade-worker]
     GW -->|Service Binding| TGW[telegram-worker]
-    TW -->|Signed API Request| CentralizedEx[Centralized Exchanges: Binance / Bybit / MEXC]
-    TW -->|On-Chain Swap| Web3Wallet[DeFi Wallet Execution]
+    TW -->|Signed API Request| CentralizedEx[CEX: Binance / Bybit / MEXC]
+    TW -->|WEB3_WALLET_SERVICE /swap| Web3Wallet[DEX: Uniswap V3 / Jupiter]
     AW[agent-worker: Cron Risk Monitor] -->|Scale/Kill Switch| TW
 ```
 
@@ -70,6 +70,7 @@ graph TB
 | ---- | ---------- |
 | Install CLI + first deploy | [Installation](/docs/enduser/getting-started/installation) · [Quick Start](/docs/enduser/getting-started/quick-start) |
 | Sandbox / testnet orders | [Test Trading](/docs/enduser/guides/test-trading) |
+| Uniswap / Jupiter spots | [DEX spot swaps](/docs/enduser/guides/dex-spot-swaps) |
 | How a signal becomes a fill | [How Hoox Works](/docs/enduser/concepts/how-hoox-works) |
 | Pine strategy → live order | [PYNE live trading](/docs/enduser/guides/pyne-live-trading) |
 | Chart without trading | [AXIS and HOOX](/docs/enduser/guides/axis-and-hoox) |

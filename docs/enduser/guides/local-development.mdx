@@ -60,7 +60,7 @@ hoox dev start --runtime docker
 If you choose the Docker runtime, Hoox manages orchestration using three specialized Docker Compose profiles defined in `docker-compose.yml`:
 
 ```bash
-# Profile 1: Workers Only (9 services — all background workers, no UI)
+# Profile 1: Workers only (10 services — all background workers, no UI)
 docker compose --profile workers up
 
 # Profile 2: Dashboard + transitive worker deps (5 services: hoox,
@@ -81,21 +81,17 @@ network — the same topology as production Cloudflare® Workers Service Binding
 
 ## 📍 Local Port Mapping & Endpoint Access
 
-During local development, all enabled workers are assigned dedicated local ports, simulating service boundaries locally:
+`hoox dev start` pins the ports below. agent-worker, email-worker, report-worker, and analytics-worker are not pinned; they take `8800` and up, in enable order. Docker Compose publishes only `8787` (gateway) and `8794` (dashboard) to the host.
 
-| Worker | Local Port | Endpoint URL | Purpose |
-|| :-------------------- | :--------: | :---------------------- | :-------------------------------- |
-|| **`hoox`** | `8787` | `http://localhost:8787` | Public Gateway & Webhook Receiver |
-|| **`trade-worker`** | `8789` | `http://localhost:8789` | Trade Execution Engine |
-|| **`telegram-worker`** | `8791` | `http://localhost:8791` | Telegram Bot Alerts & Commands |
-|| **`d1-worker`** | `8792` | `http://localhost:8792` | SQLite Database Operations |
-|| **`web3-wallet`** | `8793` | `http://localhost:8793` | On-Chain DeFi Execution |
-|| **`dashboard`** | `8794` | `http://localhost:8794` | Next.js Dashboard Cockpit |
-|| **`agent-worker`** | `8795` | `http://localhost:8795` | AI Risk Manager & Cron Engine |
-|| **`email-worker`** | `8796` | `http://localhost:8796` | Email Signal Parsing |
-|| **`report-worker`** | `8797` | `http://localhost:8797` | PDF Portfolio Report Generator |
-|| **`analytics-worker`** | `8798` | `http://localhost:8798` | Analytics & Reporting Engine |
-|| **`pyne-worker`** | `8799` | `http://localhost:8799` | Pine Script™ edge evaluate (PYNE) |
+| Worker | `hoox dev` port | Endpoint URL | Purpose |
+| :-------------------- | :-------------: | :---------------------- | :-------------------------------- |
+| **`hoox`** | `8787` | `http://localhost:8787` | Public Gateway & Webhook Receiver |
+| **`trade-worker`** | `8788` | `http://localhost:8788` | Trade Execution Engine |
+| **`d1-worker`** | `8789` | `http://localhost:8789` | SQLite Database Operations |
+| **`telegram-worker`** | `8790` | `http://localhost:8790` | Telegram Bot Alerts & Commands |
+| **`web3-wallet-worker`** | `8792` | `http://localhost:8792` | On-Chain DeFi Execution |
+| **`dashboard`** | `8794` | `http://localhost:8794` | Next.js Dashboard Cockpit |
+| **`pyne-worker`** | `8799` | `http://localhost:8799` | Pine Script™ edge evaluate (PYNE) |
 
 ```bash
 # Probe / evaluate via CLI (when pyne-worker is enabled)
@@ -142,7 +138,7 @@ The pipeline executes four verification steps in a strict dependency sequence:
 🔍 Running local CI Pipeline...
 [STARTED] lint check... [PASSED]
 [STARTED] TypeScript typecheck... [PASSED]
-[STARTED] bun test runner... [PASSED] (~4,600+ unit tests · ~9k assertions)
+[STARTED] bun test runner... [PASSED]
 [STARTED] workspace builds... [PASSED]
 ✔ Local CI Pipeline Succeeded!
 ```

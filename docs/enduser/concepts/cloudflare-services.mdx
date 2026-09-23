@@ -78,12 +78,12 @@ Here is an architectural map of how each service functions in the Hoox monorepo.
 
 ---
 
-## 🌐 7. Browser Rendering (Edge Puppeteer Renderer)
+## 🌐 7. Browser Rendering
 
-- **Concept**: Serverless Chrome instances running at Cloudflare®'s edge, allowing developers to automate browser actions, interact with websites, and convert web elements to documents.
-- **Hoox Implementation**: Deployed in `report-worker` to generate twice-daily, styled PDF portfolio reports.
+- **Concept**: Serverless Chrome at the Cloudflare® edge, bound to a worker as `BROWSER`.
+- **Hoox Implementation**: `report-worker` calls `env.BROWSER.quickAction("pdf")` twice a day (08:00 and 18:00 UTC).
 - **Why it Matters**:
-  - Reads D1 database P&L records, renders a beautiful, secure HTML5 dashboard report, captures it via Puppeteer, converts it to PDF, saves the file to R2, and links it directly in your Telegram alert.
+  - Reads D1 P&L, renders an HTML report, writes the PDF to R2, and links it in the Telegram alert. Missing `BROWSER` falls back to a text summary.
   - Completely automated, running entirely in the background near-instantaneously.
 
 ---

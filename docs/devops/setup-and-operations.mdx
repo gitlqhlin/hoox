@@ -66,6 +66,8 @@ Hoox is an edge-deployed cryptocurrency trading system built on Cloudflare® Wor
 
 ```
 External Webhook → hoox → [Queue] → trade-worker → D1 (via d1-worker)
+                                      ├─ CEX HMAC REST (Binance / Bybit / MEXC)
+                                      └─ WEB3_WALLET_SERVICE POST /swap (Uniswap V3 / Jupiter)
                         ↓
                   telegram-worker (notifications)
                         ↓
@@ -80,19 +82,19 @@ pyne-worker (cron /run) → trade-worker (mesh internal auth on live forward)
 
 | Service               | Instance Name      | Binding              | Used By                                           |
 | --------------------- | ------------------ | -------------------- | ------------------------------------------------- |
-| **D1 Database**       | `trade-data-db`    | `DB`                 | trade-worker, d1-worker, agent-worker             |
+| **D1 Database**       | `trade-data-db`    | `DB`                 | d1-worker only. Others use service binding `D1_SERVICE`. |
 | **KV Namespace**      | `CONFIG_KV`        | `CONFIG_KV`          | ALL workers + dashboard (config + rate limiter)   |
 | **KV Namespace**      | `SESSIONS_KV`      | `SESSIONS_KV`        | hoox                                              |
 | **R2 Bucket**         | `trade-reports`    | `REPORTS_BUCKET`     | trade-worker, report-worker                       |
 | **R2 Bucket**         | `hoox-system-logs` | `SYSTEM_LOGS_BUCKET` | trade-worker                                      |
 | **R2 Bucket**         | `user-uploads`     | `UPLOADS_BUCKET`     | telegram-worker                                   |
 | **Queue**             | `trade-execution`  | `TRADE_QUEUE`        | hoox (producer), trade-worker (consumer)          |
-| **Vectorize**         | `my-rag-index`     | `VECTORIZE_INDEX`    | hoox, trade-worker, telegram-worker               |
-| **Analytics Engine**  | `hoox-analytics`   | (REST API)           | analytics-worker (cross-worker data collection)   |
+| **Vectorize**         | `my-rag-index`     | `VECTORIZE_INDEX`    | hoox, telegram-worker (768-d, `@cf/baai/bge-base-en-v1.5`) |
+| **Analytics Engine**  | `hoox-analytics`   | `ANALYTICS_ENGINE`   | analytics-worker (`analytics_engine_datasets`)    |
 | **Durable Objects**   | `IdempotencyStore` | `IDEMPOTENCY_STORE`  | hoox (SQLite-backed, TTL+alarm cleanup, migration `v1`) |
 | **Durable Objects**   | `RateLimiterStore` | `RATE_LIMITER`       | hoox (atomic trade rate limits, migration `v2`)   |
-| **Browser Rendering** | —                  | (REST API)           | report-worker (PDF generation via CF API)         |
-| **AI**                | —                  | `AI`                 | hoox, trade-worker, telegram-worker, agent-worker |
+| **Browser Rendering** | —                  | `BROWSER`            | report-worker (`quickAction("pdf")`, not the REST API) |
+| **AI**                | —                  | `AI`                 | hoox, telegram-worker, agent-worker, dashboard    |
 | **Smart Placement**   | —                  | (wrangler config)    | hoox, trade, agent, d1, telegram, report          |
 
 ---
@@ -179,9 +181,10 @@ hoox clone my-hoox-app
 | `WALLET_EXECUTE_KEY_BINDING` | trade-worker, web3-wallet-worker, hoox | `hoox setup` (auto) | DEX P1 | Mesh key for wallet `/swap` (falls back to INTERNAL_KEY_BINDING) |
 | `SOLANA_PRIVATE_KEY`      | web3-wallet-worker                  | `hoox setup` (auto if unset) | Optional | Solana seed (base58). Replace with a Phantom export to use an existing wallet |
 | `JUPITER_API_KEY`         | web3-wallet-worker                  | `hoox secrets set` / init wizard | Solana DEX | Jupiter Swap V2 key from developers.jup.ag/portal |
-| `EMAIL_HOST`              | email-worker                        | `wrangler secret put` | Optional     | Email IMAP host                        |
-| `EMAIL_USER`              | email-worker                        | `wrangler secret put` | Optional     | Email username                         |
-| `EMAIL_PASS`              | email-worker                        | `wrangler secret put` | Optional     | Email password                         |
+| `MAILGUN_API_KEY`         | email-worker                        | `wrangler secret put` | Production   | HMAC key for `POST /webhook`           |
+| `EMAIL_HOST`              | email-worker                        | `wrangler secret put` | Reserved     | Not read. IMAP polling is not implemented. |
+| `EMAIL_USER`              | email-worker                        | `wrangler secret put` | Reserved     | Not read.                              |
+| `EMAIL_PASS`              | email-worker                        | `wrangler secret put` | Reserved     | Not read.                              |
 | `INTERNAL_KEY_BINDING`    | email-worker                        | `wrangler secret put` | Optional     | Email worker auth                      |
 | `D1_INTERNAL_KEY`         | d1-worker (header check)            | `wrangler secret put` | Optional     | D1 worker API auth                     |
 | `HA_TOKEN_BINDING`        | hoox                                | `wrangler secret put` | Optional     | Home Assistant token                   |
@@ -296,8 +299,8 @@ DASHBOARD_PASS=admin
     "email-worker": {
       "enabled": true,
       "path": "workers/email-worker",
-      "vars": { "USE_IMAP": "false" },
-      "secrets": ["EMAIL_HOST", "EMAIL_USER", "EMAIL_PASS", "INTERNAL_KEY"],
+      "vars": {},
+      "secrets": ["MAILGUN_API_KEY", "INTERNAL_KEY_BINDING"],
     },
     "analytics-worker": {
       "enabled": true,
@@ -329,11 +332,11 @@ These keys must be set in `CONFIG_KV` namespace:
 | `agent:google_key`                           | string  | —       | Manual       | agent-worker       |
 | `agent:azure_api_key`                        | string  | —       | Manual       | agent-worker       |
 | `agent:azure_endpoint`                       | string  | —       | Manual       | agent-worker       |
-| `email:scan_subject`                         | string  | —       | Manual       | email-worker       |
+| `email:scan_subject`                         | string  | —       | unused       | constant only; worker does not filter subjects |
 | `email:coin_pattern`                         | string  | —       | Manual       | email-worker       |
 | `email:action_pattern`                       | string  | —       | Manual       | email-worker       |
 | `email:quantity_multiplier`                  | number  | `1`     | Manual       | email-worker       |
-| `email:use_imap`                             | boolean | `false` | Manual       | email-worker       |
+| `email:use_imap`                             | boolean | —       | unused       | constant only; IMAP polling is not implemented |
 
 ---
 

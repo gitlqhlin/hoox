@@ -33,8 +33,11 @@ Omit `test` or set `"test": false` for **live** trading (default).
 | Binance  |          Yes          | `testnet.binancefuture.com`      |
 | Bybit    |          Yes          | `api-testnet.bybit.com`          |
 | MEXC     |           No          | Rejected (`TEST_TRADING_UNSUPPORTED`) |
+| `uniswap-ethereum` | No | Rejected (`TEST_TRADING_UNSUPPORTED`) |
+| `uniswap-arbitrum` | No | Rejected (`TEST_TRADING_UNSUPPORTED`) |
+| `jupiter-solana` | No | Rejected (`TEST_TRADING_UNSUPPORTED`) |
 
-MEXC has no public REST sandbox for automated trading (UI demo only). Requests with `test: true` and `exchange: "mexc"` fail with a clear 400 error.
+MEXC has no public REST sandbox for automated trading (UI demo only). DEX venues are mainnet-only (Uniswap V3 / Jupiter Swap V2). Requests with `test: true` on those names fail with a 400 `TEST_TRADING_UNSUPPORTED`. See [DEX spot swaps](/docs/enduser/guides/dex-spot-swaps).
 
 ---
 

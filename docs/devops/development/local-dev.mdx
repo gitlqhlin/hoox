@@ -57,7 +57,9 @@ hoox dev start --runtime docker
 For full stack containerized development, Hoox divides operations into three Docker Compose profiles in your root `docker-compose.yml`:
 
 ```bash
-# Profile 1: All background workers (9 services — no dashboard UI)
+# Profile 1: workers — 10 services, no dashboard UI
+#   hoox, trade-worker, telegram-worker, d1-worker, web3-wallet-worker,
+#   agent-worker, email-worker, report-worker, analytics-worker, pyne-worker
 docker compose --profile workers up
 
 # Profile 2: Dashboard + its transitive worker dependencies (5 services:
@@ -65,7 +67,7 @@ docker compose --profile workers up
 #           trade-worker is pulled in because agent-worker depends on it.
 docker compose --profile dashboard up
 
-# Profile 3: Full Stack — all 10 services
+# Profile 3: full — 11 services (the 10 workers + dashboard)
 docker compose --profile full up
 ```
 
@@ -78,20 +80,17 @@ Bindings.
 
 ## 📍 3. Local Port Mapping Registry
 
-In the local environment, each V8 dev instance mounts to a dedicated host port. Ensure no other applications are occupying these ports before launching:
+`hoox dev start` assigns the ports below. agent-worker, email-worker, report-worker, and analytics-worker are not pinned and take the next free port from `8800` upward, in enable order. Docker Compose publishes only gateway `8787` and dashboard `8794`. Inside the compose network, report-worker, analytics-worker, and pyne-worker also pass `--port 8797`, `8798`, and `8799`; those ports are not published to the host.
 
-| Microservice           | Default Port | Local Binding URL       | Purpose                   |
-| :--------------------- | :----------: | :---------------------- | :------------------------ |
-| **`hoox`**             |    `8787`    | `http://localhost:8787` | Ingress Gateway           |
-| **`trade-worker`**     |    `8789`    | `http://localhost:8789` | Order Execution Engine    |
-| **`telegram-worker`**  |    `8791`    | `http://localhost:8791` | Notifications Hub         |
-| **`d1-worker`**        |    `8792`    | `http://localhost:8792` | Relational SQLite Manager |
-| **`web3-wallet`**      |    `8793`    | `http://localhost:8793` | On-Chain DeFi Node        |
-| **`dashboard`**        |    `8794`    | `http://localhost:8794` | Next.js Dashboard SSR     |
-| **`agent-worker`**     |    `8795`    | `http://localhost:8795` | Cron Risk Monitor         |
-| **`email-worker`**     |    `8796`    | `http://localhost:8796` | Email Signal Parser       |
-| **`report-worker`**    |    `8797`    | `http://localhost:8797` | PDF Portfolio Generator   |
-| **`analytics-worker`** |    `8798`    | `http://localhost:8798` | Analytics & Reporting     |
+| Microservice           | `hoox dev` port | Local Binding URL       | Purpose                   |
+| :--------------------- | :-------------: | :---------------------- | :------------------------ |
+| **`hoox`**             |     `8787`      | `http://localhost:8787` | Ingress Gateway           |
+| **`trade-worker`**     |     `8788`      | `http://localhost:8788` | Order Execution Engine    |
+| **`d1-worker`**        |     `8789`      | `http://localhost:8789` | Relational SQLite Manager |
+| **`telegram-worker`**  |     `8790`      | `http://localhost:8790` | Notifications Hub         |
+| **`web3-wallet-worker`** |   `8792`      | `http://localhost:8792` | On-Chain DeFi Node        |
+| **`dashboard`**        |     `8794`      | `http://localhost:8794` | Next.js Dashboard         |
+| **`pyne-worker`**      |     `8799`      | `http://localhost:8799` | Pine Script™ edge evaluate |
 
 ---
 

@@ -46,6 +46,8 @@ These credentials must be injected as secure encrypted environment variables int
   - `MEXC_API_KEY` — Order routing account key.
   - `MEXC_API_SECRET` — Order signing private key.
 
+DEX spots (`uniswap-ethereum`, `uniswap-arbitrum`, `jupiter-solana`) do not use CEX API keys. `hoox setup` writes `WALLET_EXECUTE_KEY_BINDING` and a Solana seed if missing. You still set `JUPITER_API_KEY` for Solana. See [DEX spot swaps](/docs/enduser/guides/dex-spot-swaps).
+
 ### C. 💬 Telegram Bot Alerts
 
 | Parameter            | Required | Description                                                            | Example                 |

@@ -5,7 +5,7 @@
 
 ---
 title: "Configuration Dictionary"
-description: "Exhaustive matrix of all 31 environment variable keys and 16 Cloudflare® KV dynamic manifest parameters."
+description: "Environment variables and CONFIG_KV keys for the HOOX mesh."
 ---
 
 This document serves as the absolute, exhaustive reference dictionary for every environment variable, encrypted Workers Secret, and dynamic KV runtime setting utilized in the Hoox trading ecosystem.
@@ -69,17 +69,20 @@ These parameters are configured in your local `.env.local` file for building/dep
 
 ---
 
-### F. Email Parsing Inbox Connection
+### F. Email signal ingress
 
-| Variable     | Required |   Type   |     Scope      | Description                                    |
-| :----------- | :------: | :------: | :------------: | :--------------------------------------------- |
-| `EMAIL_HOST` |    No    | `string` | `email-worker` | POP3/IMAP mailbox server address.              |
-| `EMAIL_USER` |    No    | `string` | `email-worker` | Target signal mailbox email address.           |
-| `EMAIL_PASS` |    No    | `string` | `email-worker` | Secure app password for signal mailbox access. |
+`email-worker` does not poll IMAP. `POST /webhook` verifies Mailgun HMAC with `MAILGUN_API_KEY`. `POST /email-signal` uses the mesh internal key only. Cloudflare® Email Routing uses the worker `email` handler.
+
+| Variable          | Required |   Type   |     Scope      | Description                                              |
+| :---------------- | :------: | :------: | :------------: | :------------------------------------------------------- |
+| `MAILGUN_API_KEY` |    No    | `string` | `email-worker` | Signing key for `POST /webhook`. Required for Mailgun.   |
+| `EMAIL_HOST`      |    No    | `string` | `email-worker` | Reserved. The worker does not read it.                   |
+| `EMAIL_USER`      |    No    | `string` | `email-worker` | Reserved. The worker does not read it.                   |
+| `EMAIL_PASS`      |    No    | `string` | `email-worker` | Reserved. The worker does not read it.                   |
 
 ---
 
-## 2. Dynamic KV Manifest Settings (16 Keys)
+## 2. Dynamic KV Manifest Settings
 
 These runtime variables exist inside the `CONFIG_KV` namespace. They are accessed globally at sub-millisecond speeds and take effect instantly upon being modified.
 
@@ -91,10 +94,9 @@ These runtime variables exist inside the `CONFIG_KV` namespace. They are accesse
 | `webhooks:queue_mode`              | `string`  | `queue_failover` | Routing behavior: `direct_only`, `queue_failover`, `queue_everywhere`.  |
 | `exchanges:default_routing`        | `string`  |     `bybit`      | Default CEX fallback router: `binance`, `bybit`, or `mexc`.             |
 | `routing:dynamic:enabled`          | `boolean` |     `false`      | Enables/disables dynamically shifting routes based on symbols.          |
-| `email:scan_subject`               | `string`  |     `TRADE`      | Prefix required in signal email subjects.                               |
-| `email:coin_pattern`               | `string`  |   `BTC or ETH`   | Regex expression used to extract asset tokens from email bodies.        |
-| `email:action_pattern`             | `string`  |  `BUY or SELL`   | Regex expression used to resolve buy/sell actions in email bodies.      |
-| `email:authorized_senders`         |  `array`  |       `[]`       | List of email addresses authorized to submit trade signals.             |
+| `email:coin_pattern`               | `string`  |  `BTC\|ETH\|SOL` | Regex used to extract asset tokens from a plain-text email body.        |
+| `email:action_pattern`             | `string`  | `buy\|sell\|long\|short` | Regex used to resolve actions in a plain-text email body.        |
+| `email:quantity_multiplier`        | `number`  |       `1`        | Multiplies the quantity parsed from a plain-text email body.            |
 | `webhook:tradingview:ip_check`     | `boolean` |     `false`      | Toggles dropping payloads that don't originate from TradingView® IPs.   |
 
 ---

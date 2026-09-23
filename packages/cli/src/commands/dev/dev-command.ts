@@ -208,6 +208,7 @@ EXAMPLES:
             "d1-worker": 8789,
             "telegram-worker": 8790,
             "web3-wallet-worker": 8792,
+            "pyne-worker": 8799,
           };
 
           let nextFallbackPort = 8800;

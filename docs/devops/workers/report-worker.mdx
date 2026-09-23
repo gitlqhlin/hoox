@@ -5,10 +5,10 @@
 
 ---
 title: "report-worker Isolate Profile"
-description: "Comprehensive engineering specification for the Hoox PDF Report Worker, covering Cloudflare Browser Rendering APIs, Puppeteer Chrome automation, and R2 bucketing."
+description: "Engineering specification for the Hoox PDF report worker: BROWSER.quickAction pdf, cron at 08:00 and 18:00 UTC, and R2."
 ---
 
-The **`report-worker`** is the automated document compiler of the Hoox trading platform. Deployed as a scheduled cron isolate, this worker runs twice daily (at 06:00 and 18:00 UTC) to pull D1 transactional stats, construct a highly styled HTML5 portfolio report, spin up a serverless **Cloudflare Browser Rendering** Chrome instance to compile the page into a PDF buffer, offload the file to R2, and push a private download link to your Telegram.
+The **`report-worker`** is the automated document compiler of the Hoox trading platform. Deployed as a scheduled cron isolate, this worker runs twice daily (at 08:00 and 18:00 UTC) to pull D1 transactional stats, construct a highly styled HTML5 portfolio report, call the **`BROWSER`** binding (`quickAction("pdf")`) to compile the page into a PDF buffer, offload the file to R2, and push a private download link to your Telegram.
 
 ---
 
@@ -27,7 +27,7 @@ The `report-worker` mounts storage buckets, notification bindings, and is trigge
     "mode": "smart",
   },
   "triggers": {
-    "crons": ["0 6 * * *", "0 18 * * *"], // Runs twice daily
+    "crons": ["0 8 * * *", "0 18 * * *"], // 08:00 and 18:00 UTC
   },
   "r2_buckets": [
     {
@@ -41,7 +41,7 @@ The `report-worker` mounts storage buckets, notification bindings, and is trigge
   ],
   "secrets": [
     "INTERNAL_KEY_BINDING",
-    "CF_API_TOKEN", // Required to call Browser Rendering REST API
+    // PDF uses the BROWSER binding. CF_API_TOKEN is not required for quickAction("pdf").
   ],
 }
 ```
@@ -50,7 +50,7 @@ The `report-worker` mounts storage buckets, notification bindings, and is trigge
 
 ## 🔑 2. Environmental Variables & Encrypted Secrets
 
-- **`CF_API_TOKEN`**: Your Cloudflare API Token with `Account.Browser Rendering` and `Account.R2` write permissions.
+- **`BROWSER`**: Wrangler `browser` binding. `generatePdf` calls `env.BROWSER.quickAction("pdf", { html, options })`. No Browser Rendering REST token.
 - **`INTERNAL_KEY_BINDING`**: Shared key used to validate calls from other V8 isolates.
 
 ---
@@ -74,27 +74,17 @@ The worker pings `D1_SERVICE` to retrieve P&L, win rate, and total daily fees, i
 
 ### Step 2: Cloudflare Chrome Isolate Print
 
-Pushes the HTML template to Cloudflare's headless Chrome rendering pool via the REST API:
+Calls the Browser Rendering binding. This is not a REST request:
 
 ```typescript
-const response = await fetch(
-  `https://api.cloudflare.com/client/v4/accounts/${env.ACCOUNT_ID}/browser-rendering/pdf`,
-  {
-    method: "POST",
-    headers: {
-      Authorization: `Bearer ${env.CF_API_TOKEN}`,
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({
-      html: htmlContent,
-      options: {
-        format: "A4",
-        printBackground: true,
-        margin: { top: "1cm", bottom: "1cm", left: "1cm", right: "1cm" },
-      },
-    }),
-  }
-);
+const pdf = await env.BROWSER.quickAction("pdf", {
+  html: htmlContent,
+  options: {
+    format: "A4",
+    printBackground: true,
+    margin: { top: "1cm", right: "1cm", bottom: "1cm", left: "1cm" },
+  },
+});
 ```
 
 ---

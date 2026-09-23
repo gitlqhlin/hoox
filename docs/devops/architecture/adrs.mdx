@@ -69,7 +69,7 @@ This directory contains the Architecture Decision Records for the Hoox trading p
 | Worker               | Responsibility                                  |
 | -------------------- | ----------------------------------------------- |
 | `hoox`               | Gateway, validation, rate limiting, idempotency |
-| `trade-worker`       | Exchange order execution, leverage calculation  |
+| `trade-worker`       | CEX order execution + DEX spots via wallet binding |
 | `agent-worker`       | AI risk management, trailing stops, cron jobs   |
 | `d1-worker`          | All SQLite read/write operations                |
 | `telegram-worker`    | Push notifications, chat command handling       |

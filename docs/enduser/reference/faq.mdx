@@ -47,7 +47,7 @@ Yes! All components — Workers, D1, KV, R2, Queues, Vectorize, Workers AI, Brow
 
 ### Q: Do I need to know Solidity or blockchain development?
 
-No. Hoox is designed for **algorithmic traders**, not blockchain developers. On-chain execution is handled by the `web3-wallet-worker` with pre-built EIP-1559 transaction signing. Centralized exchange execution requires only API credentials.
+No. Hoox is designed for **algorithmic traders**, not blockchain developers. On-chain execution is handled by `web3-wallet-worker` (Uniswap V3 + Jupiter Swap V2). Send the same webhook as CEX with `exchange: "uniswap-ethereum"` (or `uniswap-arbitrum` / `jupiter-solana`) and a `BASE/QUOTE` symbol. See [DEX spot swaps](/docs/enduser/guides/dex-spot-swaps).
 
 ---
 
@@ -79,7 +79,11 @@ hoox secrets set trade-worker BYBIT_TESTNET_KEY_BINDING
 hoox secrets set trade-worker BYBIT_TESTNET_SECRET_BINDING
 ```
 
-Test fills are stored as `TEST_EXECUTED` with `*-testnet-*` position ids so they do not mix with live exposure. See **[Test Trading](/docs/enduser/guides/test-trading)**.
+Test fills are stored as `TEST_EXECUTED` with `*-testnet-*` position ids so they do not mix with live exposure. DEX venues reject `test: true`. See **[Test Trading](/docs/enduser/guides/test-trading)**.
+
+### Q: How do I swap on Uniswap or Jupiter?
+
+Use `exchange: "uniswap-ethereum"` | `"uniswap-arbitrum"` | `"jupiter-solana"` and `symbol: "ETH/USDC"` (slash required). `hoox setup` writes the wallet mesh key, a Solana seed if missing, and public RPCs. You still set `JUPITER_API_KEY` for Solana. Guide: **[DEX spot swaps](/docs/enduser/guides/dex-spot-swaps)**.
 
 ### Q: Can I rotate API keys without downtime?
 
