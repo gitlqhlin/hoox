@@ -82,7 +82,8 @@ bunx wrangler tail <name> # live worker logs
 
 ## Pre-Commit / Pre-Push
 
-- **Pre-commit**: `npx lint-staged` (eslint --fix + prettier --write on staged `*.{ts,tsx,js,jsx,mjs,cjs,json,yaml,yml,md,css,scss}`)
+- **Pre-commit**: `npx lint-staged` (eslint --fix + prettier --write on staged `*.{ts,tsx,js,jsx,mjs,cjs,json,yaml,yml,md,css,scss}`), then the OKF bundle is drafted from the git index and staged. `OKF_SKIP=1` skips the bundle.
+- **Codebase memory**: read `okf/index.md`, then one concept. `bun run okf:context <path>` and `bun run okf:query <terms>`. Worker submodules are not in the bundle. Curated notes live in `okf/playbooks/` with `okf_lock: human`.
 - **Pre-push**: `bun run typecheck`
 
 ## Testing

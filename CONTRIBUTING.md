@@ -119,6 +119,7 @@ bun run test:live --jobs 1
 
 - **Package manager**: `bun` — use `bun add`, `bun remove`, `bun run`
 - **Formatter**: `prettier` — auto-formatted on pre-commit via husky
+- **OKF bundle**: `okf/` is the compiled map of this repo. The pre-commit hook refreshes it. Read `okf/index.md` before searching the tree. `bun run okf:context <path>` prints one module. Worker submodules are not in the bundle. `OKF_SKIP=1` skips the refresh.
 - **Linter**: `eslint` with strict TypeScript rules
 - **Type safety**: `tsc --noEmit` must pass with zero errors (`strict: true`)
 - **Test runner**: Bun native test runner (`bun test`)

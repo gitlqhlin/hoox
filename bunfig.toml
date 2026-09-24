@@ -17,6 +17,8 @@ preload = "./packages/test-utils/src/setup.ts"
 coveragePathIgnorePatterns = [
   "packages/test-utils/**",
   "packages/test-setup-global.ts",
+  "scripts/okf/**",
+  "tests/okf/**",
   "**/node_modules/**",
   "**/dist/**",
   "coverage/**",

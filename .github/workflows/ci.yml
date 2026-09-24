@@ -47,6 +47,9 @@ jobs:
       - name: Install dependencies
         run: bun install --frozen-lockfile
 
+      - name: OKF bundle is current
+        run: bun run okf:check
+
       - name: Build shared package
         # Required: the shared package's `exports` map points `import`/`types`
         # at `dist/*.js` / `dist/*.d.ts`, so consumers (dashboard, workers,

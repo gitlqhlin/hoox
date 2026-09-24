@@ -51,6 +51,11 @@
     "docker:down": "docker compose --profile full down",
     "prepare": "husky",
     "lint-staged": "lint-staged",
+    "okf:enrich": "bun scripts/okf/cli.ts enrich",
+    "okf:check": "bun scripts/okf/cli.ts enrich --check",
+    "okf:lint": "bun scripts/okf/cli.ts lint",
+    "okf:query": "bun scripts/okf/cli.ts query",
+    "okf:context": "bun scripts/okf/cli.ts context",
     "lint:scripts": "bun run ./scripts/check-script-paths.ts",
     "check:worker-submodules": "bun run ./scripts/check-worker-submodules.ts",
     "start": "bun run server.js"

@@ -1,0 +1,27 @@
+---
+type: "Code Module"
+title: "workers/dashboard/src/app/dashboard/database"
+description: "workers/dashboard/src/app/dashboard/database contains metadata.ts, page.client.tsx, page.tsx."
+resource: "workers/dashboard/src/app/dashboard/database"
+tags: [app, code, dashboard, workers]
+status: stable
+generated:
+  by: process:axis-okf/1
+  at: 2026-09-24T03:53:55Z
+sources:
+  - id: tree
+    resource: "workers/dashboard/src/app/dashboard/database"
+    title: "workers/dashboard/src/app/dashboard/database"
+    author: process:git
+okf_lock: generated
+---
+
+# Files
+
+* `metadata.ts` — metadata
+* `page.client.tsx` — DatabaseClient
+* `page.tsx` — DatabasePage, dynamic, metadata, runtime
+
+# Packages
+
+`@/components/dashboard/database-table-browser`, `@/components/dashboard/page-header`, `next`, `reicon-react`
